@@ -4,4 +4,3 @@ build-output/
 .env
 *.local
 .DS_Store
-server/drizzle/migrations/
