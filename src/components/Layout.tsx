@@ -68,6 +68,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-56 bg-gray-900 text-gray-200 flex flex-col">
         <div className="px-4 py-5 border-b border-gray-700">
+          <p className="text-sm font-bold text-white mb-2">Lightspeed Systems</p>
           <h1 className="text-lg font-semibold text-white">Template App</h1>
           <p className="text-xs text-gray-400 mt-1">SP-002 Scaffold</p>
         </div>
