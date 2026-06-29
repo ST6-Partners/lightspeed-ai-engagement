@@ -18,6 +18,8 @@ import { systemRouter } from './routers/system.js';
 import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
+import { pipRouter } from './routers/pip.js';
+import { jobTitlesRouter } from './routers/jobTitles.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -35,6 +37,8 @@ export const appRouter = router({
   releases: releasesRouter,
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,
+  pip: pipRouter,
+  jobTitles: jobTitlesRouter,
 });
 
 export type AppRouter = typeof appRouter;

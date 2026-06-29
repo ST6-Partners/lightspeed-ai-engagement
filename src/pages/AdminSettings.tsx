@@ -24,6 +24,7 @@ import {
   ChatLogs,
   SatisfactionDashboard,
   ReleaseNotesAdmin,
+  JobTitles,
 } from './admin';
 
 // ── Feature flags panel (simple settings table) ──────────────
@@ -91,6 +92,7 @@ const ANALYTICS_TABS = [
 
 const CONFIG_TABS = [
   { id: 'users', label: 'Users' },
+  { id: 'jobtitles', label: 'Job Titles' },
   { id: 'archived', label: 'Archived Items' },
 ];
 
@@ -243,6 +245,7 @@ export default function AdminSettings() {
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
         {activeSection === 'users' && showConfig && <UserManagement />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
+        {activeSection === 'jobtitles' && showConfig && <JobTitles />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}
         {activeSection === 'activeusers' && showSystem && <ActiveUsers />}
         {activeSection === 'systemjobs' && showSystem && <SystemJobs />}

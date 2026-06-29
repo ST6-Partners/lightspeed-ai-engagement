@@ -28,3 +28,8 @@ export { systemJobs, backupLog, onboardingVideos } from './system.js';
 export { sampleEntities } from './sampleEntity.js';
 
 // Total: 23 tables (22 infrastructure + 1 sample domain)
+
+export { jobTitles } from './jobTitles.js';
+export {
+  pips, pipConcerns, pipGoals, pipSupports, pipCheckins, pipSignatures,
+} from './pip.js';

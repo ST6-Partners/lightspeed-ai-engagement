@@ -5,7 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot } from 'lucide-react';
+import { Home, Database, Settings, MessageSquare, LogOut
+, Bot, ClipboardList }from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -15,6 +16,7 @@ const navItems = [
   { path: '/', label: 'Home', icon: Home },
   { path: '/entities', label: 'Entities', icon: Database },
   { path: '/chat', label: 'AI Chat', icon: Bot },
+  { path: '/pips', label: 'Improvement Plans', icon: ClipboardList },
   { path: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

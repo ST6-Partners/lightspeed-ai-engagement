@@ -5,6 +5,8 @@ import Entities from './pages/Entities';
 import Chat from './pages/Chat';
 import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
+import Pips from './pages/Pips';
+import PipDetail from './pages/PipDetail';
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/entities" element={<Entities />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/pips" element={<Pips />} />
+        <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
       </Route>
     </Routes>
