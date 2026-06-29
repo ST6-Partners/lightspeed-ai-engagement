@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exit Surveys · AI Engagement — Lightspeed Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ls-cyan:#4FA9D6; --ls-cyan-bright:#6FBCE0; --ls-primary:#2E89B8; --ls-primary-600:#246F97; --ls-primary-50:#EAF4FA;
+  --ls-ink:#2E3942; --ls-ink-2:#51606A; --ls-ink-3:#8A969E; --ls-line:#E3E8EB;
+  --ls-surface:#FFFFFF; --ls-bg:#F6F9FA; --ls-bg-2:#EEF3F5; --ls-slate-deep:#28323A;
+  --ls-thrive:#2E9E7B; --ls-thrive-bg:#E6F4EF; --ls-watch:#C99300; --ls-watch-bg:#FBF2DC; --ls-risk:#C2615A; --ls-risk-bg:#F8EAE8;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
+  --sh-1:0 1px 2px rgba(40,50,58,.06),0 1px 3px rgba(40,50,58,.05);
+  --sh-2:0 4px 12px rgba(40,50,58,.07),0 2px 4px rgba(40,50,58,.04);
+  --sh-3:0 12px 32px rgba(40,50,58,.14);
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);color:var(--ls-ink);background:var(--ls-bg);line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{line-height:1.2;letter-spacing:-.02em}
+a{color:inherit;text-decoration:none}
+.muted{color:var(--ls-ink-3)}
+.t-cap{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ls-ink-3)}
+
+/* App shell */
+.app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+.side{background:var(--ls-slate-deep);color:#B9C3CB;display:flex;flex-direction:column;padding:18px 14px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.brand .nm{color:#fff;font-weight:700;font-size:15px}
+.brand .nm small{display:block;font-weight:500;font-size:11px;color:#7E8B94}
+.wsswitch{display:flex;align-items:center;gap:9px;background:#323D46;border:1px solid #3D4953;border-radius:10px;padding:8px 10px;margin-bottom:16px;cursor:pointer}
+.wsswitch .av{width:22px;height:22px;border-radius:6px;background:#46535D;flex:none}
+.wsswitch .txt{font-size:12.5px;color:#E3E7EA;font-weight:600;flex:1}
+.wsswitch .car{color:#7E8B94;font-size:11px}
+.navlbl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#677480;padding:14px 10px 7px;font-weight:700}
+.nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:#B9C3CB;font-size:14px;font-weight:500;margin-bottom:2px;cursor:pointer}
+.nav a .ic{width:18px;text-align:center;opacity:.85}
+.nav a:hover{background:#323D46;color:#fff}
+.nav a.active{background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));color:#fff;box-shadow:0 4px 14px rgba(79,169,214,.3)}
+.side .foot{margin-top:auto;border-top:1px solid #36424B;padding-top:12px}
+.userchip{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px;cursor:pointer}
+.userchip:hover{background:#323D46}
+.userchip .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#51606A,#4FA9D6);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.userchip .un{font-size:13px;color:#E3E7EA;font-weight:600}
+.userchip .ur{font-size:11px;color:#7E8B94}
+
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{display:flex;align-items:center;gap:14px;padding:14px 22px;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);border-bottom:1px solid var(--ls-line);position:sticky;top:0;z-index:10}
+.crumb{font-size:13px;color:var(--ls-ink-3)}.crumb b{color:var(--ls-ink);font-weight:600}
+.search{margin-left:8px;flex:1;max-width:320px;position:relative}
+.search input{font-size:13px;padding:8px 12px 8px 32px;border-radius:999px;border:1px solid var(--ls-line);width:100%;background:var(--ls-surface)}
+.search .si{position:absolute;left:11px;top:7px;color:var(--ls-ink-3);font-size:13px}
+.topbar .sp{flex:1}
+.iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--ls-line);background:var(--ls-surface);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;font-size:15px}
+.iconbtn .dotn{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--ls-risk)}
+.content{padding:24px 26px;overflow:auto}
+
+.phead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:4px;gap:14px;flex-wrap:wrap}
+.phead h2{font-size:24px;font-weight:700}
+.psub{font-size:14px;color:var(--ls-ink-3);margin-bottom:18px}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--ls-line);margin-bottom:22px;flex-wrap:wrap}
+.tabs a{font-size:14px;font-weight:600;color:var(--ls-ink-3);padding:10px 14px;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.tabs a.on{color:var(--ls-primary);border-bottom-color:var(--ls-cyan)}
+
+/* buttons */
+.btn{font-family:var(--font);font-size:14px;font-weight:600;border-radius:var(--r-sm);padding:9px 16px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn-primary{background:var(--ls-primary);color:#fff}.btn-primary:hover{background:var(--ls-primary-600)}
+.btn-accent{background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));color:#fff;box-shadow:0 4px 14px rgba(79,169,214,.35)}
+.btn-ghost{background:var(--ls-surface);color:var(--ls-ink);border-color:var(--ls-line)}.btn-ghost:hover{background:var(--ls-bg-2)}
+.btn-sm{font-size:12.5px;padding:6px 12px}
+.btn-danger{background:var(--ls-risk-bg);color:var(--ls-risk);border-color:#E9CFCC}.btn-danger:hover{background:#F2DDDB}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.stat{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:16px;box-shadow:var(--sh-1)}
+.stat .k{font-size:12px;color:var(--ls-ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:28px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+.stat .d{font-size:12.5px;margin-top:4px}
+.trend-up{color:var(--ls-thrive);font-weight:600}.trend-dn{color:var(--ls-risk);font-weight:600}
+
+.card{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-lg);padding:22px;box-shadow:var(--sh-1)}
+.sechead{display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px;gap:12px}
+.sechead h3{font-size:16px;font-weight:700}
+
+/* badges */
+.badgeS{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.b-thrive{color:var(--ls-thrive);background:var(--ls-thrive-bg)}
+.b-watch{color:var(--ls-watch);background:var(--ls-watch-bg)}
+.b-risk{color:var(--ls-risk);background:var(--ls-risk-bg)}
+.b-neutral{color:var(--ls-ink-2);background:var(--ls-bg-2)}
+.b-info{color:var(--ls-primary);background:var(--ls-primary-50)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.type-pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
+.type-vol{background:var(--ls-primary-50);color:var(--ls-primary)}
+.type-invol{background:#FCEEE0;color:#B5701F}
+
+/* table */
+.tablewrap{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-lg);box-shadow:var(--sh-1);overflow:hidden}
+.tabletools{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--ls-line);flex-wrap:wrap}
+.tabletools .seg{display:flex;background:var(--ls-bg-2);border-radius:999px;padding:3px;gap:2px}
+.tabletools .seg button{border:0;background:transparent;font:inherit;font-size:12.5px;font-weight:600;color:var(--ls-ink-2);padding:6px 13px;border-radius:999px;cursor:pointer}
+.tabletools .seg button.on{background:var(--ls-surface);color:var(--ls-primary);box-shadow:var(--sh-1)}
+.tabletools .fsearch{flex:1;min-width:160px;max-width:280px;position:relative}
+.tabletools .fsearch input{width:100%;font-size:13px;padding:8px 12px 8px 30px;border:1px solid var(--ls-line);border-radius:var(--r-sm);background:var(--ls-bg)}
+.tabletools .fsearch .si{position:absolute;left:10px;top:8px;color:var(--ls-ink-3);font-size:13px}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ls-ink-3);padding:12px 16px;border-bottom:1px solid var(--ls-line);background:var(--ls-bg)}
+tbody td{padding:13px 16px;border-bottom:1px solid var(--ls-line);font-size:13.5px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--ls-primary-50)}
+.cell-person{display:flex;align-items:center;gap:11px}
+.cell-person .av{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12.5px}
+.cell-person .nm{font-weight:600}.cell-person .rl{font-size:12px;color:var(--ls-ink-3)}
+.rowact{display:flex;gap:6px;justify-content:flex-end}
+.rowact .ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--ls-line);background:var(--ls-surface);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.rowact .ib:hover{background:var(--ls-bg-2)}
+.rowact .ib.del:hover{background:var(--ls-risk-bg);border-color:#E9CFCC}
+.progress-mini{display:flex;gap:4px;align-items:center}
+.pchip{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px}
+.pchip.done{background:var(--ls-thrive-bg);color:var(--ls-thrive)}
+.pchip.wait{background:var(--ls-bg-2);color:var(--ls-ink-3)}
+.empty{padding:48px 16px;text-align:center;color:var(--ls-ink-3)}
+
+/* status flow chips */
+.status-chip{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px}
+.s-init{background:var(--ls-bg-2);color:var(--ls-ink-2)}
+.s-prog{background:var(--ls-watch-bg);color:var(--ls-watch)}
+.s-ready{background:var(--ls-primary-50);color:var(--ls-primary)}
+.s-closed{background:var(--ls-thrive-bg);color:var(--ls-thrive)}
+
+/* gap pill */
+.gap-pill{font-weight:700}
+.gap-hi{color:var(--ls-risk)}.gap-lo{color:var(--ls-ink-3)}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(40,50,58,.45);backdrop-filter:blur(2px);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:48px 16px;overflow:auto}
+.scrim.open{display:flex}
+.modal{background:var(--ls-surface);border-radius:var(--r-xl);box-shadow:var(--sh-3);width:100%;max-width:560px;overflow:hidden}
+.modal.wide{max-width:860px}
+.modal .mh{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--ls-line)}
+.modal .mh h3{font-size:18px}
+.modal .mh .x{cursor:pointer;color:var(--ls-ink-3);font-size:20px;border:0;background:none}
+.modal .mb{padding:22px;max-height:70vh;overflow:auto}
+.modal .mf{display:flex;justify-content:flex-end;gap:10px;padding:16px 22px;border-top:1px solid var(--ls-line);background:var(--ls-bg)}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ls-ink-2);margin-bottom:6px}
+.input,select.input{font-family:var(--font);font-size:14px;border:1px solid var(--ls-line);border-radius:var(--r-sm);padding:9px 12px;width:100%;background:var(--ls-surface);color:var(--ls-ink)}
+.input:focus{outline:none;border-color:var(--ls-cyan);box-shadow:0 0 0 3px var(--ls-primary-50)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.radio-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rc{border:1px solid var(--ls-line);border-radius:var(--r-md);padding:12px 14px;cursor:pointer}
+.rc.on{border-color:var(--ls-cyan);background:var(--ls-primary-50)}
+.rc .rt{font-weight:700;font-size:14px}.rc .rd{font-size:12px;color:var(--ls-ink-3)}
+
+/* survey form */
+.form-banner{display:flex;align-items:center;gap:12px;background:var(--ls-primary-50);border:1px solid #C9E7F3;border-radius:var(--r-md);padding:12px 16px;margin-bottom:18px;font-size:13px;color:var(--ls-ink-2)}
+.q{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:16px 18px;margin-bottom:14px;box-shadow:var(--sh-1)}
+.q.sig{border-color:var(--ls-cyan);box-shadow:0 0 0 1px var(--ls-cyan)}
+.qhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.qnum{font-size:11px;font-weight:700;color:var(--ls-ink-3);letter-spacing:.06em}
+.sig-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));padding:3px 8px;border-radius:999px}
+.bt{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:5px}
+.bt.shared{background:var(--ls-thrive-bg);color:var(--ls-thrive)}
+.bt.adapts{background:var(--ls-watch-bg);color:var(--ls-watch)}
+.bt.onlyv{background:var(--ls-primary-50);color:var(--ls-primary)}
+.bt.onlyi{background:#FCEEE0;color:#B5701F}
+.qtext{font-size:15.5px;font-weight:600;margin-bottom:3px}
+.qhint{font-size:12.5px;color:var(--ls-ink-3);margin-bottom:12px}
+.scale{display:flex;gap:8px;flex-wrap:wrap}
+.scale .opt{flex:1;min-width:64px;text-align:center;border:1px solid var(--ls-line);background:var(--ls-surface);border-radius:var(--r-sm);padding:10px 6px;cursor:pointer;font-size:12px;color:var(--ls-ink-2)}
+.scale .opt:hover{border-color:var(--ls-cyan)}
+.scale .opt .num{display:block;font-size:17px;font-weight:700;color:var(--ls-ink);margin-bottom:2px}
+.scale .opt.sel{border-color:var(--ls-primary);background:var(--ls-primary-50);color:var(--ls-primary)}
+.scale .opt.sel .num{color:var(--ls-primary)}
+.choices{display:flex;flex-direction:column;gap:8px}
+.choices .opt{border:1px solid var(--ls-line);border-radius:var(--r-sm);padding:11px 13px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:10px}
+.choices .opt:hover{border-color:var(--ls-cyan)}
+.choices .opt.sel{border-color:var(--ls-primary);background:var(--ls-primary-50)}
+.choices .opt .bul{width:15px;height:15px;border-radius:50%;border:2px solid var(--ls-ink-3);flex:none}
+.choices .opt.sel .bul{border-color:var(--ls-primary);background:var(--ls-primary);box-shadow:inset 0 0 0 3px #fff}
+.chiprow{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--ls-line);border-radius:999px;padding:8px 13px;font-size:13px;cursor:pointer;background:var(--ls-surface)}
+.chip:hover{border-color:var(--ls-cyan)}.chip.sel{border-color:var(--ls-primary);background:var(--ls-primary-50);color:var(--ls-primary);font-weight:600}
+textarea.input{min-height:64px;resize:vertical}
+.bhv{display:flex;align-items:center;gap:12px;margin:10px 0}
+.bhv .bl{flex:1;font-size:13.5px}
+
+/* comparison */
+.surprise-card{border:1px solid #E9CFCC;background:var(--ls-risk-bg);border-radius:var(--r-lg);padding:20px}
+.surprise-card.ok{border-color:#CDE6DF;background:var(--ls-thrive-bg)}
+.sc-nums{display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.sc-nums .n{font-size:28px;font-weight:800}
+.cmp-row{display:grid;grid-template-columns:1fr 130px 1fr;align-items:center;border-bottom:1px solid var(--ls-line)}
+.cmp-row:last-child{border-bottom:none}
+.cmp-row .ql{grid-column:1/-1;padding:12px 14px 3px;font-size:13px;font-weight:600;color:var(--ls-ink-2)}
+.cmp-row .v{padding:4px 14px 13px;font-size:14px}
+.cmp-row .v.e{color:var(--ls-primary-600)}.cmp-row .v.m{text-align:right;color:var(--ls-ink)}
+.cmp-row .bw{display:flex;justify-content:center;padding:4px 6px 13px}
+.bar2{display:flex;align-items:center;gap:10px;font-size:11px;margin-top:5px}
+.bar2 .lab{width:58px;text-align:right;color:var(--ls-ink-3)}
+.bar-track{flex:1;height:8px;border-radius:999px;background:var(--ls-bg-2);overflow:hidden}
+.bar-track i{display:block;height:100%}
+.flag{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:var(--r-md);margin:10px 0;border:1px solid var(--ls-line)}
+.flag.r{background:var(--ls-risk-bg);border-color:#E9CFCC}.flag.a{background:var(--ls-watch-bg);border-color:#EAD9A8}
+.flag .fi{font-size:18px}.flag h4{font-size:14px;margin-bottom:3px}.flag p{font-size:13px;color:var(--ls-ink-2)}
+.brief{background:var(--ls-primary-50);border:1px solid #C9E7F3;border-radius:var(--r-lg);padding:20px}
+.brief .to{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ls-ink-3);margin-bottom:4px}
+.brief ul{margin:8px 0 0;padding-left:18px}.brief li{font-size:13.5px;color:var(--ls-ink-2);margin:6px 0}
+
+.matrix{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px;margin-top:8px}
+.matrix .at{text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ls-ink-3)}
+.matrix .al{writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ls-ink-3);text-align:center}
+.qc{background:var(--ls-bg);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:13px;min-height:96px;position:relative}
+.qc h4{font-size:13.5px;margin:3px 0}.qc p{font-size:12px;color:var(--ls-ink-2)}
+.qc .lb{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.qc.good{border-color:#BFE3D5}.qc.good .lb{color:var(--ls-thrive)}
+.qc.warn{border-color:#EAD9A8}.qc.warn .lb{color:var(--ls-watch)}
+.qc.bad{border-color:#E9CFCC}.qc.bad .lb{color:var(--ls-risk)}
+.qc .here{position:absolute;bottom:10px;right:10px;font-size:10.5px;font-weight:700;color:#fff;background:var(--ls-risk);padding:3px 8px;border-radius:999px}
+
+/* template admin */
+.tpl-group{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ls-ink-3);margin:20px 0 10px}
+.tpl-item{display:flex;align-items:center;gap:12px;background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:13px 16px;margin-bottom:8px;box-shadow:var(--sh-1)}
+.tpl-item .tq{flex:1}.tpl-item .tq .qt{font-size:14px;font-weight:600}.tpl-item .tq .qm{font-size:12px;color:var(--ls-ink-3)}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ls-slate-deep);color:#fff;font-size:13.5px;font-weight:500;padding:11px 18px;border-radius:999px;box-shadow:var(--sh-3);opacity:0;transition:.25s;z-index:60;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.detail-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.detail-head .av{width:48px;height:48px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px}
+.backlink{font-size:13px;color:var(--ls-primary);font-weight:600;cursor:pointer;margin-bottom:14px;display:inline-flex;gap:5px;align-items:center}
+.kv{display:flex;gap:26px;flex-wrap:wrap;margin:14px 0}
+.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ls-ink-3);font-weight:700}
+.kv .val{font-size:14px;font-weight:600;margin-top:3px}
+@media(max-width:980px){.app{grid-template-columns:1fr}.side{display:none}.stats{grid-template-columns:repeat(2,1fr)}.field-row,.radio-cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand">
+      <span class="mark">
+        <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="var(--ls-cyan)" stroke-width="3.6" stroke-linecap="round">
+          <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5"/>
+          <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5"/>
+          <line x1="5" y1="14" x2="11.5" y2="14"/><line x1="28.5" y1="26" x2="35" y2="26"/>
+        </svg>
+      </span>
+      <div class="nm">Lightspeed<small>AI Engagement</small></div>
+    </div>
+    <div class="wsswitch"><span class="av"></span><span class="txt">Acme Robotics</span><span class="car">▾</span></div>
+    <div class="navlbl">Workspace</div>
+    <nav class="nav">
+      <a><span class="ic">⌂</span> Home</a>
+      <a><span class="ic">✎</span> My Week</a>
+      <a><span class="ic">⊞</span> Organization</a>
+      <a class="active"><span class="ic">⇲</span> Exit Surveys</a>
+    </nav>
+    <div class="navlbl">Manage</div>
+    <nav class="nav">
+      <a><span class="ic">⚙</span> Admin</a>
+    </nav>
+    <div class="foot">
+      <div class="userchip"><span class="av">BF</span><div><div class="un">Brooke F.</div><div class="ur">Admin · People Team</div></div></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <span class="crumb" id="crumb"><b>Exit Surveys</b></span>
+      <div class="search"><span class="si">⌕</span><input placeholder="Search people, teams…"></div>
+      <span class="sp"></span>
+      <button class="iconbtn">⌕</button>
+      <button class="iconbtn">🔔<span class="dotn"></span></button>
+      <button class="iconbtn">BF</button>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"><div id="modalHost"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================== STATE ============================== */
+const REASONS_VOL=["Manager / leadership","Career growth & opportunity","Compensation & benefits","The work itself / role","Work-life balance","Company direction","Recognition","Relocation / personal","Better external offer"];
+const REASONS_INVOL=["Performance","Role fit / skills","Behavior / conduct","Attendance","Role eliminated / restructure"];
+const BEHAVIORS=["Gave clear, direct feedback","Recognized good work","Cared about growth & development","Removed obstacles / had my back","Treated fairly","Was someone I could be honest with"];
+
+const AVCOLORS=["#2E89B8,#4FA9D6","#2E9E7B,#4FA9D6","#4FA9D6,#2E9E7B","#C99300,#2E89B8","#51606A,#4FA9D6","#C2615A,#2E89B8"];
+function initials(n){return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
+function avColor(seed){return AVCOLORS[seed%AVCOLORS.length];}
+
+let UID=100;
+let state={
+  view:'dashboard',          // dashboard | exits | templates | detail
+  detailId:null,
+  detailTab:'overview',      // overview | employee | manager | comparison
+  filter:'all',              // all | open | closed
+  query:'',
+  exits:[
+    {id:1,name:"Jordan Reyes",role:"Senior Analyst",dept:"Analytics",manager:"Pat Doyle",type:"resignation",lastDay:"2026-07-10",status:"ready",
+      emp:{done:true,surprise:2,reason:"Manager / leadership",concerns:"yes",behaviors:[2,2,1,3,4,2],stood:2,course:"none",enps:2,safety:2,pushpull:"pushed",timeline:"3–6 months ago",open:"Give real feedback instead of silence, then a sudden 'you seem unhappy.'",boomerang:3},
+      mgr:{done:true,surprise:5,awareness:"none",reason:"Better external offer",behaviors:[4,4,3,4,4,5],cadence:"Every 2 weeks",lastFeedback:"Longer ago",intervention:"late",regret:5,hindsight:"Should have had a real career conversation a quarter ago.",pattern:"Second"}},
+    {id:2,name:"Maya Chen",role:"Product Designer",dept:"Design",manager:"Lena Ortiz",type:"resignation",lastDay:"2026-07-18",status:"prog",
+      emp:{done:true,surprise:1,reason:"Better external offer",concerns:"nothing",behaviors:[5,5,4,4,5,5],stood:5,course:"late",enps:5,safety:5,pushpull:"pulled",timeline:"This month",open:"Nothing — great manager, just a once-in-a-career offer.",boomerang:5},
+      mgr:{done:false}},
+    {id:3,name:"Devon Walsh",role:"Account Executive",dept:"Sales",manager:"Ray Okafor",type:"termination",lastDay:"2026-06-30",status:"ready",
+      emp:{done:true,surprise:5,reason:"I was never clearly told",concerns:"no",behaviors:[1,2,1,2,3,1],stood:1,course:"none",enps:1,safety:2,pushpull:"no",timeline:"Never until now",open:"I had no idea my numbers were a problem until today.",fair:1},
+      mgr:{done:true,surprise:2,awareness:"soft",reason:"Performance",behaviors:[4,3,3,4,4,3],cadence:"Monthly",lastFeedback:"Past quarter",intervention:"none",regret:2,hindsight:"I assumed the dashboard spoke for itself.",pattern:"Third or more"}},
+    {id:4,name:"Aisha Bello",role:"Engineer",dept:"Platform",manager:"Pat Doyle",type:"resignation",lastDay:"2026-08-01",status:"init",
+      emp:{done:false},mgr:{done:false}},
+    {id:5,name:"Tom Becker",role:"Support Lead",dept:"CX",manager:"Nadia Park",type:"termination",lastDay:"2026-07-05",status:"closed",
+      emp:{done:true,surprise:2,reason:"Role eliminated / restructure",concerns:"yes",behaviors:[4,4,4,4,5,4],stood:4,course:"plan",enps:4,safety:4,pushpull:"clear",timeline:"Past month",open:"Fair process; the role was genuinely eliminated.",fair:4},
+      mgr:{done:true,surprise:1,awareness:"clear",reason:"Role eliminated / restructure",behaviors:[4,4,4,4,5,4],cadence:"Weekly",lastFeedback:"Past 2 weeks",intervention:"plan",regret:4,hindsight:"Restructure-driven; handled cleanly.",pattern:"Yes, first one"}}
+  ],
+  questions:[
+    {part:"A",topic:"Reason",branch:"adapts",vol:"Primary reason you're leaving?",invol:"Your understanding of why you were let go?"},
+    {part:"A",topic:"Context",branch:"adapts",vol:"Push vs. pull — were you looking, or approached?",invol:"Was the decision clearly explained to you?"},
+    {part:"A",topic:"Surprise ★",branch:"adapts",vol:"How surprised was your manager by your resignation?",invol:"How surprised were YOU to be let go?"},
+    {part:"A",topic:"Warning / concerns",branch:"adapts",vol:"Did you make your concerns known to your manager?",invol:"Had your manager clearly told you your job was at risk?"},
+    {part:"A",topic:"Manager behaviors",branch:"shared",vol:"6-behavior block — feedback, recognition, growth, support, fairness, honesty",invol:"Same 6-behavior block"},
+    {part:"A",topic:"Knew where you stood",branch:"shared",vol:"Did you always know where you stood on performance & growth?",invol:"Same"},
+    {part:"A",topic:"Course-correct",branch:"adapts",vol:"Did anyone have a conversation that could've changed your mind?",invol:"Were you given a real chance to course-correct?"},
+    {part:"A",topic:"Manager eNPS",branch:"shared",vol:"Would you work for this manager again?",invol:"Same"},
+    {part:"A",topic:"Psychological safety",branch:"shared",vol:"Did you feel safe raising problems on this team?",invol:"Same"},
+    {part:"A",topic:"Closing item",branch:"split",vol:"Boomerang — would you return someday?",invol:"Did this process feel fair?"},
+    {part:"B",topic:"Surprise ★",branch:"adapts",vol:"How surprised were you by this resignation?",invol:"How surprised do you think they were to be let go?"},
+    {part:"B",topic:"Awareness / warning",branch:"adapts",vol:"Had you identified them as a flight risk?",invol:"Had you clearly told them their job was at risk?"},
+    {part:"B",topic:"Reason read",branch:"adapts",vol:"What do you believe is their reason for leaving?",invol:"Primary reason for the termination?"},
+    {part:"B",topic:"Own behaviors",branch:"shared",vol:"Same 6-behavior block, self-rated",invol:"Same"},
+    {part:"B",topic:"1:1 cadence",branch:"shared",vol:"How regularly were you having real 1:1s?",invol:"Same"},
+    {part:"B",topic:"Last direct feedback",branch:"shared",vol:"When did you last give clear, direct feedback?",invol:"Same"},
+    {part:"B",topic:"Intervention",branch:"adapts",vol:"Did you attempt a stay conversation / retention case?",invol:"Was there a documented improvement plan (PIP)?"},
+    {part:"B",topic:"Reflection",branch:"adapts",vol:"Is this a regretted departure?",invol:"Could earlier, clearer feedback have changed this?"},
+    {part:"B",topic:"Pattern check",branch:"shared",vol:"First departure from your team in 12 months?",invol:"Same"}
+  ]
+};
+
+/* derive status from completion */
+function deriveStatus(x){
+  if(x.status==='closed') return 'closed';
+  if(x.emp.done && x.mgr.done) return 'ready';
+  if(x.emp.done || x.mgr.done) return 'prog';
+  return 'init';
+}
+const STATUS_LABEL={init:"Initiated",prog:"In progress",ready:"Ready to review",closed:"Closed"};
+const STATUS_CLASS={init:"s-init",prog:"s-prog",ready:"s-ready",closed:"s-closed"};
+
+/* ============================== HELPERS ============================== */
+const $=s=>document.querySelector(s);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function surpriseGap(x){if(!x.emp.done||!x.mgr.done)return null;return Math.abs((x.mgr.surprise||0)-(x.emp.surprise||0));}
+function reasonMatch(x){if(!x.emp.done||!x.mgr.done)return null;return x.emp.reason===x.mgr.reason;}
+
+/* ============================== RENDER ROUTER ============================== */
+function render(){
+  const c=$('#content');
+  if(state.view==='detail'){c.innerHTML=viewDetail();bindDetail();}
+  else if(state.view==='exits'){c.innerHTML=viewExits();bindExits();}
+  else if(state.view==='templates'){c.innerHTML=viewTemplates();}
+  else {c.innerHTML=viewDashboard();}
+  // crumb
+  $('#crumb').innerHTML = state.view==='detail'
+    ? `Exit Surveys / <b>${esc(getExit(state.detailId).name)}</b>`
+    : `<b>Exit Surveys</b>`;
+}
+function tabsBar(active){
+  const t=[['dashboard','Dashboard'],['exits','All Exits'],['templates','Question Templates']];
+  return `<div class="tabs">${t.map(([k,l])=>`<a data-tab="${k}" class="${active===k?'on':''}">${l}</a>`).join('')}</div>`;
+}
+function getExit(id){return state.exits.find(e=>e.id===id);}
+
+/* ---------- DASHBOARD ---------- */
+function viewDashboard(){
+  const xs=state.exits;
+  const total=xs.length;
+  const ready=xs.filter(x=>deriveStatus(x)==='ready').length;
+  const redFlags=xs.filter(x=>{const g=surpriseGap(x);return g!==null&&g>=3;}).length;
+  const doneBoth=xs.filter(x=>x.emp.done&&x.mgr.done);
+  const avgMgrSurprise=doneBoth.length?(doneBoth.reduce((s,x)=>s+(x.mgr.surprise||0),0)/doneBoth.length).toFixed(1):'—';
+  const regret=doneBoth.filter(x=>x.type==='resignation'&&(x.mgr.regret||0)>=4).length;
+  return `
+  ${tabsBar('dashboard')}
+  <div class="phead"><h2>Exit Surveys</h2><button class="btn btn-accent btn-sm" data-new>＋ New exit</button></div>
+  <div class="psub">Coordinated employee + manager exit diagnostics. The signal we watch most: did the person who got the news see it coming?</div>
+  <div class="stats">
+    <div class="stat"><div class="k">Active exits</div><div class="v">${total}</div><div class="d muted">${ready} ready to review</div></div>
+    <div class="stat"><div class="k">Surprise red flags</div><div class="v" style="color:var(--ls-risk)">${redFlags}</div><div class="d trend-dn">gap ≥ 3 — worth a look</div></div>
+    <div class="stat"><div class="k">Avg manager surprise</div><div class="v" style="color:var(--ls-watch)">${avgMgrSurprise}</div><div class="d muted">1 saw it · 5 blindsided</div></div>
+    <div class="stat"><div class="k">Regretted resignations</div><div class="v">${regret}</div><div class="d muted">of ${doneBoth.length} completed</div></div>
+  </div>
+  <div class="sechead"><h3>Needs review</h3><a data-tab="exits" style="font-size:13px;color:var(--ls-primary);font-weight:600;cursor:pointer">View all exits →</a></div>
+  <div class="tablewrap">
+    <table><thead><tr><th>Employee</th><th>Type</th><th>Manager</th><th>Surprise gap</th><th></th></tr></thead>
+    <tbody>
+    ${xs.filter(x=>deriveStatus(x)==='ready').map(x=>{const g=surpriseGap(x);return `
+      <tr data-open="${x.id}">
+        <td><div class="cell-person"><div class="av" style="background:linear-gradient(135deg,${avColor(x.id)})">${initials(x.name)}</div><div><div class="nm">${esc(x.name)}</div><div class="rl">${esc(x.role)} · ${esc(x.dept)}</div></div></div></td>
+        <td><span class="type-pill ${x.type==='resignation'?'type-vol':'type-invol'}">${x.type==='resignation'?'Resignation':'Termination'}</span></td>
+        <td>${esc(x.manager)}</td>
+        <td><span class="gap-pill ${g>=3?'gap-hi':'gap-lo'}">${g!==null?('▲ '+g):'—'}</span></td>
+        <td><div class="rowact"><button class="btn btn-ghost btn-sm" data-open="${x.id}">Review →</button></div></td>
+      </tr>`;}).join('') || `<tr><td colspan="5"><div class="empty">Nothing waiting — all caught up.</div></td></tr>`}
+    </tbody></table>
+  </div>`;
+}
+
+/* ---------- EXITS TABLE (CRUD) ---------- */
+function viewExits(){
+  let xs=state.exits.slice();
+  if(state.filter==='open') xs=xs.filter(x=>deriveStatus(x)!=='closed');
+  if(state.filter==='closed') xs=xs.filter(x=>deriveStatus(x)==='closed');
+  if(state.query){const q=state.query.toLowerCase();xs=xs.filter(x=>(x.name+x.role+x.dept+x.manager).toLowerCase().includes(q));}
+  return `
+  ${tabsBar('exits')}
+  <div class="phead"><h2>All Exits</h2><button class="btn btn-accent btn-sm" data-new>＋ New exit</button></div>
+  <div class="psub">Create and manage exit records. Click any row — or <b>Open</b> — to expand a past record and see both completed forms and the comparison.</div>
+  <div class="tablewrap">
+    <div class="tabletools">
+      <div class="seg">
+        <button data-filter="all" class="${state.filter==='all'?'on':''}">All</button>
+        <button data-filter="open" class="${state.filter==='open'?'on':''}">Open</button>
+        <button data-filter="closed" class="${state.filter==='closed'?'on':''}">Closed</button>
+      </div>
+      <div class="fsearch"><span class="si">⌕</span><input id="exsearch" placeholder="Filter by name, team, manager…" value="${esc(state.query)}"></div>
+    </div>
+    <table>
+      <thead><tr><th>Employee</th><th>Type</th><th>Manager</th><th>Last day</th><th>Surveys</th><th>Status</th><th>Surprise</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody>
+      ${xs.map(x=>{const st=deriveStatus(x);const g=surpriseGap(x);return `
+        <tr data-open="${x.id}">
+          <td><div class="cell-person"><div class="av" style="background:linear-gradient(135deg,${avColor(x.id)})">${initials(x.name)}</div><div><div class="nm">${esc(x.name)}</div><div class="rl">${esc(x.role)} · ${esc(x.dept)}</div></div></div></td>
+          <td><span class="type-pill ${x.type==='resignation'?'type-vol':'type-invol'}">${x.type==='resignation'?'Resignation':'Termination'}</span></td>
+          <td>${esc(x.manager)}</td>
+          <td>${esc(x.lastDay)}</td>
+          <td><div class="progress-mini"><span class="pchip ${x.emp.done?'done':'wait'}">A ${x.emp.done?'✓':'…'}</span><span class="pchip ${x.mgr.done?'done':'wait'}">B ${x.mgr.done?'✓':'…'}</span></div></td>
+          <td><span class="status-chip ${STATUS_CLASS[st]}">${STATUS_LABEL[st]}</span></td>
+          <td><span class="gap-pill ${g>=3?'gap-hi':'gap-lo'}">${g!==null?('▲ '+g):'—'}</span></td>
+          <td><div class="rowact">
+            <button class="btn btn-ghost btn-sm" title="Open full record" data-open="${x.id}">Open →</button>
+            <button class="ib" title="Edit" data-edit="${x.id}">✎</button>
+            <button class="ib del" title="Delete" data-del="${x.id}">🗑</button>
+          </div></td>
+        </tr>`;}).join('') || `<tr><td colspan="8"><div class="empty">No exits match. Adjust filters or create one.</div></td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+/* ---------- DETAIL ---------- */
+function viewDetail(){
+  const x=getExit(state.detailId);if(!x)return '';
+  const st=deriveStatus(x);
+  const tabs=[['overview','Overview'],['employee','Part A · Employee'],['manager','Part B · Manager'],['comparison','Comparison']];
+  let body='';
+  if(state.detailTab==='employee') body=surveyForm(x,'A');
+  else if(state.detailTab==='manager') body=surveyForm(x,'B');
+  else if(state.detailTab==='comparison') body=comparison(x);
+  else body=overview(x);
+  return `
+  <span class="backlink" data-back>‹ Back to all exits</span>
+  <div class="detail-head">
+    <div class="av" style="background:linear-gradient(135deg,${avColor(x.id)})">${initials(x.name)}</div>
+    <div style="flex:1">
+      <div class="phead" style="margin:0"><h2>${esc(x.name)}</h2>
+        <div class="row" style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" data-edit="${x.id}">✎ Edit</button>
+          ${st==='ready'?`<button class="btn btn-primary btn-sm" data-close="${x.id}">✓ Mark reviewed</button>`:''}
+        </div>
+      </div>
+      <div class="psub" style="margin:2px 0 0">${esc(x.role)} · ${esc(x.dept)} · reports to ${esc(x.manager)}</div>
+    </div>
+  </div>
+  <div class="kv">
+    <div><div class="k">Exit type</div><div class="val"><span class="type-pill ${x.type==='resignation'?'type-vol':'type-invol'}">${x.type==='resignation'?'Resignation':'Termination'}</span></div></div>
+    <div><div class="k">Last day</div><div class="val">${esc(x.lastDay)}</div></div>
+    <div><div class="k">Status</div><div class="val"><span class="status-chip ${STATUS_CLASS[st]}">${STATUS_LABEL[st]}</span></div></div>
+    <div><div class="k">Surprise gap</div><div class="val">${surpriseGap(x)!==null?('▲ '+surpriseGap(x)):'pending'}</div></div>
+  </div>
+  <div class="tabs">${tabs.map(([k,l])=>`<a data-dtab="${k}" class="${state.detailTab===k?'on':''}">${l}</a>`).join('')}</div>
+  ${body}`;
+}
+
+function overview(x){
+  const empSt=x.emp.done?'<span class="badgeS b-thrive"><span class="dot" style="background:var(--ls-thrive)"></span>Completed</span>':'<span class="badgeS b-neutral">Awaiting response</span>';
+  const mgrSt=x.mgr.done?'<span class="badgeS b-thrive"><span class="dot" style="background:var(--ls-thrive)"></span>Completed</span>':'<span class="badgeS b-neutral">Awaiting response</span>';
+  const steps=[
+    ['T+0 · '+(x.type==='resignation'?'Notice':'Decision'),(x.emp.done||x.mgr.done)?'done':'now','People Team triggers both instruments.'],
+    ['Within 24h · Part B',x.mgr.done?'done':'wait','Manager answers first — genuine prior belief, before seeing Part A.'],
+    ['Before last day · Part A',x.emp.done?'done':'wait','Employee completes confidentially.'],
+    ['After both · Review',(x.emp.done&&x.mgr.done)?'now':'wait','Divergence analysis + coaching brief to skip-level.']
+  ];
+  const seq=`<div class="card" style="margin-bottom:16px"><div class="t-cap" style="margin-bottom:12px">Coordination sequence</div>
+    <div style="display:flex;gap:0;flex-wrap:wrap;align-items:stretch">
+    ${steps.map((s,i)=>`<div style="flex:1;min-width:150px;background:${s[1]==='now'?'var(--ls-primary-50)':'var(--ls-bg)'};border:1px solid ${s[1]==='now'?'#C9E7F3':'var(--ls-line)'};border-radius:10px;padding:12px 14px;margin-right:${i<3?'8px':'0'}">
+      <div style="font-size:11px;font-weight:700;color:${s[1]==='done'?'var(--ls-thrive)':'var(--ls-primary)'};letter-spacing:.03em;text-transform:uppercase">${s[1]==='done'?'✓ ':''}${s[0]}</div>
+      <div style="font-size:12.5px;color:var(--ls-ink-2);margin-top:4px">${s[2]}</div></div>`).join('')}
+    </div></div>`;
+  return `
+  ${seq}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card"><div class="sechead"><h3>Part A · Employee</h3>${empSt}</div>
+      <p class="muted" style="font-size:13.5px;margin-bottom:14px">Confidential to the People Team. Surprise asked about the ${x.type==='resignation'?'manager':'employee'}.</p>
+      <button class="btn ${x.emp.done?'btn-ghost':'btn-primary'} btn-sm" data-dtab="employee">${x.emp.done?'View / edit response':'Record response'}</button>
+    </div>
+    <div class="card"><div class="sechead"><h3>Part B · Manager</h3>${mgrSt}</div>
+      <p class="muted" style="font-size:13.5px;margin-bottom:14px">Asked first, within 24h, before seeing the employee's answers.</p>
+      <button class="btn ${x.mgr.done?'btn-ghost':'btn-primary'} btn-sm" data-dtab="manager">${x.mgr.done?'View / edit response':'Record response'}</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="sechead"><h3>Comparison</h3>${x.emp.done&&x.mgr.done?'<span class="badgeS b-info">Ready</span>':'<span class="badgeS b-neutral">Needs both responses</span>'}</div>
+    ${x.emp.done&&x.mgr.done
+      ? `<p class="muted" style="font-size:13.5px;margin-bottom:14px">Both responses are in. View the side-by-side divergence analysis, surprise quadrant, and coaching brief.</p><button class="btn btn-accent btn-sm" data-dtab="comparison">Open comparison →</button>`
+      : `<p class="muted" style="font-size:13.5px">The comparison unlocks once both Part A and Part B are complete.</p>`}
+  </div>`;
+}
+
+/* ---------- SURVEY FORM (data-driven, branch-aware) ---------- */
+function scaleHTML(name,val,lo,hi){
+  let h='<div class="scale" data-scale="'+name+'">';
+  for(let i=1;i<=5;i++){h+=`<div class="opt ${val===i?'sel':''}" data-val="${i}"><span class="num">${i}</span>${i===1?lo:(i===5?hi:'')}</div>`;}
+  return h+'</div>';
+}
+function choicesHTML(name,opts,val){
+  return '<div class="choices" data-choice="'+name+'">'+opts.map(o=>`<div class="opt ${val===o.v?'sel':''}" data-val="${o.v}"><span class="bul"></span>${o.l}</div>`).join('')+'</div>';
+}
+function chipsHTML(name,opts,val){
+  return '<div class="chiprow" data-chips="'+name+'">'+opts.map(o=>`<div class="chip ${val===o?'sel':''}" data-val="${esc(o)}">${esc(o)}</div>`).join('')+'</div>';
+}
+function behaviorsHTML(name,vals){
+  vals=vals||[];
+  return BEHAVIORS.map((b,i)=>`<div class="bhv"><span class="bl">${b}</span>${scaleHTML(name+'_'+i,vals[i]||0,'','')}</div>`).join('');
+}
+function surveyForm(x,part){
+  const vol=x.type==='resignation';
+  const r=part==='A'?x.emp:x.mgr;
+  const who=part==='A'?'Employee':'Manager';
+  const banner = part==='A'
+    ? `🔒 Confidential — the manager never sees these individual answers.`
+    : `⏱️ Complete within 24h of notice, before reviewing the employee's responses.`;
+  let qs='';
+  if(part==='A'){
+    qs+=qBlock('Q1','Reason','adapts',vol?'Primary reason for leaving?':'Your understanding of why you were let go?',
+        chipsHTML('reason', vol?REASONS_VOL:REASONS_INVOL, r.reason));
+    qs+=qBlock('Q2','Push vs. pull','adapts',vol?'Which is closer to the truth?':'Was the decision clearly explained to you?',
+        choicesHTML('pushpull', vol?[{v:'pushed',l:'I was actively looking (pushed)'},{v:'pulled',l:"I wasn't looking — an opportunity found me (pulled)"},{v:'moment',l:'A specific event made me decide'}]
+                                   :[{v:'clear',l:'Yes — clearly, with specifics'},{v:'vague',l:'Somewhat — but it was vague'},{v:'no',l:"No — I don't really understand why"}], r.pushpull));
+    qs+=qBlock('Q3','Surprise','adapts',vol?'How surprised do you think your manager was?':'How surprised were YOU to be let go?',
+        scaleHTML('surprise',r.surprise,'Saw it','Blindsided'),true);
+    qs+=qBlock('Q4','Warning / concerns','adapts',
+        vol?'Did you make your concerns known to your manager?':'Had your manager clearly told you your job was at risk?',
+        choicesHTML('concerns', vol?[{v:'yes',l:'Yes — clearly & more than once'},{v:'hint',l:'I hinted, never directly'},{v:'no',l:"No — didn't feel safe"},{v:'nothing',l:'Nothing to raise'}]
+                                  :[{v:'yes',l:'Yes — clearly & more than once'},{v:'hint',l:'Hinted, never directly'},{v:'no',l:'No — first I am hearing it'}], r.concerns));
+    qs+=qBlock('Q5','Manager behaviors','shared','How well did your manager do each of these? (1 rarely · 5 consistently)',
+        behaviorsHTML('eb',r.behaviors));
+    qs+=qBlock('Q6','Knew where you stood','shared','Did you always know where you stood — performance & growth?',
+        scaleHTML('stood',r.stood,'Never','Always'));
+    qs+=qBlock('Q7','Course-correct','adapts',
+        vol?'Did anyone have a conversation that could have changed your mind?':'Were you given a real chance to course-correct (a clear plan)?',
+        choicesHTML('course', vol?[{v:'nearly',l:'Yes — and it nearly worked'},{v:'late',l:'Someone tried, but too late'},{v:'none',l:'No one tried'},{v:'nothing',l:'Nothing could have'}]
+                                 :[{v:'plan',l:'Yes — a clear plan with time to improve'},{v:'tried',l:'A plan, but unrealistic / too short'},{v:'none',l:'No real chance to course-correct'}], r.course));
+    qs+=qBlock('Q8','Manager eNPS','shared','Would you work for this manager again?',
+        scaleHTML('enps',r.enps,'No way','Absolutely'),true);
+    qs+=qBlock('Q9','Timeline','adapts',vol?'When did you first seriously start thinking about leaving?':'When were you first told there was a problem?',
+        chipsHTML('timeline', vol?['This month','1–3 months ago','3–6 months ago','6–12 months ago','Over a year ago']
+                                 :['Only today','Past 2 weeks','Past month','Past quarter','Never until now'], r.timeline));
+    qs+=qBlock('Q10','Psychological safety','shared','Did you feel safe raising problems on this team?',
+        scaleHTML('safety',r.safety,'Not at all','Completely'));
+    qs+=qBlock('Q11','Open text','adapts',vol?'If your manager could do one thing differently?':'One thing that, handled differently, might have changed this?',
+        `<textarea class="input" data-text="open" placeholder="Goes straight to HR.">${esc(r.open)}</textarea>`);
+    qs+=vol
+      ? qBlock('Q12','Closing','onlyv','Would you consider returning someday?',scaleHTML('boomerang',r.boomerang,'Never','Definitely'))
+      : qBlock('Q12','Closing','onlyi','Did this process feel fair?',scaleHTML('fair',r.fair,'Not at all','Completely'));
+  } else {
+    qs+=qBlock('M1','Surprise','adapts',vol?'How surprised were you by this resignation?':'How surprised do you think they were to be let go?',
+        scaleHTML('surprise',r.surprise,'Saw it','Blindsided'),true);
+    qs+=qBlock('M2','Awareness / warning','adapts',vol?'Had you identified them as a flight risk?':'Had you clearly told them their job was at risk?',
+        choicesHTML('awareness', vol?[{v:'flag',l:"Yes — and I'd flagged it"},{v:'self',l:'Yes — kept it to myself'},{v:'vague',l:'A vague sense'},{v:'none',l:'No — out of nowhere'}]
+                                    :[{v:'clear',l:'Yes — clearly & more than once'},{v:'soft',l:'I raised it, softly'},{v:'none',l:'No — not explicitly'}], r.awareness));
+    qs+=qBlock('M3','Reason read','adapts',vol?'What do you believe is their reason for leaving?':'Primary reason for the termination?',
+        chipsHTML('reason', vol?REASONS_VOL:REASONS_INVOL, r.reason));
+    qs+=qBlock('M4','Own behaviors','shared','Honestly — how consistently did you do each of these? (1 rarely · 5 consistently)',
+        behaviorsHTML('mb',r.behaviors));
+    qs+=qBlock('M5','1:1 cadence','shared','How regularly were you having real 1:1s with them?',
+        chipsHTML('cadence',['Weekly','Every 2 weeks','Monthly','Sporadically','Rarely / never'],r.cadence));
+    qs+=qBlock('M6','Last direct feedback','shared','When did you last give them clear, direct feedback?',
+        chipsHTML('lastFeedback',['Past 2 weeks','Past month','Past quarter','Longer ago',"Not sure I did"],r.lastFeedback));
+    qs+=qBlock('M7','Intervention','adapts',vol?'Did you attempt a stay conversation / retention case?':'Was there a documented improvement plan (PIP)?',
+        choicesHTML('intervention', vol?[{v:'before',l:'Yes, before they resigned'},{v:'late',l:'Yes, but after notice'},{v:'nomatter',l:"No — wouldn't have mattered"},{v:'none',l:"No — didn't see it in time"}]
+                                       :[{v:'plan',l:'Yes — formal plan with time'},{v:'late',l:'Yes — brief or late'},{v:'none',l:'No formal plan'}], r.intervention));
+    qs+=qBlock('M8','Reflection','adapts',vol?'Is this a regretted departure?':'Could earlier, clearer feedback have changed this?',
+        scaleHTML('regret',r.regret,vol?'Not regretted':'No',vol?'Very':'Definitely'),true);
+    qs+=qBlock('M9','Hindsight (open)','shared','Looking back, what could have changed the outcome?',
+        `<textarea class="input" data-text="hindsight" placeholder="Coaching reflection for you and your skip-level.">${esc(r.hindsight)}</textarea>`);
+    qs+=qBlock('M10','Pattern check','shared','First departure from your team in the last 12 months?',
+        choicesHTML('pattern',[{v:'Yes, first one',l:'Yes, first one'},{v:'Second',l:'Second'},{v:'Third or more',l:'Third or more'}],r.pattern));
+  }
+  return `
+  <div class="form-banner">${banner}</div>
+  <div class="psub" style="margin-bottom:14px">Part ${part} · ${who} survey — <b>${vol?'Voluntary (Resignation)':'Involuntary (Termination)'}</b> version. Edit answers and save; the comparison recomputes automatically.</div>
+  <form id="surveyForm" data-part="${part}">
+    ${qs}
+    <div class="row" style="margin-top:18px;gap:10px">
+      <button type="button" class="btn btn-primary" data-savesurvey="${part}">${r.done?'Update response':'Save response'}</button>
+      <button type="button" class="btn btn-ghost" data-dtab="overview">Cancel</button>
+      ${r.done?'<span class="badgeS b-thrive" style="align-self:center"><span class="dot" style="background:var(--ls-thrive)"></span>Recorded</span>':''}
+    </div>
+  </form>`;
+}
+function qBlock(num,topic,branch,text,control,sig){
+  const bmap={shared:['shared','Shared'],adapts:['adapts','Adapts'],onlyv:['onlyv','Voluntary only'],onlyi:['onlyi','Involuntary only'],split:['adapts','Adapts']};
+  const [bc,bl]=bmap[branch]||bmap.shared;
+  return `<div class="q ${sig?'sig':''}">
+    <div class="qhead"><span class="qnum">${num}</span>${sig?'<span class="sig-badge">★ Coordinated</span>':''}<span class="bt ${bc}">${bl}</span><span class="muted" style="font-size:12px">${esc(topic)}</span></div>
+    <div class="qtext">${esc(text)}</div>
+    ${control}
+  </div>`;
+}
+
+/* ---------- COMPARISON ---------- */
+function comparison(x){
+  if(!(x.emp.done&&x.mgr.done)) return `<div class="card"><div class="empty">The comparison unlocks once both Part A and Part B are complete.</div></div>`;
+  const vol=x.type==='resignation';
+  const g=surpriseGap(x);
+  const empBlind = vol ? (x.emp.surprise<=2) : (x.emp.surprise>=4); // emp thinks mgr should've known / emp was blindsided
+  const mgrBlind = vol ? (x.mgr.surprise>=4) : (x.mgr.surprise<=2);
+  const redFlag = g>=3;
+  // surprise card
+  const sc = `
+  <div class="surprise-card">
+    <span class="badgeS b-risk"><span class="dot" style="background:var(--ls-risk)"></span>${redFlag?'Manager red flag':'Surprise reading'}</span>
+    <h3 style="margin-top:12px;font-size:18px">${vol
+      ? (redFlag?'Employee expected it — manager was blindsided.':'Surprise levels are broadly aligned.')
+      : (redFlag?'Manager claims clear feedback — employee was blindsided.':'Surprise levels are broadly aligned.')}</h3>
+    <p class="muted" style="font-size:13.5px;margin-top:6px">${redFlag
+      ? 'The signals were sent and not received — the feedback loop was broken.'
+      : 'Both sides read the situation similarly — the feedback loop appears to have worked.'}</p>
+    <div class="sc-nums">
+      <div><div class="t-cap">${vol?'Employee → manager surprise':'Employee → own surprise'}</div><div class="n" style="color:var(--ls-primary-600)">${x.emp.surprise} / 5</div></div>
+      <div style="font-size:22px;color:var(--ls-risk)">→ gap ${g} →</div>
+      <div><div class="t-cap">${vol?'Manager → own surprise':"Manager → employee's surprise"}</div><div class="n" style="color:var(--ls-ink)">${x.mgr.surprise} / 5</div></div>
+    </div>
+  </div>`;
+  // mirrored rows
+  const CMAP={yes:'Made concerns known clearly',hint:'Hinted only',no:"Didn't / couldn't raise it",nothing:'Nothing to raise'};
+  const AMAP={flag:'Flagged it',self:'Knew, kept it quiet',vague:'Had a vague sense',none:'Came out of nowhere',clear:'Warned clearly',soft:'Raised it softly'};
+  const CRSMAP={nearly:'Nearly changed my mind',late:'Tried, too late',none:'No one tried',nothing:'Nothing could have',plan:'Real plan, had time',tried:'Plan unrealistic'};
+  const IMAP={before:'Tried before notice',late:'Tried after notice',nomatter:"Wouldn't have mattered",none:"Didn't see it in time",plan:'Formal PIP given'};
+  const concDiv=(x.emp.concerns==='yes'&&x.mgr.awareness==='none')?'div':((['no','nothing'].includes(x.emp.concerns)&&x.mgr.awareness==='none')?'align':'partial');
+  const intvDiv=(['none','nothing'].includes(x.emp.course)&&['before','plan'].includes(x.mgr.intervention))?'div':((['none','nothing'].includes(x.emp.course)&&['none','late','nomatter'].includes(x.mgr.intervention))?'align':'partial');
+  const rows=[
+    ['Primary reason', x.emp.reason, x.mgr.reason, reasonMatch(x)?'align':'div'],
+    [vol?'Manager surprised?':'Employee surprised?', x.emp.surprise+'/5', x.mgr.surprise+'/5', g>=3?'div':(g>=2?'partial':'align')],
+    ['Concerns surfaced vs. heard', CMAP[x.emp.concerns]||x.emp.concerns||'—', AMAP[x.mgr.awareness]||x.mgr.awareness||'—', concDiv],
+    ['Gave clear, direct feedback', (x.emp.behaviors[0])+'/5', (x.mgr.behaviors[0])+'/5', Math.abs(x.emp.behaviors[0]-x.mgr.behaviors[0])>=2?'div':'align'],
+    [vol?'A real intervention happened':'A real chance to course-correct', CRSMAP[x.emp.course]||x.emp.course||'—', IMAP[x.mgr.intervention]||x.mgr.intervention||'—', intvDiv],
+    ['Manager eNPS / regret', 'Work again: '+(x.emp.enps||'—')+'/5', (vol?'Regret: ':'Feedback-fix: ')+(x.mgr.regret||'—')+'/5', 'align']
+  ];
+  const mgrCount=state.exits.filter(e=>e.manager===x.manager).length;
+  const guard=`<div class="form-banner" style="background:var(--ls-watch-bg);border-color:#EAD9A8;margin-bottom:18px">🔒
+    <div><b>Anonymity guard (OQ-13).</b> ${esc(x.manager)} has <b>${mgrCount}</b> exit${mgrCount>1?'s':''} on record. ${mgrCount>=4
+      ? 'At or above the n = 4 threshold — aggregate manager-level findings may be shared back with the manager.'
+      : 'Below the n = 4 threshold — raw findings route to HR + skip-level only; treat as named, confidential coaching (anonymity is a fiction at this size).'}</div></div>`;
+  const cmpTable = `
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="cmp-row" style="background:var(--ls-bg)"><div class="ql" style="display:grid;grid-template-columns:1fr 130px 1fr">
+      <span style="color:var(--ls-primary-600)">EMPLOYEE (A)</span><span style="text-align:center;color:var(--ls-ink-3)">SIGNAL</span><span style="text-align:right">MANAGER (B)</span></div></div>
+    ${rows.map(([q,e,m,b])=>`<div class="cmp-row"><div class="ql">${esc(q)}</div>
+      <div class="v e">${esc(e)}</div>
+      <div class="bw"><span class="badgeS ${b==='align'?'b-thrive':(b==='partial'?'b-watch':'b-risk')}">${b==='align'?'Aligned':(b==='partial'?'Partial':'Divergent')}</span></div>
+      <div class="v m">${esc(m)}</div></div>`).join('')}
+  </div>`;
+  // felt vs self
+  const bars = BEHAVIORS.map((b,i)=>{const e=x.emp.behaviors[i],m=x.mgr.behaviors[i],gap=Math.abs(e-m),fl=gap>=2;
+    return `<div style="margin:14px 0;${fl?'background:var(--ls-risk-bg);border:1px solid #E9CFCC;border-radius:10px;padding:10px 12px':''}">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>${b}</span><span style="${fl?'color:var(--ls-risk);font-weight:700':'color:var(--ls-ink-3)'}">${fl?'▲ ':''}gap ${gap}</span></div>
+      <div class="bar2"><span class="lab">Felt ${e}</span><div class="bar-track"><i style="width:${e/5*100}%;background:var(--ls-primary)"></i></div></div>
+      <div class="bar2"><span class="lab">Self ${m}</span><div class="bar-track"><i style="width:${m/5*100}%;background:var(--ls-cyan)"></i></div></div>
+    </div>`;}).join('');
+  // matrix
+  const matrix = vol ? matrixVol(empBlind,mgrBlind) : matrixInvol(empBlind,mgrBlind);
+  // flags
+  const flags=[];
+  if(redFlag) flags.push(['r','▲','Surprise gap',`A ${g}-point gap between the two stories — the signature of feedback that wasn't landing.`]);
+  if(!reasonMatch(x)) flags.push(['r','▲','Reason mismatch',`Employee: "${esc(x.emp.reason)}" · Manager: "${esc(x.mgr.reason)}". Managers under-attribute exits to themselves — weight the employee's view.`]);
+  if(Math.abs(x.emp.behaviors[0]-x.mgr.behaviors[0])>=2) flags.push(['a','◆','Feedback blind spot',`Manager self-rates feedback ${x.mgr.behaviors[0]}/5; employee felt ${x.emp.behaviors[0]}/5. That blind spot is what produces "blindsided."`]);
+  if(x.mgr.pattern==='Third or more'||x.mgr.pattern==='Second') flags.push(['a','◆','Team pattern',`This is not the first departure from ${esc(x.manager)}'s team in 12 months — look at the team, not just this exit.`]);
+  const flagHTML=flags.map(([c,i,h,p])=>`<div class="flag ${c}"><span class="fi">${i}</span><div><h4>${h}</h4><p>${p}</p></div></div>`).join('') || '<p class="muted">No automated flags — the two stories largely agree.</p>';
+  // coaching brief
+  const brief = `
+  <div class="brief">
+    <div class="to">Auto-routed to · ${esc(x.manager)}'s skip-level</div>
+    <h3 style="font-size:17px;margin-bottom:6px">Coaching brief — not a verdict</h3>
+    <ul>
+      <li><b>Pattern:</b> ${redFlag?'a departure the '+(vol?'manager':'employee')+' didn\'t see coming (surprise gap '+g+').':'an exit with aligned expectations.'}</li>
+      <li><b>Root behavior:</b> last direct feedback was "${esc(x.mgr.lastFeedback||'—')}"; employee rated feedback ${x.emp.behaviors[0]}/5.</li>
+      <li><b>Coach toward:</b> a real 1:1 cadence and a monthly "where you stand" conversation, so no future exit is a surprise.</li>
+      <li><b>Calibration:</b> feed this exit back into the continual-signals flight-risk model.</li>
+    </ul>
+  </div>`;
+  return `
+  ${guard}
+  ${sc}
+  <h3 style="margin:24px 0 10px;font-size:16px">Mirrored answers, side by side</h3>
+  ${cmpTable}
+  <h3 style="margin:24px 0 10px;font-size:16px">Manager behavior — felt vs. self-reported</h3>
+  <div class="card">${bars}<p class="muted" style="font-size:12.5px;margin-top:10px">Flag threshold is a gap of 2+ (highlighted), especially on feedback and honesty.</p></div>
+  <h3 style="margin:24px 0 10px;font-size:16px">Surprise quadrant</h3>
+  <div class="card">${matrix}</div>
+  <h3 style="margin:24px 0 10px;font-size:16px">Auto-flagged findings</h3>
+  ${flagHTML}
+  <h3 style="margin:24px 0 10px;font-size:16px">Close the loop</h3>
+  ${brief}`;
+}
+function matrixVol(empMadeKnown,mgrBlind){
+  const cell=(cls,lb,h,p,here)=>`<div class="qc ${cls}"><div class="lb">${lb}</div><h4>${h}</h4><p>${p}</p>${here?'<span class="here">This exit ▲</span>':''}</div>`;
+  return `<div class="matrix">
+    <div></div><div class="at">Mgr: "Not surprised"</div><div class="at">Mgr: "Blindsided"</div>
+    <div class="al">Emp: made it known</div>
+    ${cell('good','● Healthy','Known & managed','Both saw it coming.', empMadeKnown&&!mgrBlind)}
+    ${cell('bad','▲ Red flag',"Wasn't listening",'Concerns raised, never registered.', empMadeKnown&&mgrBlind)}
+    <div class="al">Emp: built quietly</div>
+    ${cell('warn','◆ Watch','Silent & seen','Sensed it, didn\'t act.', !empMadeKnown&&!mgrBlind)}
+    ${cell('warn','◆ Watch','Mutual blind spot','Nobody was talking.', !empMadeKnown&&mgrBlind)}
+  </div>`;
+}
+function matrixInvol(empBlind,mgrNoFeedback){
+  const cell=(cls,lb,h,p,here)=>`<div class="qc ${cls}"><div class="lb">${lb}</div><h4>${h}</h4><p>${p}</p>${here?'<span class="here">This exit ▲</span>':''}</div>`;
+  return `<div class="matrix">
+    <div></div><div class="at">Mgr: "gave clear feedback"</div><div class="at">Mgr: "little / none"</div>
+    <div class="al">Emp: saw it coming</div>
+    ${cell('good','● Healthy','Fair & clear','Feedback landed; didn\'t work out.', !empBlind&&!mgrNoFeedback)}
+    ${cell('warn','◆ Watch','Knew without being told','Never made explicit. Doc risk.', !empBlind&&mgrNoFeedback)}
+    <div class="al">Emp: blindsided</div>
+    ${cell('bad','▲ Red flag','Said but not heard','Feedback wasn\'t actually clear.', empBlind&&!mgrNoFeedback)}
+    ${cell('bad','▲ Red + legal','No warning','Coaching + defensibility risk.', empBlind&&mgrNoFeedback)}
+  </div>`;
+}
+
+/* ---------- TEMPLATES (CRUD on questions) ---------- */
+function viewTemplates(){
+  const partA=state.questions.filter(q=>q.part==='A');
+  const partB=state.questions.filter(q=>q.part==='B');
+  const item=(q,idx)=>{
+    const i=state.questions.indexOf(q);
+    const bmap={shared:['shared','Shared'],adapts:['adapts','Adapts'],split:['adapts','Adapts/Split']};
+    const [bc,bl]=bmap[q.branch]||['adapts','Adapts'];
+    return `<div class="tpl-item">
+      <span class="bt ${bc}">${bl}</span>
+      <div class="tq"><div class="qt">${esc(q.topic)}</div><div class="qm">Vol: ${esc(q.vol)}${q.invol&&q.invol!=='Same'?' · Invol: '+esc(q.invol):''}</div></div>
+      <div class="rowact"><button class="ib" data-tedit="${i}" title="Edit">✎</button><button class="ib del" data-tdel="${i}" title="Delete">🗑</button></div>
+    </div>`;
+  };
+  return `
+  ${tabsBar('templates')}
+  <div class="phead"><h2>Question Templates</h2><button class="btn btn-accent btn-sm" data-tnew>＋ Add question</button></div>
+  <div class="psub">The shared question bank that drives both surveys. Branch tags control how each item adapts across voluntary and involuntary exits.</div>
+  <div class="tpl-group">Part A · Employee (${partA.length})</div>
+  ${partA.map(item).join('')}
+  <div class="tpl-group">Part B · Manager (${partB.length})</div>
+  ${partB.map(item).join('')}`;
+}
+
+/* ============================== BINDINGS ============================== */
+// global nav (sidebar + tabs + new)
+document.body.addEventListener('click',e=>{
+  const tab=e.target.closest('[data-tab]');
+  if(tab){state.view=tab.dataset.tab;state.detailId=null;render();return;}
+  if(e.target.closest('[data-new]')){openExitModal(null);return;}
+  if(e.target.closest('[data-tnew]')){openTemplateModal(null);return;}
+  // sidebar items (visual only except Exit Surveys)
+});
+function bindExits(){
+  $('#content').querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.filter;render();});
+  const s=$('#exsearch');if(s)s.oninput=()=>{state.query=s.value;const xs=viewExits();/* keep focus */};
+  if(s)s.oninput=debounce(()=>{state.query=s.value;render();$('#exsearch')&&$('#exsearch').focus();},180);
+  $('#content').querySelectorAll('[data-open]').forEach(el=>el.onclick=ev=>{ev.stopPropagation();openDetail(+el.dataset.open);});
+  $('#content').querySelectorAll('[data-edit]').forEach(el=>el.onclick=ev=>{ev.stopPropagation();openExitModal(+el.dataset.edit);});
+  $('#content').querySelectorAll('[data-del]').forEach(el=>el.onclick=ev=>{ev.stopPropagation();confirmDelete(+el.dataset.del);});
+}
+function bindDetail(){
+  $('#content').querySelector('[data-back]').onclick=()=>{state.view='exits';render();};
+  $('#content').querySelectorAll('[data-dtab]').forEach(el=>el.onclick=()=>{state.detailTab=el.dataset.dtab;render();});
+  $('#content').querySelectorAll('[data-edit]').forEach(el=>el.onclick=()=>openExitModal(+el.dataset.edit));
+  const cb=$('#content').querySelector('[data-close]');if(cb)cb.onclick=()=>{getExit(+cb.dataset.close).status='closed';toast('Marked reviewed & closed');render();};
+  // survey controls
+  bindSurveyControls();
+  const save=$('#content').querySelector('[data-savesurvey]');
+  if(save)save.onclick=()=>saveSurvey(save.dataset.savesurvey);
+}
+function openDetail(id){state.view='detail';state.detailId=id;state.detailTab='overview';render();}
+
+// survey input handling (delegated within form)
+let surveyDraft={};
+function bindSurveyControls(){
+  const f=$('#surveyForm');if(!f)return;surveyDraft={};
+  f.querySelectorAll('[data-scale]').forEach(sc=>sc.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{sc.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');surveyDraft[sc.dataset.scale]=+o.dataset.val;}));
+  f.querySelectorAll('[data-choice]').forEach(ch=>ch.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{ch.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');surveyDraft[ch.dataset.choice]=o.dataset.val;}));
+  f.querySelectorAll('[data-chips]').forEach(ch=>ch.querySelectorAll('.chip').forEach(o=>o.onclick=()=>{ch.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');surveyDraft[ch.dataset.chips]=o.dataset.val;}));
+}
+function saveSurvey(part){
+  const x=getExit(state.detailId);const r=part==='A'?x.emp:x.mgr;
+  const f=$('#surveyForm');
+  // collect scales
+  f.querySelectorAll('[data-scale]').forEach(sc=>{const sel=sc.querySelector('.opt.sel');const key=sc.dataset.scale;
+    if(key.startsWith('eb_')||key.startsWith('mb_')){return;} if(sel)r[key]=+sel.dataset.val;});
+  // behaviors
+  const bpref=part==='A'?'eb_':'mb_';const bvals=[];for(let i=0;i<6;i++){const sel=f.querySelector('[data-scale="'+bpref+i+'"] .opt.sel');bvals[i]=sel?+sel.dataset.val:0;}
+  r.behaviors=bvals;
+  // choices + chips
+  f.querySelectorAll('[data-choice]').forEach(ch=>{const sel=ch.querySelector('.opt.sel');if(sel)r[ch.dataset.choice]=sel.dataset.val;});
+  f.querySelectorAll('[data-chips]').forEach(ch=>{const sel=ch.querySelector('.chip.sel');if(sel)r[ch.dataset.chips]=sel.dataset.val;});
+  // text
+  f.querySelectorAll('[data-text]').forEach(t=>r[t.dataset.text]=t.value);
+  r.done=true;
+  toast('Part '+part+' response saved');
+  state.detailTab='overview';render();
+}
+
+/* ---------- MODALS ---------- */
+function showModal(html){$('#modalHost').innerHTML=html;$('#scrim').classList.add('open');}
+function closeModal(){$('#scrim').classList.remove('open');$('#modalHost').innerHTML='';}
+$('#scrim').addEventListener('click',e=>{if(e.target.id==='scrim')closeModal();});
+
+function openExitModal(id){
+  const x=id?getExit(id):null;
+  showModal(`
+  <div class="modal"><div class="mh"><h3>${x?'Edit exit':'New exit'}</h3><button class="x" data-x>×</button></div>
+    <div class="mb">
+      <div class="field"><label>Employee name</label><input class="input" id="f_name" value="${x?esc(x.name):''}" placeholder="e.g., Jordan Reyes"></div>
+      <div class="field-row">
+        <div class="field"><label>Role / title</label><input class="input" id="f_role" value="${x?esc(x.role):''}" placeholder="Senior Analyst"></div>
+        <div class="field"><label>Team / dept</label><input class="input" id="f_dept" value="${x?esc(x.dept):''}" placeholder="Analytics"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Manager</label><input class="input" id="f_mgr" value="${x?esc(x.manager):''}" placeholder="Pat Doyle"></div>
+        <div class="field"><label>Last day</label><input class="input" type="date" id="f_last" value="${x?esc(x.lastDay):''}"></div>
+      </div>
+      <div class="field"><label>Exit type — sets which survey branch is sent</label>
+        <div class="radio-cards" id="f_type">
+          <div class="rc ${(!x||x.type==='resignation')?'on':''}" data-type="resignation"><div class="rt">Resignation</div><div class="rd">Voluntary · surprise asked of the manager</div></div>
+          <div class="rc ${x&&x.type==='termination'?'on':''}" data-type="termination"><div class="rt">Termination</div><div class="rd">Involuntary · surprise asked of the employee</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btn-ghost" data-x>Cancel</button><button class="btn btn-primary" id="f_save">${x?'Save changes':'Create exit'}</button></div>
+  </div>`);
+  let type=x?x.type:'resignation';
+  $('#modalHost').querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);
+  $('#modalHost').querySelectorAll('#f_type .rc').forEach(rc=>rc.onclick=()=>{$('#modalHost').querySelectorAll('#f_type .rc').forEach(r=>r.classList.remove('on'));rc.classList.add('on');type=rc.dataset.type;});
+  $('#f_save').onclick=()=>{
+    const name=$('#f_name').value.trim();if(!name){$('#f_name').focus();return;}
+    const data={name,role:$('#f_role').value.trim()||'—',dept:$('#f_dept').value.trim()||'—',manager:$('#f_mgr').value.trim()||'—',lastDay:$('#f_last').value||'—',type};
+    if(x){Object.assign(x,data);toast('Exit updated');}
+    else{const nx={id:++UID,...data,status:'init',emp:{done:false},mgr:{done:false}};state.exits.unshift(nx);toast('Exit created');}
+    closeModal();render();
+  };
+}
+function confirmDelete(id){
+  const x=getExit(id);
+  showModal(`<div class="modal" style="max-width:440px"><div class="mh"><h3>Delete exit?</h3><button class="x" data-x>×</button></div>
+    <div class="mb"><p style="font-size:14.5px">Remove the exit record for <b>${esc(x.name)}</b>? This deletes both survey responses. This can't be undone.</p></div>
+    <div class="mf"><button class="btn btn-ghost" data-x>Cancel</button><button class="btn btn-danger" id="d_yes">Delete</button></div></div>`);
+  $('#modalHost').querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);
+  $('#d_yes').onclick=()=>{state.exits=state.exits.filter(e=>e.id!==id);if(state.detailId===id){state.view='exits';state.detailId=null;}toast('Exit deleted');closeModal();render();};
+}
+function openTemplateModal(idx){
+  const q=idx!=null?state.questions[idx]:null;
+  showModal(`<div class="modal"><div class="mh"><h3>${q?'Edit question':'Add question'}</h3><button class="x" data-x>×</button></div>
+    <div class="mb">
+      <div class="field-row">
+        <div class="field"><label>Part</label><select class="input" id="t_part"><option value="A" ${q&&q.part==='A'?'selected':''}>A · Employee</option><option value="B" ${q&&q.part==='B'?'selected':''}>B · Manager</option></select></div>
+        <div class="field"><label>Branch behavior</label><select class="input" id="t_branch">
+          <option value="shared" ${q&&q.branch==='shared'?'selected':''}>Shared (identical)</option>
+          <option value="adapts" ${q&&q.branch==='adapts'?'selected':''}>Adapts (reworded)</option>
+          <option value="split" ${q&&q.branch==='split'?'selected':''}>Split (type-specific)</option>
+        </select></div>
+      </div>
+      <div class="field"><label>Topic</label><input class="input" id="t_topic" value="${q?esc(q.topic):''}" placeholder="e.g., Surprise"></div>
+      <div class="field"><label>Voluntary wording</label><input class="input" id="t_vol" value="${q?esc(q.vol):''}" placeholder="Resignation version"></div>
+      <div class="field"><label>Involuntary wording</label><input class="input" id="t_invol" value="${q?esc(q.invol):''}" placeholder="Termination version (or 'Same')"></div>
+    </div>
+    <div class="mf"><button class="btn btn-ghost" data-x>Cancel</button><button class="btn btn-primary" id="t_save">${q?'Save':'Add'}</button></div></div>`);
+  $('#modalHost').querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);
+  $('#t_save').onclick=()=>{
+    const topic=$('#t_topic').value.trim();if(!topic){$('#t_topic').focus();return;}
+    const data={part:$('#t_part').value,branch:$('#t_branch').value,topic,vol:$('#t_vol').value.trim()||'—',invol:$('#t_invol').value.trim()||'Same'};
+    if(q)Object.assign(q,data),toast('Question updated');
+    else state.questions.push(data),toast('Question added');
+    closeModal();render();
+  };
+}
+// template row buttons (delegated)
+document.body.addEventListener('click',e=>{
+  const ed=e.target.closest('[data-tedit]');if(ed){openTemplateModal(+ed.dataset.tedit);return;}
+  const dl=e.target.closest('[data-tdel]');if(dl){const i=+dl.dataset.tdel;showModal(`<div class="modal" style="max-width:420px"><div class="mh"><h3>Delete question?</h3><button class="x" data-x>×</button></div><div class="mb"><p>Remove "<b>${esc(state.questions[i].topic)}</b>" from the template?</p></div><div class="mf"><button class="btn btn-ghost" data-x>Cancel</button><button class="btn btn-danger" id="tq_yes">Delete</button></div></div>`);$('#modalHost').querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);$('#tq_yes').onclick=()=>{state.questions.splice(i,1);toast('Question deleted');closeModal();render();};return;}
+});
+
+function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+
+/* boot */
+render();
+</script>
+</body>
+</html>
