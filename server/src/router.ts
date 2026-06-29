@@ -20,6 +20,10 @@ import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
 import { pipRouter } from './routers/pip.js';
 import { jobTitlesRouter } from './routers/jobTitles.js';
+import { organizationRouter } from './routers/organization.js';
+import { okrsRouter } from './routers/okrs.js';
+import { weeklyPlanRouter } from './routers/weeklyPlan.js';
+import { exitSurveyRouter } from './routers/exitSurvey.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -39,6 +43,10 @@ export const appRouter = router({
   chat: chatRouter,
   pip: pipRouter,
   jobTitles: jobTitlesRouter,
+  organization: organizationRouter,
+  okrs: okrsRouter,
+  weeklyPlan: weeklyPlanRouter,
+  exitSurvey: exitSurveyRouter,
 });
 
 export type AppRouter = typeof appRouter;

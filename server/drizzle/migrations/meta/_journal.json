@@ -22,6 +22,13 @@
       "when": 1782756965004,
       "tag": "0002_seed_job_titles",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782758640053,
+      "tag": "0003_new_surfaces",
+      "breakpoints": true
     }
   ]
 }

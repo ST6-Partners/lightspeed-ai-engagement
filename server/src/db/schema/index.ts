@@ -33,3 +33,8 @@ export { jobTitles } from './jobTitles.js';
 export {
   pips, pipConcerns, pipGoals, pipSupports, pipCheckins, pipSignatures,
 } from './pip.js';
+
+// New surfaces (DD-002): Planning + Engagement backends
+export { okrNodes } from './okr.js';
+export { weeklyCheckins } from './weeklyPlan.js';
+export { exitSurveys } from './exitSurvey.js';
