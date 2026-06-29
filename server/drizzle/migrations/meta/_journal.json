@@ -15,6 +15,13 @@
       "when": 1782756477380,
       "tag": "0001_pip_job_titles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782756965004,
+      "tag": "0002_seed_job_titles",
+      "breakpoints": true
     }
   ]
 }
