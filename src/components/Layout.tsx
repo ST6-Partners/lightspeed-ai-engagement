@@ -1,23 +1,41 @@
 // ============================================================
-// LAYOUT — sidebar + top bar with NotificationBell + FeedbackDrawer
+// LAYOUT — Lightspeed left sidebar (DD-001/002) + top bar
 // Auth guard: redirects to /login if not authenticated
 // ============================================================
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut
-, Bot, ClipboardList }from 'lucide-react';
+import {
+  Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
+  Settings, LogOut, MessageSquare,
+} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
-const navItems = [
-  { path: '/', label: 'Home', icon: Home },
-  { path: '/entities', label: 'Entities', icon: Database },
-  { path: '/chat', label: 'AI Chat', icon: Bot },
-  { path: '/pips', label: 'Improvement Plans', icon: ClipboardList },
-  { path: '/admin/settings', label: 'Settings', icon: Settings },
+type NavItem = { path: string; label: string; icon: typeof Home };
+type NavGroup = { label: string | null; items: NavItem[] };
+
+// Information architecture per DD-002
+const navGroups: NavGroup[] = [
+  { label: null, items: [{ path: '/', label: 'Home', icon: Home }] },
+  {
+    label: 'Planning',
+    items: [
+      { path: '/organization', label: 'Organization', icon: Users },
+      { path: '/okrs', label: 'OKRs', icon: Target },
+      { path: '/weekly-plan', label: 'Weekly Plan', icon: CalendarCheck },
+    ],
+  },
+  {
+    label: 'Engagement',
+    items: [
+      { path: '/pips', label: 'PIP', icon: ClipboardList },
+      { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
+    ],
+  },
+  { label: 'System', items: [{ path: '/admin/settings', label: 'Admin', icon: Settings }] },
 ];
 
 export default function Layout() {
@@ -30,26 +48,19 @@ export default function Layout() {
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const handleLogout = async () => {
-    // Clear BOTH auth channels: the localStorage bearer token (primary path
-    // in the Replit iframe) and the server-side session + cookie (first-party
-    // path). The tRPC logout destroys req.session and clears tmpl.sid.
     localStorage.removeItem('auth_token');
     try {
       await logoutMutation.mutateAsync();
     } catch {
-      // ignore — we redirect to /login regardless
+      // ignore — redirect regardless
     }
     window.location.href = '/login';
   };
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isLoading && !user) {
-      navigate('/login', { replace: true });
-    }
+    if (!isLoading && !user) navigate('/login', { replace: true });
   }, [isLoading, user, navigate]);
 
-  // Sync browser timezone on every app load
   useEffect(() => {
     if (user) {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -57,10 +68,13 @@ export default function Layout() {
     }
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-sm text-gray-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-ls-bg">
+        <div className="text-sm text-ls-ink-3">Loading…</div>
       </div>
     );
   }
@@ -68,68 +82,82 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-56 bg-gray-900 text-gray-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-gray-700">
-          <p className="text-sm font-bold text-white mb-2">Lightspeed Systems</p>
-          <h1 className="text-lg font-semibold text-white">Template App</h1>
-          <p className="text-xs text-gray-400 mt-1">SP-002 Scaffold</p>
+      <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col">
+        <div className="px-4 py-4 flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(79,169,214,.45)] shrink-0">
+            <svg width="16" height="16" viewBox="0 0 40 40" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round">
+              <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
+              <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
+            </svg>
+          </span>
+          <div className="leading-tight">
+            <div className="text-white font-bold text-[15px]">Lightspeed</div>
+            <div className="text-[11px] text-[#7E8B94]">AI Engagement</div>
+          </div>
         </div>
-        <nav className="flex-1 py-4 space-y-1 px-2">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? 'bg-gray-700 text-white font-medium'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
+
+        <nav className="flex-1 px-2 py-2 overflow-y-auto">
+          {navGroups.map((group, gi) => (
+            <div key={gi} className="mb-1">
+              {group.label && (
+                <div className="px-2.5 pt-3 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] uppercase text-[#677480]">
+                  {group.label}
+                </div>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-colors ${
+                      active
+                        ? 'bg-ls-active text-white font-medium shadow-[0_4px_14px_rgba(79,169,214,.3)]'
+                        : 'text-[#B9C3CB] hover:bg-[#323D46] hover:text-white'
+                    }`}
+                  >
+                    <Icon size={18} className={active ? 'opacity-100' : 'opacity-85'} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
+
         {user && (
-          <div className="px-4 py-3 border-t border-gray-700">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
+          <div className="px-3 py-3 border-t border-[#36424B]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold">
                 {user.name?.charAt(0) || '?'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-gray-200 truncate">{user.name}</div>
-                <div className="text-[10px] text-gray-500">{user.role}</div>
+                <div className="text-[13px] font-semibold text-[#E3E7EA] truncate">{user.name}</div>
+                <div className="text-[11px] text-[#7E8B94]">{user.role}</div>
               </div>
             </div>
           </div>
         )}
-        <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500">
-          v0.1.0
-        </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top bar */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-14 bg-white/80 backdrop-blur border-b border-ls-line flex items-center justify-between px-6">
           <div />
           <div className="flex items-center gap-2">
             <WhatsNew />
             <NotificationBell />
             <button
               onClick={() => setShowFeedback(true)}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink-2 rounded-lg hover:bg-ls-bg-2 transition-colors"
               title="Submit Feedback"
             >
               <MessageSquare className="w-5 h-5" />
             </button>
             <button
               onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink-2 rounded-lg hover:bg-ls-bg-2 transition-colors"
               title="Sign out"
             >
               <LogOut className="w-[18px] h-[18px]" />
@@ -137,13 +165,11 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 p-6 overflow-auto">
           <Outlet />
         </main>
       </div>
 
-      {/* Feedback drawer */}
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />
     </div>
   );

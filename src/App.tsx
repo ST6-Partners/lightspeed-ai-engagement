@@ -7,6 +7,10 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
+import Organization from './pages/Organization';
+import Okrs from './pages/Okrs';
+import WeeklyPlan from './pages/WeeklyPlan';
+import ExitSurvey from './pages/ExitSurvey';
 
 export default function App() {
   return (
@@ -14,11 +18,19 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
-        <Route path="/entities" element={<Entities />} />
-        <Route path="/chat" element={<Chat />} />
+        {/* Planning */}
+        <Route path="/organization" element={<Organization />} />
+        <Route path="/okrs" element={<Okrs />} />
+        <Route path="/weekly-plan" element={<WeeklyPlan />} />
+        {/* Engagement */}
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
+        <Route path="/exit-survey" element={<ExitSurvey />} />
+        {/* System */}
         <Route path="/admin/settings" element={<AdminSettings />} />
+        {/* Retained template surfaces (not in primary nav) */}
+        <Route path="/entities" element={<Entities />} />
+        <Route path="/chat" element={<Chat />} />
       </Route>
     </Routes>
   );

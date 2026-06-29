@@ -2,6 +2,7 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
+@import '@fontsource/inter/800.css';
 
 @tailwind base;
 @tailwind components;
@@ -9,5 +10,15 @@
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-ls-bg text-ls-ink;
+}
+
+/* Lightspeed component helpers (DD-003) */
+@layer components {
+  .ls-card { @apply bg-white border border-ls-line rounded-ls shadow-ls; }
+  .ls-btn { @apply inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg px-4 py-2 transition-colors; }
+  .ls-btn-primary { @apply bg-ls-blue-deep text-white hover:bg-ls-blue-deeper; }
+  .ls-btn-ghost { @apply bg-white text-ls-ink border border-ls-line hover:bg-ls-bg-2; }
+  .ls-chip { @apply inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full; }
+  .ls-eyebrow { @apply text-xs font-bold tracking-widest uppercase text-ls-blue; }
 }
