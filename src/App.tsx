@@ -11,8 +11,6 @@ import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
-import Plan from './pages/Plan';
-import MyWeek from './pages/MyWeek';
 
 export default function App() {
   return (
@@ -24,8 +22,6 @@ export default function App() {
         <Route path="/organization" element={<Organization />} />
         <Route path="/okrs" element={<Okrs />} />
         <Route path="/weekly-plan" element={<WeeklyPlan />} />
-        <Route path="/plan" element={<Plan />} />
-        <Route path="/my-week" element={<MyWeek />} />
         {/* Engagement */}
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
