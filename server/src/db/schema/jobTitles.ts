@@ -16,12 +16,17 @@
 // ============================================================
 
 import { pgTable, uuid, varchar, integer, boolean, timestamp, unique } from 'drizzle-orm/pg-core';
+import { departments } from './departments.js';
 
 export const jobTitles = pgTable('job_titles', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: varchar('title', { length: 200 }).notNull(),     // "Software Engineer II"
   level: varchar('level', { length: 60 }),                 // optional, e.g. "L3" / "Senior"
-  department: varchar('department', { length: 120 }),      // optional grouping
+  // Department — managed FK into the departments lookup.
+  departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
+  // DEPRECATED free-text department — superseded by departmentId. Retained so the
+  // migration is purely additive (no destructive drop); not read/written by the app.
+  department: varchar('department', { length: 120 }),
   isActive: boolean('is_active').notNull().default(true),  // retire without deleting
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

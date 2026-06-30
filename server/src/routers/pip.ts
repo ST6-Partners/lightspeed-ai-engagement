@@ -32,6 +32,7 @@ import {
 } from '../db/schema/pip.js';
 import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
+import { departments } from '../db/schema/departments.js';
 import { auditChange, auditFieldChanges } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import {
@@ -131,13 +132,16 @@ export const pipRouter = router({
       const nameById = new Map(allUsers.map((u) => [u.id, u.name]));
       const titles = await ctx.db.query.jobTitles.findMany();
       const titleById = new Map(titles.map((t) => [t.id, t.title]));
+      const depts = await ctx.db.query.departments.findMany();
+      const deptById = new Map(depts.map((d) => [d.id, d.name]));
       return rows.map((p) => ({
         ...p,
         employeeName: p.employeeId ? nameById.get(p.employeeId) ?? null : null,
         managerName: p.managerId ? nameById.get(p.managerId) ?? null : null,
         hrPartnerName: p.hrPartnerId ? nameById.get(p.hrPartnerId) ?? null : null,
-        // Derived display label for the FK (frontends read `roleLevel`).
+        // Derived display labels for the FKs (frontends read `roleLevel` / `team`).
         roleLevel: p.jobTitleId ? titleById.get(p.jobTitleId) ?? null : null,
+        team: p.departmentId ? deptById.get(p.departmentId) ?? null : null,
       }));
     }),
 
@@ -160,6 +164,9 @@ export const pipRouter = router({
       const jt = pip.jobTitleId
         ? await ctx.db.query.jobTitles.findFirst({ where: eq(jobTitles.id, pip.jobTitleId) })
         : null;
+      const dept = pip.departmentId
+        ? await ctx.db.query.departments.findFirst({ where: eq(departments.id, pip.departmentId) })
+        : null;
 
       return {
         ...pip,
@@ -167,6 +174,7 @@ export const pipRouter = router({
         managerName: pip.managerId ? nameById.get(pip.managerId) ?? null : null,
         hrPartnerName: pip.hrPartnerId ? nameById.get(pip.hrPartnerId) ?? null : null,
         roleLevel: jt?.title ?? null, // derived label for the jobTitleId FK
+        team: dept?.name ?? null,     // derived label for the departmentId FK
         isEmployee: isSubject(ctx.user, pip),
         canEdit: isPipEditor(ctx.user, pip),
         concerns, goals, supports, checkins, signatures,
@@ -179,7 +187,7 @@ export const pipRouter = router({
       managerId: z.string().uuid().optional(),
       hrPartnerId: z.string().uuid().optional(),
       jobTitleId: z.string().uuid().optional(),
-      team: z.string().max(200).optional(),
+      departmentId: z.string().uuid().optional(),
       durationDays: z.number().int().min(1).max(365).optional(),
       startDate: z.string().optional(),
       midpointDate: z.string().optional(),
@@ -193,7 +201,7 @@ export const pipRouter = router({
         managerId: input.managerId ?? ctx.user.id, // creator is the manager by default
         hrPartnerId: input.hrPartnerId ?? null,
         jobTitleId: input.jobTitleId ?? null,
-        team: input.team ?? null,
+        departmentId: input.departmentId ?? null,
         durationDays: input.durationDays ?? 60,
         startDate: input.startDate ?? null,
         midpointDate: input.midpointDate ?? null,
@@ -230,7 +238,7 @@ export const pipRouter = router({
       managerId: z.string().uuid().nullable().optional(),
       hrPartnerId: z.string().uuid().nullable().optional(),
       jobTitleId: z.string().uuid().nullable().optional(),
-      team: z.string().max(200).nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(),
       durationDays: z.number().int().min(1).max(365).optional(),
       startDate: z.string().nullable().optional(),
       midpointDate: z.string().nullable().optional(),

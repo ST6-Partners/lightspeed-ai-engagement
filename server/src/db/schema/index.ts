@@ -29,6 +29,7 @@ export { sampleEntities } from './sampleEntity.js';
 
 // Total: 23 tables (22 infrastructure + 1 sample domain)
 
+export { departments } from './departments.js';
 export { jobTitles } from './jobTitles.js';
 export {
   pips, pipConcerns, pipGoals, pipSupports, pipCheckins, pipSignatures,

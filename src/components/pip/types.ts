@@ -71,7 +71,8 @@ export interface PipListRow {
   hrPartnerName: string | null;
   jobTitleId: string | null;
   roleLevel: string | null;   // derived display label for jobTitleId
-  team: string | null;
+  departmentId: string | null;
+  team: string | null;        // derived display label for departmentId (the "Team / Department" field)
   status: PipStatus;
   durationDays: number;
   startDate: string | null;

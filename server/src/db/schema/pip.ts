@@ -29,6 +29,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 import { jobTitles } from './jobTitles.js';
+import { departments } from './departments.js';
 
 // ── The PIP record ──────────────────────────────────────────
 // status workflow (enforced in the router):
@@ -42,9 +43,13 @@ export const pips = pgTable('pips', {
   managerId: uuid('manager_id').references(() => users.id, { onDelete: 'set null' }),
   hrPartnerId: uuid('hr_partner_id').references(() => users.id, { onDelete: 'set null' }),
 
-  // Role / Level — now a FK into the managed job_titles lookup (was free text).
+  // Role / Level — FK into the managed job_titles lookup (was free text).
   jobTitleId: uuid('job_title_id').references(() => jobTitles.id, { onDelete: 'set null' }),
-  team: varchar('team', { length: 200 }),             // e.g. "Platform Engineering"
+  // Team / Department — managed FK into the departments lookup.
+  departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
+  // DEPRECATED free-text team — superseded by departmentId. Retained so the
+  // migration is purely additive (no destructive drop); not read/written by the app.
+  team: varchar('team', { length: 200 }),
 
   // §1 Plan details
   durationDays: integer('duration_days').notNull().default(60),

@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
+import { JobTitles, Departments } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
@@ -26,6 +27,9 @@ export default function App() {
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
+        {/* Core Data */}
+        <Route path="/core-data/job-titles" element={<JobTitles />} />
+        <Route path="/core-data/departments" element={<Departments />} />
         {/* System */}
         <Route path="/admin/settings" element={<AdminSettings />} />
         {/* Retained template surfaces (not in primary nav) */}

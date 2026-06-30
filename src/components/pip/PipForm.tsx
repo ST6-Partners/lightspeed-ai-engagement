@@ -18,12 +18,13 @@ export default function PipForm({ initial, onClose, onSaved }: Props) {
   const mode = initial ? 'edit' : 'create';
   const { data: users } = trpc.pip.listUsers.useQuery();
   const { data: titles } = trpc.jobTitles.list.useQuery();
+  const { data: depts } = trpc.departments.list.useQuery();
 
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? '');
   const [managerId, setManagerId] = useState(initial?.managerId ?? '');
   const [hrPartnerId, setHrPartnerId] = useState(initial?.hrPartnerId ?? '');
   const [jobTitleId, setJobTitleId] = useState(initial?.jobTitleId ?? '');
-  const [team, setTeam] = useState(initial?.team ?? '');
+  const [departmentId, setDepartmentId] = useState(initial?.departmentId ?? '');
   const [durationDays, setDurationDays] = useState(String(initial?.durationDays ?? 60));
   const [startDate, setStartDate] = useState(initial?.startDate ?? '');
   const [midpointDate, setMidpointDate] = useState(initial?.midpointDate ?? '');
@@ -53,7 +54,7 @@ export default function PipForm({ initial, onClose, onSaved }: Props) {
         managerId: managerId || undefined,
         hrPartnerId: hrPartnerId || undefined,
         jobTitleId: jobTitleId || undefined,
-        team: team || undefined,
+        departmentId: departmentId || undefined,
         durationDays: days,
         startDate: startDate || undefined,
         midpointDate: midpointDate || undefined,
@@ -67,7 +68,7 @@ export default function PipForm({ initial, onClose, onSaved }: Props) {
         managerId: managerId || null,
         hrPartnerId: hrPartnerId || null,
         jobTitleId: jobTitleId || null,
-        team: team || null,
+        departmentId: departmentId || null,
         durationDays: days,
         startDate: startDate || null,
         midpointDate: midpointDate || null,
@@ -114,7 +115,7 @@ export default function PipForm({ initial, onClose, onSaved }: Props) {
                   <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>
                 ))}
               </select>
-              <p className="text-[11px] text-gray-400 mt-1">Managed in Admin → Job Titles.</p>
+              <p className="text-[11px] text-gray-400 mt-1">Managed in Core Data → Job Titles.</p>
             </div>
             <div>
               <label className={label}>Manager</label>
@@ -130,8 +131,13 @@ export default function PipForm({ initial, onClose, onSaved }: Props) {
             </div>
             <div>
               <label className={label}>Team / Department</label>
-              <input className={input} value={team} onChange={(e) => setTeam(e.target.value)}
-                placeholder="e.g. Platform Engineering" />
+              <select className={input} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                <option value="">—</option>
+                {(depts ?? []).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">Managed in Core Data → Departments.</p>
             </div>
             <div>
               <label className={label}>Plan duration (days)</label>

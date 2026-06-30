@@ -12,6 +12,7 @@ import { eq, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
+import { departments } from '../db/schema/departments.js';
 import { pips } from '../db/schema/pip.js';
 import { requireAdmin } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
@@ -25,7 +26,13 @@ export const jobTitlesRouter = router({
       const all = await ctx.db.query.jobTitles.findMany({
         orderBy: [asc(jobTitles.sortOrder), asc(jobTitles.title)],
       });
-      return input?.includeInactive ? all : all.filter((t) => t.isActive);
+      const depts = await ctx.db.query.departments.findMany();
+      const nameById = new Map(depts.map((d) => [d.id, d.name]));
+      const withDept = all.map((t) => ({
+        ...t,
+        departmentName: t.departmentId ? nameById.get(t.departmentId) ?? null : null,
+      }));
+      return input?.includeInactive ? withDept : withDept.filter((t) => t.isActive);
     }),
 
   create: protectedProcedure
@@ -33,7 +40,7 @@ export const jobTitlesRouter = router({
     .input(z.object({
       title: z.string().min(1).max(200),
       level: z.string().max(60).optional(),
-      department: z.string().max(120).optional(),
+      departmentId: z.string().uuid().optional(),
       sortOrder: z.number().int().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -42,7 +49,7 @@ export const jobTitlesRouter = router({
       const [row] = await ctx.db.insert(jobTitles).values({
         title: input.title,
         level: input.level ?? null,
-        department: input.department ?? null,
+        departmentId: input.departmentId ?? null,
         sortOrder: input.sortOrder ?? 0,
       }).returning();
       await auditChange(ctx.db, ctx.user.id, row.id, 'job_titles', 'create');
@@ -56,7 +63,7 @@ export const jobTitlesRouter = router({
       id: z.string().uuid(),
       title: z.string().min(1).max(200).optional(),
       level: z.string().max(60).nullable().optional(),
-      department: z.string().max(120).nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(),
       isActive: z.boolean().optional(),
       sortOrder: z.number().int().optional(),
     }))

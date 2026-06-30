@@ -36,6 +36,20 @@
       "when": 1782760854793,
       "tag": "0004_seed_lightspeed_users",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782850806189,
+      "tag": "0005_departments_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782850820228,
+      "tag": "0006_seed_departments",
+      "breakpoints": true
     }
   ]
 }
