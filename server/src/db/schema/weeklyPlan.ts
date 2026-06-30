@@ -7,11 +7,14 @@ import {
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 
+// A single weekly priority. Optionally linked to an OKR node (objective or key result).
+export type WeeklyPriority = { text: string; okrNodeId?: string | null };
+
 export const weeklyCheckins = pgTable('weekly_checkins', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   weekStart: date('week_start').notNull(),                 // Monday of the ISO week
-  priorities: jsonb('priorities').$type<string[]>().notNull().default([]),
+  priorities: jsonb('priorities').$type<WeeklyPriority[]>().notNull().default([]),
   wins: text('wins'),
   blockers: text('blockers'),
   mood: integer('mood'),                                   // 1..5

@@ -1,42 +1,139 @@
 // Weekly Plan — live, per-user weekly check-in (DD-002 Planning). No scoring, no lock.
-import { useEffect, useState } from 'react';
-import { Hand } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Hand, Link2, X, Trash2, Pencil } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 const MOODS = ['😞', '😐', '🙂', '😀', '🤩'];
 const MOOD_LABELS = ['Drained', 'Low', 'Okay', 'Good', 'Energized'];
 const PULSE = ['Disagree', 'Neutral', 'Agree'];
 
+type Priority = { text: string; okrNodeId: string | null };
+
+// One objective with its key-result children, for the grouped OKR picker.
+type OkrGroup = {
+  objective: { id: string; title: string };
+  keyResults: { id: string; title: string }[];
+};
+
 export default function WeeklyPlan() {
   const { data, refetch } = trpc.weeklyPlan.getCurrent.useQuery();
   const save = trpc.weeklyPlan.save.useMutation({ onSuccess: () => refetch() });
+  const { data: okrs } = trpc.okrs.list.useQuery();
 
-  const [priorities, setPriorities] = useState<string[]>(['']);
+  const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
   const [wins, setWins] = useState('');
   const [blockers, setBlockers] = useState('');
   const [mood, setMood] = useState<number | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
 
+  // Which picker is open: 'add' for the Add-priority button, or a row index for a row's link control.
+  const [picker, setPicker] = useState<'add' | number | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
   // Hydrate local form when the server check-in loads/changes.
   useEffect(() => {
     if (!data) return;
     const c = data.checkin;
-    setPriorities(c?.priorities?.length ? c.priorities : ['']);
+    const raw = c?.priorities ?? [];
+    const norm: Priority[] = raw.map((p: string | { text: string; okrNodeId?: string | null }) =>
+      typeof p === 'string' ? { text: p, okrNodeId: null } : { text: p.text, okrNodeId: p.okrNodeId ?? null },
+    );
+    setPriorities(norm.length ? norm : [{ text: '', okrNodeId: null }]);
     setWins(c?.wins ?? '');
     setBlockers(c?.blockers ?? '');
     setMood(c?.mood ?? null);
     setPulse(c?.pulseAnswer ?? null);
   }, [data?.weekStart, data?.checkin?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Close any open picker on outside click.
+  useEffect(() => {
+    if (picker === null) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicker(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [picker]);
+
   const weekStart = data?.weekStart ?? '';
-  const setPriority = (i: number, v: string) => setPriorities((p) => p.map((x, idx) => (idx === i ? v : x)));
+
+  // Non-archived objectives + key results, grouped by objective.
+  const active = (okrs ?? []).filter((n) => !n.archivedAt);
+  const groups: OkrGroup[] = active
+    .filter((n) => n.type === 'objective')
+    .map((obj) => ({
+      objective: { id: obj.id, title: obj.title },
+      keyResults: active
+        .filter((n) => n.type === 'key_result' && n.parentId === obj.id)
+        .map((kr) => ({ id: kr.id, title: kr.title })),
+    }));
+  const nodeTitle = (id: string | null): string | null => {
+    if (!id) return null;
+    const n = active.find((x) => x.id === id);
+    return n ? n.title : null;
+  };
+
+  const setText = (i: number, v: string) =>
+    setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, text: v } : x)));
+  const setLink = (i: number, id: string | null) =>
+    setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, okrNodeId: id } : x)));
+  const removeRow = (i: number) => setPriorities((p) => p.filter((_, idx) => idx !== i));
+  const addOwn = () => setPriorities((p) => [...p, { text: '', okrNodeId: null }]);
+  const addFromNode = (id: string, title: string) =>
+    setPriorities((p) => [...p, { text: title, okrNodeId: id }]);
 
   const onSave = () =>
     save.mutate({
       weekStart,
-      priorities: priorities.filter((p) => p.trim()),
+      priorities: priorities
+        .filter((p) => p.text.trim() || p.okrNodeId)
+        .map((p) => ({ text: p.text, okrNodeId: p.okrNodeId })),
       wins, blockers, mood, pulseAnswer: pulse, status: 'saved',
     });
+
+  // Shared grouped OKR menu. `onPick` receives the chosen node id + title.
+  // `withWriteOwn` adds the "Write my own…" item (used by the Add-priority dropdown).
+  const okrMenu = (onPick: (id: string, title: string) => void, withWriteOwn: boolean) => (
+    <div
+      ref={pickerRef}
+      className="absolute z-20 mt-1 w-72 max-h-80 overflow-auto ls-card p-1.5 shadow-lg border border-ls-line bg-white rounded-lg"
+    >
+      {withWriteOwn && (
+        <>
+          <button
+            onClick={() => { addOwn(); setPicker(null); }}
+            className="w-full text-left text-sm px-2.5 py-2 rounded-md hover:bg-ls-bg-2"
+          >
+            ✏️ Write my own…
+          </button>
+          <div className="border-t border-ls-line my-1.5" />
+        </>
+      )}
+      {groups.length === 0 ? (
+        <div className="text-xs text-ls-ink-3 px-2.5 py-2">No OKRs yet.</div>
+      ) : (
+        groups.map((g) => (
+          <div key={g.objective.id} className="py-0.5">
+            <button
+              onClick={() => { onPick(g.objective.id, g.objective.title); setPicker(null); }}
+              className="w-full text-left text-sm font-bold px-2.5 py-1.5 rounded-md hover:bg-ls-bg-2"
+            >
+              {g.objective.title}
+            </button>
+            {g.keyResults.map((kr) => (
+              <button
+                key={kr.id}
+                onClick={() => { onPick(kr.id, kr.title); setPicker(null); }}
+                className="w-full text-left text-sm px-2.5 py-1.5 pl-6 rounded-md hover:bg-ls-bg-2 text-ls-ink-2"
+              >
+                {kr.title}
+              </button>
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -56,12 +153,50 @@ export default function WeeklyPlan() {
       <section className="ls-card p-5 mt-5">
         <h2 className="font-bold mb-3">Priorities this week</h2>
         <div className="space-y-2.5">
-          {priorities.map((p, i) => (
-            <input key={i} value={p} onChange={(e) => setPriority(i, e.target.value)} placeholder="Add a priority…"
-              className="w-full text-sm border border-ls-line rounded-lg px-3 py-2.5 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50" />
-          ))}
+          {priorities.map((p, i) => {
+            const linked = nodeTitle(p.okrNodeId);
+            return (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={p.text}
+                  onChange={(e) => setText(i, e.target.value)}
+                  placeholder="Add a priority…"
+                  className="flex-1 text-sm border border-ls-line rounded-lg px-3 py-2.5 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50"
+                />
+                {linked ? (
+                  <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep inline-flex items-center gap-1 whitespace-nowrap">
+                    🔗 {linked}
+                    <button onClick={() => setLink(i, null)} aria-label="Unlink OKR" className="text-ls-blue-deep">
+                      <X size={13} />
+                    </button>
+                  </span>
+                ) : (
+                  <div className="relative">
+                    <button
+                      onClick={() => setPicker(picker === i ? null : i)}
+                      className="text-sm font-medium text-ls-blue-deep inline-flex items-center gap-1 whitespace-nowrap"
+                    >
+                      <Link2 size={14} /> link to OKR
+                    </button>
+                    {picker === i && okrMenu((id) => setLink(i, id), false)}
+                  </div>
+                )}
+                <button onClick={() => removeRow(i)} aria-label="Remove priority" className="text-ls-ink-3 hover:text-ls-watch">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            );
+          })}
         </div>
-        <button onClick={() => setPriorities((p) => [...p, ''])} className="text-sm font-medium text-ls-blue-deep mt-3">+ Add priority</button>
+        <div className="relative inline-block mt-3">
+          <button
+            onClick={() => setPicker(picker === 'add' ? null : 'add')}
+            className="text-sm font-medium text-ls-blue-deep inline-flex items-center gap-1"
+          >
+            <Pencil size={14} /> + Add priority
+          </button>
+          {picker === 'add' && okrMenu((id, title) => addFromNode(id, title), true)}
+        </div>
       </section>
 
       <div className="grid md:grid-cols-2 gap-4 mt-4">

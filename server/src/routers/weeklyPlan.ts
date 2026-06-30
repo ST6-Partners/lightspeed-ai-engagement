@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
-import { weeklyCheckins } from '../db/schema/weeklyPlan.js';
+import { weeklyCheckins, type WeeklyPriority } from '../db/schema/weeklyPlan.js';
 
 // Monday (ISO) of the week containing `d`, as YYYY-MM-DD.
 function mondayOf(d = new Date()): string {
@@ -20,13 +20,23 @@ export const weeklyPlanRouter = router({
       const row = await ctx.db.query.weeklyCheckins.findFirst({
         where: and(eq(weeklyCheckins.userId, ctx.user.id), eq(weeklyCheckins.weekStart, weekStart)),
       });
+      if (row) {
+        // Legacy rows may hold plain strings; normalize so the client always gets objects.
+        const raw = row.priorities as unknown as Array<string | WeeklyPriority>;
+        row.priorities = raw.map((p) =>
+          typeof p === 'string' ? { text: p, okrNodeId: null } : { text: p.text, okrNodeId: p.okrNodeId ?? null },
+        );
+      }
       return { weekStart, checkin: row ?? null };
     }),
 
   save: protectedProcedure
     .input(z.object({
       weekStart: z.string(),
-      priorities: z.array(z.string()).default([]),
+      priorities: z.array(z.union([
+        z.string(),
+        z.object({ text: z.string(), okrNodeId: z.string().uuid().nullable().optional() }),
+      ])).default([]).transform((arr) => arr.map((p) => (typeof p === 'string' ? { text: p } : { text: p.text, okrNodeId: p.okrNodeId ?? null }))),
       wins: z.string().optional(),
       blockers: z.string().optional(),
       mood: z.number().int().min(1).max(5).nullable().optional(),
