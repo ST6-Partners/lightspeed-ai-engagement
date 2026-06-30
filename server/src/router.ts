@@ -24,6 +24,7 @@ import { organizationRouter } from './routers/organization.js';
 import { okrsRouter } from './routers/okrs.js';
 import { weeklyPlanRouter } from './routers/weeklyPlan.js';
 import { exitSurveyRouter } from './routers/exitSurvey.js';
+import { planningRouter } from './routers/planning.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -47,6 +48,7 @@ export const appRouter = router({
   okrs: okrsRouter,
   weeklyPlan: weeklyPlanRouter,
   exitSurvey: exitSurveyRouter,
+  planning: planningRouter,
 });
 
 export type AppRouter = typeof appRouter;

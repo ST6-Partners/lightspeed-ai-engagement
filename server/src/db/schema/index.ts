@@ -38,3 +38,6 @@ export {
 export { okrNodes } from './okr.js';
 export { weeklyCheckins } from './weeklyPlan.js';
 export { exitSurveys } from './exitSurvey.js';
+
+// Planning / OKR hierarchy + weekly check-in (planning router)
+export { planItems, userPriorities, weeklyPlans, commits } from './planning.js';
