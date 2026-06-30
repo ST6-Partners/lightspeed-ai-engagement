@@ -11,7 +11,6 @@ import {
   ChangeLogPanel,
   FeedbackPanel,
   TelemetryPanel,
-  UserManagement,
   PromptAdmin,
   DatabaseViews,
   SystemJobs,
@@ -90,7 +89,6 @@ const ANALYTICS_TABS = [
 ];
 
 const CONFIG_TABS = [
-  { id: 'users', label: 'Users' },
   { id: 'archived', label: 'Archived Items' },
 ];
 
@@ -241,7 +239,6 @@ export default function AdminSettings() {
         {activeSection === 'feedback' && showAnalytics && <FeedbackPanel />}
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
-        {activeSection === 'users' && showConfig && <UserManagement />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}
         {activeSection === 'activeusers' && showSystem && <ActiveUsers />}

@@ -118,6 +118,7 @@ export const authRouter = router({
       return ctx.db.query.users.findMany({
         columns: {
           id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
+          jobTitleId: true, departmentId: true, managerId: true,
           connectionType: true, isActive: true, isBeta: true, timezone: true,
           lastActiveAt: true, lastLoginAt: true,
         },
@@ -130,6 +131,9 @@ export const authRouter = router({
     .input(z.object({
       id: z.string().uuid(),
       title: z.string().optional(),
+      jobTitleId: z.string().uuid().nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(),
+      managerId: z.string().uuid().nullable().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
       isActive: z.boolean().optional(),
       isBeta: z.boolean().optional(),

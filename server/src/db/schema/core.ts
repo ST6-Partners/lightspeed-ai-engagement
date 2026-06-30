@@ -13,7 +13,9 @@
 //     per-app). The library authenticates; this column authorizes.
 // ============================================================
 
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { jobTitles } from './jobTitles.js';
+import { departments } from './departments.js';
 
 // Users — four-tier role model (DD-012, DD-014)
 export const users = pgTable('users', {
@@ -32,6 +34,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
   title: varchar('title', { length: 255 }),
+  // Employee directory fields (Core Data → Employees). Managed lookups:
+  jobTitleId: uuid('job_title_id').references(() => jobTitles.id, { onDelete: 'set null' }),
+  departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
+  managerId: uuid('manager_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
   role: varchar('role', { length: 20 }).notNull().default('user'),
     // 'user' | 'manager' | 'admin' | 'sysadmin'
   isBeta: boolean('is_beta').notNull().default(false),
