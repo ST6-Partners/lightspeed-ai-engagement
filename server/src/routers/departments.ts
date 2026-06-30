@@ -12,7 +12,7 @@ import { eq, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { departments } from '../db/schema/departments.js';
-import { jobTitles } from '../db/schema/jobTitles.js';
+import { users } from '../db/schema/core.js';
 import { pips } from '../db/schema/pip.js';
 import { requireAdmin } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
@@ -79,13 +79,13 @@ export const departmentsRouter = router({
     .use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const titleRefs = await ctx.db.query.jobTitles.findMany({ where: eq(jobTitles.departmentId, input.id) });
+      const empRefs = await ctx.db.query.users.findMany({ where: eq(users.departmentId, input.id) });
       const pipRefs = await ctx.db.query.pips.findMany({ where: eq(pips.departmentId, input.id) });
-      const n = titleRefs.length + pipRefs.length;
+      const n = empRefs.length + pipRefs.length;
       if (n > 0) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: `In use by ${titleRefs.length} title(s) and ${pipRefs.length} plan(s). Deactivate it instead of deleting.`,
+          message: `In use by ${empRefs.length} employee(s) and ${pipRefs.length} plan(s). Deactivate it instead of deleting.`,
         });
       }
       await ctx.db.delete(departments).where(eq(departments.id, input.id));
