@@ -12,6 +12,19 @@ const STATUS_META: Record<Status, { label: string; text: string; bg: string; spa
 };
 const TABS = ['People', 'Pulse', 'Org Tree'] as const;
 
+const OKR_LIGHT: Record<string, string> = { green: '#2E9E7B', yellow: '#C99300', red: '#C2615A' };
+const OKR_STATUS_LABEL: Record<string, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  on_hold: 'On hold',
+  complete: 'Complete',
+};
+const OKR_GROUPS = [
+  { type: 'objective', label: 'Objectives' },
+  { type: 'key_result', label: 'Key Results' },
+  { type: 'task', label: 'Tasks' },
+] as const;
+
 function Spark({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return <div className="w-[92px] text-[11px] text-ls-ink-3 text-right">—</div>;
   const max = Math.max(...data), min = Math.min(...data);
@@ -29,9 +42,24 @@ function Spark({ data, color }: { data: number[]; color: string }) {
 
 export default function Organization() {
   const [tab, setTab] = useState<(typeof TABS)[number]>('People');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading } = trpc.organization.list.useQuery();
+  const { data: okrs } = trpc.okrs.list.useQuery();
   const members = data?.members ?? [];
   const stats = data?.stats;
+
+  const selected = members.find((p) => p.id === selectedId) ?? null;
+  const selectPerson = (id: string) => setSelectedId((cur) => (cur === id ? null : id));
+  const switchTab = (t: (typeof TABS)[number]) => {
+    setTab(t);
+    if (t !== 'Org Tree') setSelectedId(null);
+  };
+
+  const ownedOkrs = selected
+    ? (okrs ?? []).filter(
+        (n) => (n.owner ?? '').trim().toLowerCase() === selected.name.trim().toLowerCase(),
+      )
+    : [];
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -43,7 +71,7 @@ export default function Organization() {
 
       <div className="flex gap-1 border-b border-ls-line mb-5">
         {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} onClick={() => switchTab(t)}
             className={`text-sm font-semibold px-3.5 py-2.5 -mb-px border-b-2 ${
               tab === t ? 'text-ls-blue-deep border-ls-blue' : 'text-ls-ink-3 border-transparent hover:text-ls-ink-2'
             }`}>{t}</button>
@@ -106,18 +134,85 @@ export default function Organization() {
         </div>
       )}
 
-      {tab === 'Org Tree' && (
+      {tab === 'Org Tree' && !selected && (
         <div className="ls-card p-5">
-          <div className="font-semibold mb-3">People</div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-semibold">People</div>
+            <div className="text-xs text-ls-ink-3">Select a person to see their OKRs</div>
+          </div>
           {members.map((p) => (
-            <div key={p.id} className="flex items-center gap-2.5 py-1.5">
+            <button key={p.id} onClick={() => selectPerson(p.id)}
+              className="w-full text-left flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded hover:bg-ls-bg-2">
               <span className="w-7 h-7 rounded-full bg-ls-bg-2 text-ls-ink-2 flex items-center justify-center text-[11px] font-bold">
                 {p.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
               </span>
               <span className="text-sm font-medium text-ls-ink">{p.name}</span>
               <span className="text-xs text-ls-ink-3">· {p.role}</span>
-            </div>
+            </button>
           ))}
+        </div>
+      )}
+
+      {tab === 'Org Tree' && selected && (
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-4">
+          <div className="ls-card p-5">
+            <div className="font-semibold mb-3">People</div>
+            {members.map((p) => {
+              const isSel = p.id === selectedId;
+              return (
+                <button key={p.id} onClick={() => selectPerson(p.id)}
+                  className={`w-full text-left flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded border-l-2 ${
+                    isSel ? 'bg-ls-bg-2 border-ls-blue' : 'border-transparent hover:bg-ls-bg-2'
+                  }`}>
+                  <span className="w-7 h-7 rounded-full bg-ls-bg-2 text-ls-ink-2 flex items-center justify-center text-[11px] font-bold">
+                    {p.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                  </span>
+                  <span className="text-sm font-medium text-ls-ink truncate">{p.name}</span>
+                  <span className="text-xs text-ls-ink-3 truncate">· {p.role}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="ls-card p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-11 h-11 rounded-full bg-ls-active text-white flex items-center justify-center font-bold shrink-0">
+                {selected.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[14.5px]">{selected.name}</div>
+                <div className="text-[12.5px] text-ls-ink-3">{selected.role}</div>
+              </div>
+              <button onClick={() => setSelectedId(null)}
+                className="text-ls-ink-3 hover:text-ls-ink text-lg leading-none px-1" aria-label="Close">×</button>
+            </div>
+
+            {ownedOkrs.length === 0 ? (
+              <div className="text-sm text-ls-ink-3">No OKRs owned yet.</div>
+            ) : (
+              OKR_GROUPS.map((g) => {
+                const items = ownedOkrs.filter((n) => n.type === g.type);
+                if (items.length === 0) return null;
+                return (
+                  <div key={g.type} className="mb-4 last:mb-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-ls-ink-3 mb-2">{g.label}</div>
+                    {items.map((n) => (
+                      <div key={n.id} className="flex items-start gap-2.5 py-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                          style={{ background: n.light ? OKR_LIGHT[n.light] : '#8A969E' }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-ls-ink">{n.title}</div>
+                          <div className="text-[12px] text-ls-ink-3">
+                            {OKR_STATUS_LABEL[n.status] ?? n.status}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
