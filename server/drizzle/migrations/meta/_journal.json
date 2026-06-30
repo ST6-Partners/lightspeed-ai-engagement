@@ -71,6 +71,13 @@
       "when": 1782853020714,
       "tag": "0009_titles_drop_department",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782855300000,
+      "tag": "0010_inbound_emails",
+      "breakpoints": true
     }
   ]
 }

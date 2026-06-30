@@ -15,6 +15,7 @@ import { agentRouter } from './routers/agent.js';
 import { feedbackApproveRouter } from './routers/feedbackApprove.js';
 import { promptsRouter } from './routers/prompts.js';
 import { systemRouter } from './routers/system.js';
+import { emailTestRouter } from './routers/emailTest.js';
 import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
@@ -39,6 +40,7 @@ export const appRouter = router({
   feedbackApprove: feedbackApproveRouter,                     // propose-and-approve auto-fix harness (SC-034)
   prompts: promptsRouter,
   system: systemRouter,
+  emailTest: emailTestRouter,
   releases: releasesRouter,
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,

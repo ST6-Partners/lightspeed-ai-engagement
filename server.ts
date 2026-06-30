@@ -14,6 +14,7 @@ import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerBuiltInJobs } from './server/src/services/job-runner.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
+import { inboundEmails } from './server/src/db/schema/email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = env.NODE_ENV === 'production';
@@ -204,6 +205,31 @@ async function main() {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ── Inbound email webhook (SendGrid Inbound Parse / simulate / curl) ──
+  // Accepts JSON or urlencoded posts. Real SendGrid Inbound Parse sends
+  // multipart/form-data — add a multipart parser before going live on a
+  // dedicated subdomain; JSON/urlencoded + the admin "simulate" path cover
+  // the build phase. Always responds 200 so SendGrid does not retry-storm.
+  app.post('/api/webhooks/inbound-email', express.urlencoded({ extended: true, limit: '15mb' }), async (req, res) => {
+    try {
+      const b: any = req.body || {};
+      const to: string | null = b.to || b.envelope_to || null;
+      const tag = typeof to === 'string' && to.includes('+') ? (to.split('+')[1]?.split('@')[0] ?? null) : null;
+      await db.insert(inboundEmails).values({
+        fromEmail: (b.from || 'unknown@unknown').toString().slice(0, 320),
+        toEmail: to ? to.toString().slice(0, 320) : null,
+        subject: (b.subject || '(no subject)').toString().slice(0, 500),
+        body: (b.text || b.html || '').toString(),
+        replyTag: tag,
+        source: 'webhook',
+        raw: b,
+      });
+    } catch (err) {
+      console.error('[inbound-email] failed to store:', err);
+    }
+    res.status(200).json({ ok: true });
   });
 
   app.use('/api/trpc', createExpressMiddleware({ router: appRouter, createContext }));

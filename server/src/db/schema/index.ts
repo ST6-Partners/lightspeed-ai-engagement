@@ -39,3 +39,6 @@ export {
 export { okrNodes } from './okr.js';
 export { weeklyCheckins } from './weeklyPlan.js';
 export { exitSurveys } from './exitSurvey.js';
+
+// Email (1 table) — inbound/test inbox
+export { inboundEmails } from './email.js';
