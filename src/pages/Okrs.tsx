@@ -191,6 +191,7 @@ export default function Okrs() {
                             <div className="flex-1 min-w-0">
                               <div className="text-sm text-ls-ink">{n.title}</div>
                               <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}</div>
+                              {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
                             </div>
                           </div>
                         ))}
