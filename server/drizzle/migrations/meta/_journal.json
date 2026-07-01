@@ -99,6 +99,20 @@
       "when": 1782855480000,
       "tag": "0013_engagement_survey_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782855540000,
+      "tag": "0014_manager_survey",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782855600000,
+      "tag": "0015_seed_manager_survey",
+      "breakpoints": true
     }
   ]
 }

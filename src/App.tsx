@@ -7,12 +7,13 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
-import { JobTitles, Departments, Employees } from './pages/admin';
+import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
+import ManagerSurvey from './pages/ManagerSurvey';
 import Overview from './pages/Overview';
 
 export default function App() {
@@ -30,10 +31,13 @@ export default function App() {
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
         <Route path="/engagement-survey" element={<EngagementSurvey />} />
+        <Route path="/manager-survey" element={<ManagerSurvey />} />
         {/* Core Data */}
         <Route path="/core-data/employees" element={<Employees />} />
         <Route path="/core-data/job-titles" element={<JobTitles />} />
         <Route path="/core-data/departments" element={<Departments />} />
+        <Route path="/core-data/survey-questions" element={<ManagerSurveyQuestions />} />
+        <Route path="/core-data/rating-scale" element={<ManagerRatingScale />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}

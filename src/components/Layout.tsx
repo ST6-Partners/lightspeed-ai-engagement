@@ -8,6 +8,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText,
+  UserCheck, ListChecks, Gauge,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
@@ -34,6 +35,7 @@ const navGroups: NavGroup[] = [
       { path: '/pips', label: 'PIP', icon: ClipboardList },
       { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
       { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
+      { path: '/manager-survey', label: 'Manager Survey', icon: UserCheck },
     ],
   },
   {
@@ -42,6 +44,8 @@ const navGroups: NavGroup[] = [
       { path: '/core-data/employees', label: 'Employees', icon: Contact },
       { path: '/core-data/job-titles', label: 'Job Titles', icon: Briefcase },
       { path: '/core-data/departments', label: 'Departments', icon: Building2 },
+      { path: '/core-data/survey-questions', label: 'Survey Questions', icon: ListChecks },
+      { path: '/core-data/rating-scale', label: 'Rating Scale', icon: Gauge },
     ],
   },
   {

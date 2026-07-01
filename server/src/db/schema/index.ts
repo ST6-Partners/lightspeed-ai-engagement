@@ -48,3 +48,6 @@ export { engagementSurveyResponses } from './engagementSurvey.js';
 
 // Engagement analytics (2 tables) — survey periods + aggregate metrics fact table
 export { surveyPeriods, surveyMetrics } from './engagementAnalytics.js';
+
+// Manager Survey (3 tables) — questions lookup + rating scale + responses
+export { managerSurveyQuestions, managerRatingScale, managerSurveyResponses } from './managerSurvey.js';

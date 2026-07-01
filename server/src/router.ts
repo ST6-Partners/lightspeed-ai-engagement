@@ -28,6 +28,9 @@ import { exitSurveyRouter } from './routers/exitSurvey.js';
 import { departmentsRouter } from './routers/departments.js';
 import { engagementSurveyRouter } from './routers/engagementSurvey.js';
 import { engagementAnalyticsRouter } from './routers/engagementAnalytics.js';
+import { managerSurveyQuestionsRouter } from './routers/managerSurveyQuestions.js';
+import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
+import { managerSurveyRouter } from './routers/managerSurvey.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -55,6 +58,9 @@ export const appRouter = router({
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,
   engagementAnalytics: engagementAnalyticsRouter,
+  managerSurveyQuestions: managerSurveyQuestionsRouter,
+  managerRatingScale: managerRatingScaleRouter,
+  managerSurvey: managerSurveyRouter,
 });
 
 export type AppRouter = typeof appRouter;

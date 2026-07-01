@@ -18,3 +18,5 @@ export { default as JobTitles } from './JobTitles';
 export { default as Departments } from './Departments';
 export { default as Employees } from './Employees';
 export { default as EmailTestPanel } from './EmailTestPanel';
+export { default as ManagerSurveyQuestions } from './ManagerSurveyQuestions';
+export { default as ManagerRatingScale } from './ManagerRatingScale';
