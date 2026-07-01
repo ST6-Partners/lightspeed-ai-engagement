@@ -18,6 +18,7 @@ import { generateText, stepCountIs } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { buildChatTools } from '../services/chatTools.js';
 import type { RoleTier } from '../services/permissions.js';
+import { requireAdmin } from '../services/permissions.js';
 
 export const chatRouter = router({
 
@@ -280,6 +281,22 @@ export const chatRouter = router({
         },
       };
     }),
+
+  // ── AI status (admin-only diagnostic) ──────────────────────
+  // Reports whether the SERVER process can see ANTHROPIC_API_KEY, without
+  // ever returning the key itself. Used to distinguish "live model" from
+  // the canned no-key fallback.
+  aiStatus: protectedProcedure.use(requireAdmin).query(() => {
+    const raw = process.env.ANTHROPIC_API_KEY ?? '';
+    const key = raw.trim();
+    return {
+      keyPresent: key.length > 0,
+      looksValid: key.startsWith('sk-ant-'),
+      length: key.length,
+      hadWhitespace: raw !== key,
+      model: 'claude-sonnet-4-20250514',
+    };
+  }),
 
   // ── Record reaction on a response ──────────────────────────
   recordReaction: protectedProcedure

@@ -149,6 +149,10 @@ export default function Chat() {
   // Load previous conversations from server
   const { data: serverHistory } = trpc.chat.myConversations.useQuery();
 
+  // Admin-only: does the server see the Anthropic key? (live vs fallback)
+  const isAdmin = me?.role === 'admin' || me?.role === 'sysadmin';
+  const { data: aiStatus } = trpc.chat.aiStatus.useQuery(undefined, { enabled: !!isAdmin });
+
   // Mutations
   const startSessionMutation = trpc.chat.startSession.useMutation();
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
@@ -394,6 +398,26 @@ export default function Chat() {
           <span style={st.contextBadge}>
             Screen: {activeConv?.screenMode || getScreenContext().screenMode}
           </span>
+          {isAdmin && aiStatus && (
+            <span
+              style={{
+                ...st.contextBadge,
+                background: aiStatus.keyPresent && aiStatus.looksValid ? '#dcfce7' : aiStatus.keyPresent ? '#fef9c3' : '#fee2e2',
+                color: aiStatus.keyPresent && aiStatus.looksValid ? '#166534' : aiStatus.keyPresent ? '#854d0e' : '#991b1b',
+              }}
+              title={
+                aiStatus.keyPresent
+                  ? `Server sees ANTHROPIC_API_KEY (len ${aiStatus.length}${aiStatus.hadWhitespace ? ', has surrounding whitespace!' : ''}). Model: ${aiStatus.model}`
+                  : 'Server does NOT see ANTHROPIC_API_KEY — chat is using canned fallback responses.'
+              }
+            >
+              {aiStatus.keyPresent && aiStatus.looksValid
+                ? 'AI: live model'
+                : aiStatus.keyPresent
+                ? 'AI: key set, unexpected format'
+                : 'AI: fallback (no key on server)'}
+            </span>
+          )}
           {activeConv && activeConv.messages.length > 0 && (
             <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af' }}>
               {Math.ceil(activeConv.messages.length / 2)} turn(s)
