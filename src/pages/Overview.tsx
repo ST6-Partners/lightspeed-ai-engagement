@@ -6,6 +6,8 @@
 // Reads left → right. Content is static reference documentation.
 // ============================================================
 
+import { Fragment } from 'react';
+
 type Stage = {
   n: number;
   title: string;
@@ -51,7 +53,7 @@ function StageCard({ stage, theme }: { stage: Stage; theme: Theme }) {
   const bulletCls = tbd ? 'bg-ls-watch' : isExec ? 'bg-ls-blue-deep' : 'bg-ls-thrive';
 
   return (
-    <div className={`flex-1 min-w-[190px] rounded-ls border p-4 ${cardCls}`}>
+    <div className={`flex-1 basis-0 min-w-0 rounded-ls border p-4 ${cardCls}`}>
       <div className="flex items-center justify-between mb-2.5">
         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${numCls}`}>
           {stage.n}
@@ -98,10 +100,10 @@ function StageRow({ stages, theme }: { stages: Stage[]; theme: Theme }) {
   return (
     <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
       {stages.map((s, i) => (
-        <div key={s.n} className="flex flex-col lg:flex-row lg:items-stretch gap-3 flex-1">
+        <Fragment key={s.n}>
           <StageCard stage={s} theme={theme} />
           {i < stages.length - 1 && <Arrow />}
-        </div>
+        </Fragment>
       ))}
     </div>
   );
