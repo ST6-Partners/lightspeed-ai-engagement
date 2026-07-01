@@ -12,23 +12,23 @@ type Stage = {
   n: number;
   title: string;
   points: string[];
-  note?: string;        // muted "GIANT TBD" style note
+  note?: string;        // muted placeholder note (e.g. Reviews)
   badge?: string;       // solid "INCLUDES NEW BUILD" style badge
   tbd?: boolean;        // amber placeholder styling
 };
 
 const execution: Stage[] = [
   { n: 1, title: 'Core Data', points: ['Departments', 'Employees', 'Titles', 'Email addresses'] },
-  { n: 2, title: 'People & Org', points: ['Managers', 'Reporting lines', 'Organizes the core data from stage 1'] },
-  { n: 3, title: 'Projects & OKRs', points: ['Project plans', 'Objectives & key results', 'Tasks', 'Linked to people'] },
-  { n: 4, title: 'Weekly Plan', points: ['Employees plan their week', 'Priorities & plans', 'Connected to projects & OKRs (stage 3)'] },
+  { n: 2, title: 'Organization', points: ['Managers', 'Reporting lines', 'Organizes the core data from stage 1'] },
+  { n: 3, title: 'OKRs', points: ['Project plans', 'Objectives & key results', 'Tasks', 'Linked to people'] },
+  { n: 4, title: 'Weekly Plan', points: ['Employees plan their week', 'Priorities & plans', 'Connected to projects & OKRs'] },
 ];
 
 const engagement: Stage[] = [
   { n: 1, title: 'Check-ins', points: ['Bilateral, after each weekly 1:1', 'How the manager sees the employee', 'How the employee sees the manager', 'How the employee feels about Lightspeed'] },
   { n: 2, title: 'Reviews', points: [], note: 'Placeholder — to be defined', tbd: true },
   { n: 3, title: 'Coaching Plans', points: ['Growth areas for strong performers', "PIPs for employees who aren't doing well"] },
-  { n: 4, title: 'Engagement Surveys', points: ['Historic Lightspeed engagement surveys', 'New: manager survey — employees give specific feedback on how their manager is doing'], badge: 'Includes new build' },
+  { n: 4, title: 'Engagement Surveys', points: ['Historic Lightspeed engagement surveys', 'New: manager survey — employees give specific feedback on how their manager is doing'] },
   { n: 5, title: 'Exit Interviews', points: ['The ultimate truth serum on employee sentiment and engagement', 'Structured exit conversation', 'Content per defined coverage'] },
 ];
 
@@ -76,9 +76,6 @@ function StageCard({ stage, theme }: { stage: Stage; theme: Theme }) {
         </ul>
       )}
 
-      {stage.tbd && (
-        <span className="ls-chip mt-2 bg-ls-watch text-white">GIANT TBD</span>
-      )}
       {stage.badge && (
         <span className="ls-chip mt-2.5 bg-ls-thrive text-white uppercase tracking-wide">{stage.badge}</span>
       )}
