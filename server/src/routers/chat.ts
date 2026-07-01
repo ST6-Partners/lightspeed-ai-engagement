@@ -14,8 +14,10 @@ import { chatSessionLogs, chatDebugLog } from '../db/schema/telemetry.js';
 import { promptTemplates, designKnowledge, faqEntries } from '../db/schema/ai.js';
 import { users } from '../db/schema/core.js';
 import { trackActivity } from '../services/telemetry.js';
-import { generateText } from 'ai';
+import { generateText, stepCountIs } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { buildChatTools } from '../services/chatTools.js';
+import type { RoleTier } from '../services/permissions.js';
 
 export const chatRouter = router({
 
@@ -149,6 +151,7 @@ export const chatRouter = router({
       let responseText: string;
       let inputTokens = 0;
       let outputTokens = 0;
+      let toolCallCount = 0;
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -157,21 +160,43 @@ export const chatRouter = router({
         try {
           const anthropic = createAnthropic({ apiKey });
 
-          // Build messages array from conversation history
+          // Build messages array from conversation history. The client may
+          // already include the latest user turn in `history`; avoid pushing
+          // it twice.
           const messages: { role: 'user' | 'assistant'; content: string }[] = [];
           if (input.history && input.history.length > 0) {
             messages.push(...input.history);
           }
-          messages.push({ role: 'user', content: input.message });
+          const last = messages[messages.length - 1];
+          if (!(last && last.role === 'user' && last.content === input.message)) {
+            messages.push({ role: 'user', content: input.message });
+          }
+
+          // Read-only, permission-mirrored live-data tools. The caller's role
+          // gates sensitive tools; survey tools are aggregate-only.
+          const tools = buildChatTools({
+            db: ctx.db,
+            userId: ctx.user.id,
+            userRole: (ctx.user.role as RoleTier) || 'user',
+          });
+
+          const toolGuidance = [
+            '',
+            'You have READ-ONLY tools that query this application\'s LIVE data — employee directory, org/reporting, departments, job titles, OKRs, weekly-plan participation, PIP status, and engagement/exit/manager survey results. Use them to answer questions about real people, teams, and results instead of guessing.',
+            'Confidentiality rules you must never break: survey data (engagement, exit, manager) is AGGREGATE-ONLY — never attribute an answer to an individual, and never try to defeat the anonymity suppression the tools apply. If a tool returns permission_denied or a suppressed result, say so plainly rather than guessing. You cannot create, edit, or delete anything — you are strictly read-only.',
+          ].join('\n');
 
           const result = await generateText({
             model: anthropic('claude-sonnet-4-20250514'),
-            system: assembledContext,
+            system: assembledContext + '\n' + toolGuidance,
             messages,
-            maxOutputTokens: 1024,
+            tools,
+            stopWhen: stepCountIs(6),
+            maxOutputTokens: 1500,
           });
 
           responseText = result.text;
+          toolCallCount = (result.steps ?? []).reduce((acc, step) => acc + (step.toolCalls?.length ?? 0), 0);
           inputTokens = result.usage?.inputTokens ?? Math.ceil((assembledContext.length + input.message.length) / 4);
           outputTokens = result.usage?.outputTokens ?? Math.ceil(responseText.length / 4);
         } catch (err: any) {
@@ -229,7 +254,7 @@ export const chatRouter = router({
         turnNumber: input.turnNumber,
         inputTokens: inputTokens,
         outputTokens: outputTokens,
-        toolCalls: relevantFaq.length + relevantKnowledge.length,  // Knowledge lookups as "tool calls"
+        toolCalls: relevantFaq.length + relevantKnowledge.length + toolCallCount,
         loopCount: 1,
         durationMs,
       }).returning();
