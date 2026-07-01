@@ -16,12 +16,18 @@ export const engagementSurveyRouter = router({
   submit: protectedProcedure
     .input(z.object({
       answers: answersSchema,
+      respondentName: z.string().max(200).optional(),
+      jobTitle: z.string().max(200).optional(),
+      department: z.string().max(160).optional(),
       enpsScore: z.number().int().min(0).max(10).optional(),
       enpsReason: z.string().max(4000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.insert(engagementSurveyResponses).values({
         respondentId: ctx.user.id,
+        respondentName: input.respondentName?.trim() || null,
+        jobTitle: input.jobTitle?.trim() || null,
+        department: input.department?.trim() || null,
         answers: input.answers,
         enpsScore: input.enpsScore ?? null,
         enpsReason: input.enpsReason?.trim() || null,

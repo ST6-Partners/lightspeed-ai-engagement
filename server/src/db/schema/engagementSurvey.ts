@@ -13,6 +13,9 @@ import { users } from './core.js';
 export const engagementSurveyResponses = pgTable('engagement_survey_responses', {
   id: uuid('id').primaryKey().defaultRandom(),
   respondentId: uuid('respondent_id').references(() => users.id, { onDelete: 'set null' }),
+  respondentName: varchar('respondent_name', { length: 200 }),   // selected from the employee directory
+  jobTitle: varchar('job_title', { length: 200 }),               // selected job title (denormalized)
+  department: varchar('department', { length: 160 }),            // selected department (denormalized) — used to organize results
   answers: jsonb('answers').$type<Record<string, number>>().notNull().default({}),
   enpsScore: integer('enps_score'),                 // 0..10
   enpsReason: text('enps_reason'),                  // confidential open text

@@ -97,7 +97,10 @@ export const engagementAnalyticsRouter = router({
 
       for (const resp of responses) {
         const answers = (resp.answers ?? {}) as Record<string, number>;
-        const dept = resp.respondentId ? deptByUser.get(resp.respondentId) ?? null : null;
+        // Prefer the department the respondent selected on the survey; fall back to their profile.
+        const dept = (resp.department && resp.department.trim())
+          || (resp.respondentId ? deptByUser.get(resp.respondentId) ?? null : null)
+          || null;
         if (dept) deptSet.add(dept);
         const perDriver: Record<string, number[]> = {};
         const allVals: number[] = [];
