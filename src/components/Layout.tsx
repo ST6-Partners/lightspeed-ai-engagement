@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Bot,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText,
   UserCheck, ListChecks, Gauge,
@@ -20,7 +21,13 @@ type NavGroup = { label: string | null; items: NavItem[] };
 
 // Information architecture per DD-002
 const navGroups: NavGroup[] = [
-  { label: null, items: [{ path: '/', label: 'Home', icon: Home }] },
+  {
+    label: null,
+    items: [
+      { path: '/', label: 'Home', icon: Home },
+      { path: '/chat', label: 'AI Assistant', icon: Bot },
+    ],
+  },
   {
     label: 'Planning',
     items: [
