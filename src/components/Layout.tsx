@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
-  Settings, LogOut, MessageSquare, Briefcase, Building2, Contact,
+  Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
@@ -33,6 +33,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/pips', label: 'PIP', icon: ClipboardList },
       { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
+      { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
     ],
   },
   {

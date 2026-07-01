@@ -42,3 +42,6 @@ export { exitSurveys } from './exitSurvey.js';
 
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';
+
+// Engagement Survey (1 table) — periodic engagement survey (15Five Engage parity)
+export { engagementSurveyResponses } from './engagementSurvey.js';
