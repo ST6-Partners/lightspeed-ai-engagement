@@ -13,6 +13,7 @@ import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
+import Overview from './pages/Overview';
 
 export default function App() {
   return (
@@ -33,6 +34,8 @@ export default function App() {
         <Route path="/core-data/employees" element={<Employees />} />
         <Route path="/core-data/job-titles" element={<JobTitles />} />
         <Route path="/core-data/departments" element={<Departments />} />
+        {/* Documents */}
+        <Route path="/documents/overview" element={<Overview />} />
         {/* System */}
         <Route path="/admin/settings" element={<AdminSettings />} />
         {/* Retained template surfaces (not in primary nav) */}
