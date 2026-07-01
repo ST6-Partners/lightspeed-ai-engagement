@@ -45,3 +45,6 @@ export { inboundEmails } from './email.js';
 
 // Engagement Survey (1 table) — periodic engagement survey (15Five Engage parity)
 export { engagementSurveyResponses } from './engagementSurvey.js';
+
+// Engagement analytics (2 tables) — survey periods + aggregate metrics fact table
+export { surveyPeriods, surveyMetrics } from './engagementAnalytics.js';

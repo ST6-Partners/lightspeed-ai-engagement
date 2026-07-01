@@ -27,6 +27,7 @@ import { weeklyPlanRouter } from './routers/weeklyPlan.js';
 import { exitSurveyRouter } from './routers/exitSurvey.js';
 import { departmentsRouter } from './routers/departments.js';
 import { engagementSurveyRouter } from './routers/engagementSurvey.js';
+import { engagementAnalyticsRouter } from './routers/engagementAnalytics.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -53,6 +54,7 @@ export const appRouter = router({
   exitSurvey: exitSurveyRouter,
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,
+  engagementAnalytics: engagementAnalyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;
