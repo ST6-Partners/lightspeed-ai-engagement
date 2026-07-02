@@ -9,13 +9,18 @@ import {
   buildMaps, directsOf, descendantsOf, depthOf, Person, Scope, TabKey, TOKENS,
 } from '../components/org/orgLib';
 
-const TABS: { key: TabKey; label: string }[] = [
+// Stage 2 added Assessments + Review. `minRole` HIDES (not disables) a tab the
+// viewer can't access (spec §7 tab strip): Review needs manager+ (performance
+// zone; compensation is further gated admin+ inside the tab).
+const ALL_TABS: { key: TabKey; label: string; minRole?: 'manager' }[] = [
   { key: 'priorities', label: 'Priorities' },
   { key: 'okrs', label: 'OKRs' },
   { key: 'engagement', label: 'Engagement' },
+  { key: 'assessments', label: 'Assessments' },
+  { key: 'review', label: 'Review', minRole: 'manager' },
   { key: 'ninebox', label: '9 Box' },
 ];
-const SOON = ['Assessments', 'Review']; // Stage 2
+const ROLE_RANK: Record<string, number> = { user: 1, manager: 2, admin: 3, sysadmin: 4 };
 
 const SCOPES: { key: Scope; label: string }[] = [
   { key: 'individual', label: 'Individual' },
@@ -30,6 +35,9 @@ const ls = {
 
 export default function Organization() {
   const { data, isLoading } = trpc.orgScreen.tree.useQuery();
+  const { data: me } = trpc.auth.me.useQuery();
+  const role = (me as { role?: string } | undefined)?.role ?? 'user';
+  const TABS = ALL_TABS.filter((t) => !t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]);
   const people = (data?.people ?? []) as Person[];
   const maps = useMemo(() => buildMaps(people), [people]);
 
@@ -43,6 +51,10 @@ export default function Organization() {
     const saved = ls.get('org.selected');
     setSelectedId(saved && maps.byId.has(saved) ? saved : maps.roots[0]?.id ?? null);
   }, [people.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!TABS.some((t) => t.key === tab)) { setTab('priorities'); ls.set('org.tab', 'priorities'); }
+  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const select = (id: string) => { setSelectedId(id); ls.set('org.selected', id); };
   const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
@@ -103,10 +115,6 @@ export default function Organization() {
                     color: tab === t.key ? TOKENS.activeText : TOKENS.idle,
                     borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
                   }}>{t.label}</button>
-              ))}
-              {SOON.map((s) => (
-                <span key={s} title="Coming in Stage 2" className="text-[12px]"
-                  style={{ padding: '8px 12px', color: '#c2c8cd' }}>{s}</span>
               ))}
             </div>
             {/* Body */}

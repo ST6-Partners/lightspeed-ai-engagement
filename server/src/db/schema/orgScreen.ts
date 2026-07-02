@@ -56,3 +56,88 @@ export const engagementSnapshots = pgTable('engagement_snapshots', {
 }, (t) => ({
   pk: primaryKey({ columns: [t.userId, t.asOf] }),
 }));
+
+// ============================================================
+// ORG SCREEN — Stage 2: Assessments + Review (spec §7.3/§7.4/§8)
+// Standalone in AIE (no Signal/Spine): AIE owns and stores the full
+// summary/review locally, shaped to the exact render. All keyed to
+// users.id (reuse the existing table, consistent with Stage 1).
+// numeric columns come back as strings from pg — the router coerces
+// to Number before returning to the client.
+// ============================================================
+import { numeric, boolean } from 'drizzle-orm/pg-core';
+
+// ---- Assessments (standalone snapshot per person) ----
+export const assessmentSummaries = pgTable('assessment_summaries', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  ccatColor: varchar('ccat_color', { length: 16 }),   // 'green'|'yellow'|'red'; NULL = grey badge
+  eppColor: varchar('epp_color', { length: 16 }),
+  eppProfile: text('epp_profile'),                    // profile name under EPP badge
+  eppScore: numeric('epp_score'),                     // displayScore
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// CCAT badge (Overall) + breakdown bars. CCAT scale is /50, not 0-100.
+export const assessmentCcatSections = pgTable('assessment_ccat_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),                     // 'Overall' pulled out as the badge
+  score: numeric('score'),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => ({ byUser: index('idx_ccat_sections_user').on(t.userId) }));
+
+// EPP "priority attributes" bars.
+export const assessmentEppAttributes = pgTable('assessment_epp_attributes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  st6Score: numeric('st6_score'),                     // visible bar value
+  eppScore: numeric('epp_score'),
+  finalScore: numeric('final_score'),
+  weightage: numeric('weightage'),                    // %, shown in tooltip
+  colorHex: varchar('color_hex', { length: 9 }),      // per-attribute color (fallback '#378ADD')
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => ({ byUser: index('idx_epp_attrs_user').on(t.userId) }));
+
+// Insights persona chart (one row per profile color).
+export const assessmentInsightProfiles = pgTable('assessment_insight_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  color: varchar('color', { length: 16 }),            // 'blue'|'green'|'yellow'|'red'
+  consciousScore: numeric('conscious_score'),         // 0..100
+  lessConsciousScore: numeric('less_conscious_score'),// 0..100
+  isPrimary: boolean('is_primary').notNull().default(false),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => ({ byUser: index('idx_insight_profiles_user').on(t.userId) }));
+
+// ---- Review (standalone; store comp INPUTS, derive dollars at render) ----
+export const reviewCycles = pgTable('review_cycles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),                     // e.g. '2026 H1'
+  status: varchar('status', { length: 16 }),          // 'IN_PROGRESS' | 'FINAL'
+  sortOrder: integer('sort_order').notNull().default(0),
+  // performance zone
+  scoreTotal: numeric('score_total'),
+  scoreValues: numeric('score_values'),               // avg (2 dp)
+  scorePerformance: numeric('score_performance'),
+  rank: integer('rank'),
+  rankOf: integer('rank_of'),
+  tier: text('tier'),
+  // compensation zone (inputs; dollars derived at render)
+  startBase: numeric('start_base'),
+  startBonusPct: numeric('start_bonus_pct'),          // fraction (0.20 = 20%)
+  meritBasePct: numeric('merit_base_pct'),            // fraction
+  hasPromotion: boolean('has_promotion').notNull().default(false),
+  finalSalaryIncrease: numeric('final_salary_increase'),
+  finalNewOte: numeric('final_new_ote'),
+}, (t) => ({ byUser: index('idx_review_cycles_user').on(t.userId) }));
+
+// Collapsible "Values" rows in the performance zone (0..5, band-colored).
+export const reviewValueDetails = pgTable('review_value_details', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cycleId: uuid('cycle_id').notNull().references(() => reviewCycles.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  score: numeric('score'),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => ({ byCycle: index('idx_review_value_cycle').on(t.cycleId) }));

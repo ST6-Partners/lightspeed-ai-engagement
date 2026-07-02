@@ -11,7 +11,7 @@ export type Person = {
 };
 
 export type Scope = 'individual' | 'directs' | 'descendants';
-export type TabKey = 'priorities' | 'okrs' | 'engagement' | 'ninebox';
+export type TabKey = 'priorities' | 'okrs' | 'engagement' | 'assessments' | 'review' | 'ninebox';
 
 // Spec §12 tokens (carried verbatim where precise).
 export const TOKENS = {
@@ -91,3 +91,24 @@ export const BOX_NAMES: Record<number, string> = {
 };
 export const boxPerformance = (box: number) => (box - 1) % 3;      // 0/1/2 = Low/Med/High
 export const boxPotential = (box: number) => Math.floor((box - 1) / 3); // 0/1/2 = Low/Med/High
+
+
+// Score-band colors for Review value/performance rows (0..5 scale, spec §8.2).
+export function bandFill(score: number): string {
+  if (score >= 4) return '#22c55e';
+  if (score >= 3) return '#3b82f6';
+  if (score >= 2) return '#f59e0b';
+  return '#ef4444';
+}
+export function bandText(score: number): string {
+  if (score >= 4) return '#15803d';
+  if (score >= 3) return '#2563eb';
+  if (score >= 2) return '#b45309';
+  return '#b91c1c';
+}
+
+// Insight persona palette + fixed column order (spec §8.1).
+export const INSIGHT_COLORS: Record<string, string> = {
+  blue: '#4285f4', green: '#34a853', yellow: '#ffd400', red: '#ea4335',
+};
+export const INSIGHT_ORDER = ['blue', 'green', 'yellow', 'red'];

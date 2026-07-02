@@ -2,6 +2,8 @@ import { Person, TabKey, TIER_BADGE, TOKENS } from './orgLib';
 import PrioritiesTab from './PrioritiesTab';
 import OkrsTab from './OkrsTab';
 import EngagementTab from './EngagementTab';
+import AssessmentsTab from './AssessmentsTab';
+import ReviewTab from './ReviewTab';
 
 export default function PersonCard({ person, tab }: { person: Person; tab: TabKey }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
@@ -23,6 +25,8 @@ export default function PersonCard({ person, tab }: { person: Person; tab: TabKe
         {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} />}
         {tab === 'engagement' && <EngagementTab employeeId={person.id} />}
+        {tab === 'assessments' && <AssessmentsTab employeeId={person.id} />}
+        {tab === 'review' && <ReviewTab employeeId={person.id} />}
       </div>
     </div>
   );

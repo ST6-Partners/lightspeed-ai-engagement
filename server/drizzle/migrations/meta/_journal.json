@@ -127,6 +127,20 @@
       "when": 1783022694070,
       "tag": "0017_seed_org_screen",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783022754070,
+      "tag": "0018_org_screen_stage2",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783022814070,
+      "tag": "0019_seed_org_screen_stage2",
+      "breakpoints": true
     }
   ]
 }
