@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Bot,
+  Bot, MessageCircle, Star,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText,
   UserCheck, ListChecks, Gauge,
@@ -38,11 +38,14 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Engagement',
+    // Order mirrors the Documents → Overview chart's Engagement row.
     items: [
+      { path: '/check-ins', label: 'Check-ins', icon: MessageCircle },
+      { path: '/reviews', label: 'Reviews', icon: Star },
       { path: '/pips', label: 'PIP', icon: ClipboardList },
-      { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
       { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
       { path: '/manager-survey', label: 'Manager Survey', icon: UserCheck },
+      { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
     ],
   },
   {

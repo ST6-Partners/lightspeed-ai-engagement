@@ -15,6 +15,8 @@ import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
 import ManagerSurvey from './pages/ManagerSurvey';
 import Overview from './pages/Overview';
+import CheckIns from './pages/CheckIns';
+import Reviews from './pages/Reviews';
 
 export default function App() {
   return (
@@ -27,6 +29,8 @@ export default function App() {
         <Route path="/okrs" element={<Okrs />} />
         <Route path="/weekly-plan" element={<WeeklyPlan />} />
         {/* Engagement */}
+        <Route path="/check-ins" element={<CheckIns />} />
+        <Route path="/reviews" element={<Reviews />} />
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
