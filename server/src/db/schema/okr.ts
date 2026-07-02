@@ -8,13 +8,17 @@ import {
   pgTable, uuid, varchar, text, integer, date, timestamp,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { users } from './core.js';
 
 export const okrNodes = pgTable('okr_nodes', {
   id: uuid('id').primaryKey().defaultRandom(),
   parentId: uuid('parent_id').references((): AnyPgColumn => okrNodes.id, { onDelete: 'cascade' }),
   type: varchar('type', { length: 16 }).notNull(),        // 'objective' | 'key_result' | 'task'
   title: varchar('title', { length: 400 }).notNull(),
-  owner: varchar('owner', { length: 200 }),               // denormalized name
+  owner: varchar('owner', { length: 200 }),               // denormalized name (display)
+  // Optional FK to the owning user — enables reliable per-person OKR fetch
+  // on the Org screen while `owner` stays for name display / seeding.
+  ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
   status: varchar('status', { length: 24 }).notNull().default('not_started'),
     // 'not_started' | 'in_progress' | 'on_hold' | 'complete'
   light: varchar('light', { length: 8 }),                 // 'green' | 'yellow' | 'red' (outcomes only)

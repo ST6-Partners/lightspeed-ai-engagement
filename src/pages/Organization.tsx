@@ -1,135 +1,142 @@
-// Organization — live people view; engagement derived from weekly check-ins.
-import { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+// Organization — org tree + scope + tabbed person-card matrix + 9 Box.
+// Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
+import { useMemo, useState, useEffect } from 'react';
 import { trpc } from '../lib/trpc';
+import OrgTree from '../components/org/OrgTree';
+import PersonCard from '../components/org/PersonCard';
+import NineBox from '../components/org/NineBox';
+import {
+  buildMaps, directsOf, descendantsOf, depthOf, Person, Scope, TabKey, TOKENS,
+} from '../components/org/orgLib';
 
-type Status = 'thrive' | 'watch' | 'risk' | 'none';
-const STATUS_META: Record<Status, { label: string; text: string; bg: string; spark: string }> = {
-  thrive: { label: 'Thriving', text: 'text-ls-thrive', bg: 'bg-ls-thrive-bg', spark: '#2E9E7B' },
-  watch: { label: 'Steady', text: 'text-ls-watch', bg: 'bg-ls-watch-bg', spark: '#C99300' },
-  risk: { label: 'At risk', text: 'text-ls-risk', bg: 'bg-ls-risk-bg', spark: '#C2615A' },
-  none: { label: 'No reads yet', text: 'text-ls-ink-3', bg: 'bg-ls-bg-2', spark: '#8A969E' },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'priorities', label: 'Priorities' },
+  { key: 'okrs', label: 'OKRs' },
+  { key: 'engagement', label: 'Engagement' },
+  { key: 'ninebox', label: '9 Box' },
+];
+const SOON = ['Assessments', 'Review']; // Stage 2
+
+const SCOPES: { key: Scope; label: string }[] = [
+  { key: 'individual', label: 'Individual' },
+  { key: 'directs', label: 'Directs' },
+  { key: 'descendants', label: 'Team' },
+];
+
+const ls = {
+  get: (k: string) => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null),
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* noop */ } },
 };
-const TABS = ['People', 'Pulse', 'Org Tree'] as const;
-
-function Spark({ data, color }: { data: number[]; color: string }) {
-  if (data.length < 2) return <div className="w-[92px] text-[11px] text-ls-ink-3 text-right">—</div>;
-  const max = Math.max(...data), min = Math.min(...data);
-  const pts = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * 90 + 1;
-      const y = 22 - ((v - min) / (max - min || 1)) * 18 - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
-  return (
-    <svg width="92" height="24" viewBox="0 0 92 24"><polyline points={pts} fill="none" stroke={color} strokeWidth="2.5" /></svg>
-  );
-}
 
 export default function Organization() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>('People');
-  const { data, isLoading } = trpc.organization.list.useQuery();
-  const members = data?.members ?? [];
-  const stats = data?.stats;
+  const { data, isLoading } = trpc.orgScreen.tree.useQuery();
+  const people = (data?.people ?? []) as Person[];
+  const maps = useMemo(() => buildMaps(people), [people]);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>((ls.get('org.scope') as Scope) || 'individual');
+  const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
+
+  // Restore / default selection once people load.
+  useEffect(() => {
+    if (selectedId || people.length === 0) return;
+    const saved = ls.get('org.selected');
+    setSelectedId(saved && maps.byId.has(saved) ? saved : maps.roots[0]?.id ?? null);
+  }, [people.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const select = (id: string) => { setSelectedId(id); ls.set('org.selected', id); };
+  const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
+  const chooseTab = (t: TabKey) => { setTab(t); ls.set('org.tab', t); };
+
+  const selected = selectedId ? maps.byId.get(selectedId) ?? null : null;
+
+  // In-scope people (spec §6).
+  const scoped: Person[] = useMemo(() => {
+    if (!selected) return [];
+    if (scope === 'individual') return [selected];
+    if (scope === 'directs') return directsOf(maps, selected.id);
+    return descendantsOf(maps, selected.id);
+  }, [selected, scope, maps]);
+
+  // Team scope → depth-banded groups.
+  const banded = useMemo(() => {
+    if (scope !== 'descendants' || !selected) return null;
+    const base = depthOf(maps, selected.id);
+    const groups = new Map<number, Person[]>();
+    for (const p of scoped) {
+      const rel = depthOf(maps, p.id) - base;
+      (groups.get(rel) ?? groups.set(rel, []).get(rel)!).push(p);
+    }
+    return [...groups.entries()].sort((a, b) => a[0] - b[0]);
+  }, [scope, selected, scoped, maps]);
+
+  const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="ls-eyebrow mb-1">Planning</div>
-      <h1 className="text-2xl font-bold tracking-tight">Organization</h1>
-      <p className="text-sm text-ls-ink-3 mb-5">
-        A continuous read of how the org is thriving — derived from weekly check-ins, never from a survey blast.
-      </p>
-
-      <div className="flex gap-1 border-b border-ls-line mb-5">
-        {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`text-sm font-semibold px-3.5 py-2.5 -mb-px border-b-2 ${
-              tab === t ? 'text-ls-blue-deep border-ls-blue' : 'text-ls-ink-3 border-transparent hover:text-ls-ink-2'
-            }`}>{t}</button>
-        ))}
-      </div>
-
-      {tab !== 'Org Tree' && stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
-          <Stat k="Thriving" v={`${stats.thrivingPct}%`} d="of people with a read" tone="text-ls-thrive" />
-          <Stat k="Watch" v={String(stats.watch)} d="steady" tone="text-ls-watch" />
-          <Stat k="At risk" v={String(stats.atRisk)} d="worth a look" tone="text-ls-risk" />
-          <Stat k="Check-in rate" v={`${stats.checkinRate}%`} d="this week" tone="text-ls-blue-deep" />
-        </div>
-      )}
-
-      {isLoading && <div className="text-sm text-ls-ink-3">Loading…</div>}
-      {!isLoading && members.length === 0 && (
-        <div className="ls-card p-6 text-sm text-ls-ink-3">No active people yet. Members appear here as users join and check in.</div>
-      )}
-
-      {tab === 'People' && members.map((p) => {
-        const m = STATUS_META[p.status as Status];
-        const TrendIcon = p.trend === 'up' ? TrendingUp : p.trend === 'down' ? TrendingDown : Minus;
-        return (
-          <div key={p.id} className="ls-card p-4 flex items-center gap-4 mb-3">
-            <div className="w-11 h-11 rounded-full bg-ls-active text-white flex items-center justify-center font-bold shrink-0">
-              {p.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+    <div className="flex" style={{ height: 'calc(100vh - 7.5rem)', background: TOKENS.bg, borderRadius: 10, overflow: 'hidden', border: `1px solid ${TOKENS.border}` }}>
+      {isLoading ? (
+        <div className="p-6 text-[13px]" style={{ color: TOKENS.idle }}>Loading organization…</div>
+      ) : (
+        <>
+          <OrgTree maps={maps} selectedId={selectedId} onSelect={select} />
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Scope header */}
+            <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}` }}>
+              <div className="inline-flex rounded-lg p-0.5" style={{ background: '#eef0f2' }}>
+                {SCOPES.map((s) => (
+                  <button key={s.key} onClick={() => chooseScope(s.key)}
+                    className="text-[12px] font-medium rounded-md px-3 py-1"
+                    style={scope === s.key ? { background: '#fff', color: TOKENS.activeText, boxShadow: '0 1px 2px rgba(0,0,0,.08)' } : { color: '#6c757d' }}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {selected && <span className="text-[12px]" style={{ color: TOKENS.idle }}>{selected.name}</span>}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-[14.5px]">{p.name}</div>
-              <div className="text-[12.5px] text-ls-ink-3">{p.role}</div>
+            {/* Tab strip */}
+            <div className="flex items-center" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>
+              {TABS.map((t) => (
+                <button key={t.key} onClick={() => chooseTab(t.key)}
+                  className="text-[12px] font-medium"
+                  style={{
+                    padding: '8px 16px', marginBottom: -1,
+                    color: tab === t.key ? TOKENS.activeText : TOKENS.idle,
+                    borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
+                  }}>{t.label}</button>
+              ))}
+              {SOON.map((s) => (
+                <span key={s} title="Coming in Stage 2" className="text-[12px]"
+                  style={{ padding: '8px 12px', color: '#c2c8cd' }}>{s}</span>
+              ))}
             </div>
-            <div className="hidden sm:flex items-center gap-4 text-[12px] text-ls-ink-3">
-              <span>{p.lastCheckIn ? `Checked in ${p.lastCheckIn}` : 'No check-in'}</span>
-              <TrendIcon size={15} className={m.text} />
-            </div>
-            <Spark data={p.spark} color={m.spark} />
-            <span className={`ls-chip ${m.bg} ${m.text} min-w-[88px] justify-center`}>{m.label}</span>
-          </div>
-        );
-      })}
-
-      {tab === 'Pulse' && (
-        <div className="ls-card p-5">
-          <div className="font-semibold mb-1">Thriving read</div>
-          <p className="text-sm text-ls-ink-3 mb-4">
-            {stats ? `${stats.thrivingPct}% of people with a check-in this period are thriving; ${stats.atRisk} at risk.` : '—'}
-          </p>
-          <div className="flex items-end gap-2 h-24">
-            {members.slice(0, 12).map((p) => {
-              const latest = p.spark[p.spark.length - 1] ?? 0;
-              return (
-                <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5">
-                  <div className="w-full max-w-[26px] rounded-t" style={{ height: latest * 18 || 4, background: STATUS_META[p.status as Status].spark }} />
-                  <span className="text-[9px] text-ls-ink-3">{p.name.split(' ')[0]?.slice(0, 4)}</span>
+            {/* Body */}
+            <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
+              {!selected ? (
+                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
+              ) : tab === 'ninebox' ? (
+                <NineBox people={scoped} onSelect={select} />
+              ) : scoped.length === 0 ? (
+                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
+              ) : banded ? (
+                banded.map(([rel, group]) => (
+                  <div key={rel} className="mb-5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: TOKENS.idle }}>
+                      {rel === 1 ? 'Direct reports' : `Level ${rel}`}
+                    </div>
+                    <div className={grid}>
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} />)}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className={grid}>
+                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} />)}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {tab === 'Org Tree' && (
-        <div className="ls-card p-5">
-          <div className="font-semibold mb-3">People</div>
-          {members.map((p) => (
-            <div key={p.id} className="flex items-center gap-2.5 py-1.5">
-              <span className="w-7 h-7 rounded-full bg-ls-bg-2 text-ls-ink-2 flex items-center justify-center text-[11px] font-bold">
-                {p.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-              </span>
-              <span className="text-sm font-medium text-ls-ink">{p.name}</span>
-              <span className="text-xs text-ls-ink-3">· {p.role}</span>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        </>
       )}
-    </div>
-  );
-}
-
-function Stat({ k, v, d, tone }: { k: string; v: string; d: string; tone?: string }) {
-  return (
-    <div className="ls-card p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-ls-ink-3">{k}</div>
-      <div className={`text-2xl font-extrabold mt-1.5 ${tone || ''}`}>{v}</div>
-      <div className="text-[12.5px] text-ls-ink-3 mt-1">{d}</div>
     </div>
   );
 }

@@ -51,3 +51,6 @@ export { surveyPeriods, surveyMetrics } from './engagementAnalytics.js';
 
 // Manager Survey (3 tables) — questions lookup + rating scale + responses
 export { managerSurveyQuestions, managerRatingScale, managerSurveyResponses } from './managerSurvey.js';
+
+// Org Screen (Stage 1) — priorities + 9 box + engagement snapshots
+export { priorities, nineBoxRatings, engagementSnapshots } from './orgScreen.js';

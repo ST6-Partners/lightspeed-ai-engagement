@@ -56,6 +56,7 @@ const navGroups: NavGroup[] = [
       { path: '/core-data/departments', label: 'Departments', icon: Building2 },
       { path: '/core-data/survey-questions', label: 'Survey Questions', icon: ListChecks },
       { path: '/core-data/rating-scale', label: 'Rating Scale', icon: Gauge },
+      { path: '/core-data/org-data', label: 'Org Data', icon: ListChecks },
     ],
   },
   {

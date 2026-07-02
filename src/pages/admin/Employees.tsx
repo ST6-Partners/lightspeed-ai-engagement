@@ -71,6 +71,7 @@ export default function Employees() {
                 <th className="px-3 py-3 w-[150px]">Department</th>
                 <th className="px-3 py-3 w-[170px]">Manager</th>
                 <th className="px-3 py-3 w-[110px]">Role</th>
+                <th className="px-3 py-3 w-[90px]">Badge</th>
                 <th className="px-3 py-3 w-10">Beta</th>
               </tr>
             </thead>
@@ -118,6 +119,17 @@ export default function Employees() {
                     <select value={user.role} onChange={(e) => set(user.id, { role: e.target.value })}
                       className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${ROLE_COLORS[user.role] || 'bg-gray-100'}`}>
                       {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                    </select>
+                  </td>
+
+                  {/* Leader badge — Org tree tier (ELT/SLT/ST6) */}
+                  <td className="px-3 py-3 text-sm">
+                    <select value={user.leaderBadge ?? ''} onChange={(e) => set(user.id, { leaderBadge: e.target.value || null })}
+                      className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
+                      <option value="">—</option>
+                      <option value="ELT">ELT</option>
+                      <option value="SLT">SLT</option>
+                      <option value="ST6">ST6</option>
                     </select>
                   </td>
 

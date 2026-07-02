@@ -10,6 +10,28 @@ const light = z.enum(['green', 'yellow', 'red']);
 const status = z.enum(['not_started', 'in_progress', 'on_hold', 'complete']);
 
 export const okrsRouter = router({
+  // Per-person OKRs for the Org screen card. Matches on ownerUserId (reliable)
+  // OR the denormalized owner name (fallback for seed data without a FK).
+  byUser: protectedProcedure
+    .input(z.object({ userId: z.string().uuid(), name: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const all = await ctx.db.query.okrNodes.findMany({
+        where: isNull(okrNodes.archivedAt),
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+      });
+      const mine = (n: typeof all[number]) =>
+        n.ownerUserId === input.userId || (!!input.name && n.owner === input.name);
+      const objectives = all.filter((n) => n.type === 'objective' && mine(n)).map((o) => ({
+        id: o.id, title: o.title, period: null as string | null,
+        progress: o.status === 'complete' ? 100 : o.status === 'in_progress' ? 50 : 0,
+        keyResults: all.filter((k) => k.type === 'key_result' && k.parentId === o.id).map((k) => ({
+          id: k.id, title: k.title, target: null as string | null,
+          progress: k.status === 'complete' ? 100 : k.status === 'in_progress' ? 50 : 0,
+        })),
+      }));
+      return { hasData: objectives.length > 0, objectives };
+    }),
+
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.query.okrNodes.findMany({
       where: isNull(okrNodes.archivedAt),

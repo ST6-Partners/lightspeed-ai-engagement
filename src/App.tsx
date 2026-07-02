@@ -7,7 +7,7 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
-import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale } from './pages/admin';
+import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
@@ -42,6 +42,7 @@ export default function App() {
         <Route path="/core-data/departments" element={<Departments />} />
         <Route path="/core-data/survey-questions" element={<ManagerSurveyQuestions />} />
         <Route path="/core-data/rating-scale" element={<ManagerRatingScale />} />
+        <Route path="/core-data/org-data" element={<OrgData />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}
