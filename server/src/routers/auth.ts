@@ -149,6 +149,43 @@ export const authRouter = router({
       return user;
     }),
 
+  // Admin: create a new employee (directory record on the users table). The org
+  // tree IS the users table (users.managerId), so "add employee" = insert a user.
+  // sub follows register()'s local-identity convention. A temp password is
+  // optional — omit it and the record is directory-only until an admin sets one
+  // via resetUserPassword (the existing recovery path).
+  createUser: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      email: z.string().email(),
+      name: z.string().optional(),
+      role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
+      jobTitleId: z.string().uuid().nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(),
+      managerId: z.string().uuid().nullable().optional(),
+      leaderBadge: z.enum(['ELT', 'SLT', 'ST6']).nullable().optional(),
+      isActive: z.boolean().optional(),
+      tempPassword: z.string().min(8, 'Temp password must be at least 8 characters').optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+      const existing = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
+      if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An employee with that email already exists.' });
+      const [user] = await ctx.db.insert(users).values({
+        sub: `local:${email}`,
+        email,
+        name: input.name?.trim() || null,
+        role: input.role ?? 'user',
+        jobTitleId: input.jobTitleId ?? null,
+        departmentId: input.departmentId ?? null,
+        managerId: input.managerId ?? null,
+        leaderBadge: input.leaderBadge ?? null,
+        isActive: input.isActive ?? true,
+        passwordHash: input.tempPassword ? await hashPassword(input.tempPassword) : null,
+      }).returning();
+      return { id: user.id, email: user.email, name: user.name };
+    }),
+
   // Admin: reset ANOTHER user's password (no current password required).
   // This is the recovery path for locked-out users, since there is no
   // email-based "forgot password". Admin/sysadmin only (requireAdmin).

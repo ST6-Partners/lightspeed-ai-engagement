@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
-import { Search, Clock, Info } from 'lucide-react';
+import { Search, Info, UserPlus, X } from 'lucide-react';
 
 const ROLE_OPTIONS = ['user', 'manager', 'admin', 'sysadmin'] as const;
 const ROLE_COLORS: Record<string, string> = {
@@ -24,6 +24,32 @@ export default function Employees() {
   });
   const set = (id: string, patch: Record<string, unknown>) => updateMutation.mutate({ id, ...patch } as any);
 
+  // ── Add Employee (admin create) ──────────────────────────────
+  const EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', leaderBadge: '', isActive: true, tempPassword: '' };
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState(EMPTY);
+  const [addError, setAddError] = useState<string | null>(null);
+  const f = (patch: Partial<typeof EMPTY>) => setForm((prev) => ({ ...prev, ...patch }));
+  const createMutation = trpc.auth.createUser.useMutation({
+    onSuccess: () => { utils.auth.listUsers.invalidate(); setForm(EMPTY); setShowAdd(false); setAddError(null); },
+    onError: (e: any) => setAddError(e.message ?? 'Could not add employee.'),
+  });
+  const submitAdd = () => {
+    setAddError(null);
+    if (!form.email.trim()) { setAddError('Email is required.'); return; }
+    createMutation.mutate({
+      email: form.email.trim(),
+      name: form.name.trim() || undefined,
+      role: form.role as any,
+      jobTitleId: form.jobTitleId || null,
+      departmentId: form.departmentId || null,
+      managerId: form.managerId || null,
+      leaderBadge: (form.leaderBadge || null) as any,
+      isActive: form.isActive,
+      tempPassword: form.tempPassword.trim() || undefined,
+    } as any);
+  };
+
   const filtered = userList.filter((u: any) => {
     const q = searchQuery.toLowerCase();
     return (u.name ?? '').toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q);
@@ -43,10 +69,85 @@ export default function Employees() {
         <div className="text-sm text-blue-900">Title &amp; Department are managed in Core Data → Job Titles / Departments. Manager is another employee (their boss).</div>
       </div>
 
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
         <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{userList.length} total</div>
         <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">{activeCount} active</div>
+        <button onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+          {showAdd ? <X size={14} /> : <UserPlus size={14} />}{showAdd ? 'Cancel' : 'Add Employee'}
+        </button>
       </div>
+
+      {showAdd && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+          <h3 className="text-sm font-bold text-gray-900">New employee</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <label className="text-xs text-gray-600">Name
+              <input value={form.name} onChange={(e) => f({ name: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+            </label>
+            <label className="text-xs text-gray-600">Email <span className="text-red-500">*</span>
+              <input type="email" value={form.email} onChange={(e) => f({ email: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="name@company.com" />
+            </label>
+            <label className="text-xs text-gray-600">Role
+              <select value={form.role} onChange={(e) => f({ role: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">Title
+              <select value={form.jobTitleId} onChange={(e) => f({ jobTitleId: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="">—</option>
+                {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">Department
+              <select value={form.departmentId} onChange={(e) => f({ departmentId: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="">—</option>
+                {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">Manager
+              <select value={form.managerId} onChange={(e) => f({ managerId: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="">— (top of tree)</option>
+                {userList.map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">Leader badge
+              <select value={form.leaderBadge} onChange={(e) => f({ leaderBadge: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="">—</option>
+                <option value="ELT">ELT</option>
+                <option value="SLT">SLT</option>
+                <option value="ST6">ST6</option>
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">Temp password <span className="text-gray-400">(optional)</span>
+              <input type="text" value={form.tempPassword} onChange={(e) => f({ tempPassword: e.target.value })}
+                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="min 8 chars — leave blank for directory-only" />
+            </label>
+            <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => f({ isActive: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Active
+            </label>
+          </div>
+          {addError && <div className="text-xs text-red-600">{addError}</div>}
+          <div className="flex items-center gap-2">
+            <button onClick={submitAdd} disabled={createMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+              <UserPlus size={14} />{createMutation.isPending ? 'Adding…' : 'Add employee'}
+            </button>
+            <button onClick={() => { setShowAdd(false); setForm(EMPTY); setAddError(null); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+            <span className="text-xs text-gray-400">Directory record on the users table — powers the org tree via Manager.</span>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg border border-gray-200 p-3">
         <div className="flex items-center gap-2">
