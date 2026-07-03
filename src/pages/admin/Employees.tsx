@@ -56,6 +56,10 @@ export default function Employees() {
   });
   const activeCount = userList.filter((u: any) => u.isActive).length;
   const nameById = new Map<string, string>(userList.map((u: any) => [u.id, u.name ?? u.email ?? '—']));
+  // Manager picker on the Add Employee form, sorted by first name.
+  const firstName = (n: string) => (n ?? '').trim().split(/\s+/)[0].toLowerCase();
+  const employeesByFirstName = [...userList].sort((a: any, b: any) =>
+    firstName(a.name ?? a.email ?? '').localeCompare(firstName(b.name ?? b.email ?? '')));
 
   return (
     <div className="space-y-4">
@@ -114,7 +118,7 @@ export default function Employees() {
               <select value={form.managerId} onChange={(e) => f({ managerId: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                 <option value="">— (top of tree)</option>
-                {userList.map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+                {employeesByFirstName.map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
               </select>
             </label>
             <label className="text-xs text-gray-600">Leader badge
