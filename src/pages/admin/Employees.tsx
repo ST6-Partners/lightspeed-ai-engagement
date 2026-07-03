@@ -213,7 +213,7 @@ export default function Employees() {
                     <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })}
                       className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
                       <option value="">—</option>
-                      {userList.filter((m: any) => m.id !== user.id).map((m: any) => (
+                      {employeesByFirstName.filter((m: any) => m.id !== user.id).map((m: any) => (
                         <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>
                       ))}
                     </select>
