@@ -17,6 +17,10 @@ export default function NineBox({ people }: { people: Person[] }) {
     onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate({ ids }); setEditing(null); },
     onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'Only managers can rate.' : 'Could not save rating.'),
   });
+  const clear = trpc.orgScreen.nineboxClear.useMutation({
+    onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate({ ids }); setEditing(null); },
+    onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'Only managers can rate.' : 'Could not remove rating.'),
+  });
   const [editing, setEditing] = useState<Person | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -33,6 +37,7 @@ export default function NineBox({ people }: { people: Person[] }) {
   const unrated = people.filter((p) => !ratingByUser.has(p.id));
 
   const doRate = (userId: string, box: number) => { setErr(null); rate.mutate({ userId, box }); };
+  const doClear = (userId: string) => { setErr(null); clear.mutate({ userId }); };
 
   // A placed person: clicking opens the reposition modal (does NOT change the
   // tree selection — that was the old bug).
@@ -98,7 +103,9 @@ export default function NineBox({ people }: { people: Person[] }) {
           person={editing}
           current={ratingByUser.get(editing.id) ?? null}
           saving={rate.isLoading}
+          removing={clear.isLoading}
           onPick={(b) => doRate(editing.id, b)}
+          onRemove={() => doClear(editing.id)}
           onClose={() => { setErr(null); setEditing(null); }}
         />
       )}
@@ -106,9 +113,9 @@ export default function NineBox({ people }: { people: Person[] }) {
   );
 }
 
-function RateModal({ person, current, saving, onPick, onClose }: {
-  person: Person; current: number | null; saving: boolean;
-  onPick: (b: number) => void; onClose: () => void;
+function RateModal({ person, current, saving, removing, onPick, onRemove, onClose }: {
+  person: Person; current: number | null; saving: boolean; removing: boolean;
+  onPick: (b: number) => void; onRemove: () => void; onClose: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(15,23,42,.45)' }} onClick={onClose}>
@@ -131,7 +138,16 @@ function RateModal({ person, current, saving, onPick, onClose }: {
             </button>
           ))}
         </div>
-        <button onClick={onClose} className="mt-4 w-full text-[12px] rounded-lg py-2" style={{ border: `1px solid ${TOKENS.border}`, color: TOKENS.idle }}>Cancel</button>
+        <div className="mt-4 flex gap-2">
+          {current != null && (
+            <button onClick={onRemove} disabled={removing}
+              className="flex-1 text-[12px] rounded-lg py-2"
+              style={{ border: '1px solid #fecaca', color: '#b91c1c', background: '#fef2f2', opacity: removing ? 0.6 : 1, cursor: removing ? 'default' : 'pointer' }}>
+              Remove rating
+            </button>
+          )}
+          <button onClick={onClose} className="flex-1 text-[12px] rounded-lg py-2" style={{ border: `1px solid ${TOKENS.border}`, color: TOKENS.idle }}>Cancel</button>
+        </div>
       </div>
     </div>
   );

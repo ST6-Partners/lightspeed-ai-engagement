@@ -255,6 +255,16 @@ export const orgScreenRouter = router({
       await ctx.db.delete(nineBoxRatings).where(eq(nineBoxRatings.id, input.id));
       return { ok: true };
     }),
+
+  // Clear a person's 9-box placement entirely (all their rating rows) so they
+  // return to Unrated. Manager-gated, matching nineboxRate (removing a rating
+  // is the same authority as setting one).
+  nineboxClear: protectedProcedure.use(requireManager)
+    .input(z.object({ userId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(nineBoxRatings).where(eq(nineBoxRatings.userId, input.userId));
+      return { ok: true };
+    }),
   // ================= Stage 2: Assessments (read) =================
   assessmentsByUser: protectedProcedure
     .input(z.object({ userId: z.string().uuid() }))
