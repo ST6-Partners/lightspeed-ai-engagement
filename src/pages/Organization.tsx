@@ -1,6 +1,6 @@
 // Organization — org tree + scope + tabbed person-card matrix + 9 Box.
 // Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { trpc } from '../lib/trpc';
 import OrgTree from '../components/org/OrgTree';
 import PersonCard from '../components/org/PersonCard';
@@ -60,6 +60,31 @@ export default function Organization() {
   const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
   const chooseTab = (t: TabKey) => { setTab(t); ls.set('org.tab', t); };
 
+  // Resizable split between the org tree (left) and the card/9-box body (right).
+  const [treeW, setTreeW] = useState<number>(() => {
+    const v = Number(ls.get('org.treeW'));
+    return v >= 220 && v <= 640 ? v : 300;
+  });
+  const [dragging, setDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { ls.set('org.treeW', String(treeW)); }, [treeW]);
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    const onMove = (ev: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setTreeW(Math.min(640, Math.max(220, ev.clientX - rect.left)));
+    };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const selected = selectedId ? maps.byId.get(selectedId) ?? null : null;
 
   // In-scope people (spec §6).
@@ -85,12 +110,16 @@ export default function Organization() {
   const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
   return (
-    <div className="flex" style={{ height: 'calc(100vh - 7.5rem)', background: TOKENS.bg, borderRadius: 10, overflow: 'hidden', border: `1px solid ${TOKENS.border}` }}>
+    <div ref={containerRef} className="flex" style={{ height: 'calc(100vh - 7.5rem)', background: TOKENS.bg, borderRadius: 10, overflow: 'hidden', border: `1px solid ${TOKENS.border}`, userSelect: dragging ? 'none' : undefined }}>
       {isLoading ? (
         <div className="p-6 text-[13px]" style={{ color: TOKENS.idle }}>Loading organization…</div>
       ) : (
         <>
-          <OrgTree maps={maps} selectedId={selectedId} onSelect={select} />
+          <div className="shrink-0 h-full min-w-0" style={{ width: treeW }}>
+            <OrgTree maps={maps} selectedId={selectedId} onSelect={select} />
+          </div>
+          <div onMouseDown={startDrag} className="shrink-0 h-full" title="Drag to resize"
+            style={{ width: 6, cursor: 'col-resize', background: dragging ? TOKENS.selBar : 'transparent' }} />
           <div className="flex-1 flex flex-col min-w-0">
             {/* Scope header */}
             <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}` }}>
@@ -103,7 +132,6 @@ export default function Organization() {
                   </button>
                 ))}
               </div>
-              {selected && <span className="text-[12px]" style={{ color: TOKENS.idle }}>{selected.name}</span>}
             </div>
             {/* Tab strip */}
             <div className="flex items-center" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>
@@ -122,7 +150,7 @@ export default function Organization() {
               {!selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : tab === 'ninebox' ? (
-                <NineBox people={scoped} onSelect={select} />
+                <NineBox people={scoped} />
               ) : scoped.length === 0 ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
               ) : banded ? (

@@ -9,7 +9,7 @@ import {
   Bot, MessageCircle, Star,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText,
-  UserCheck, ListChecks, Gauge,
+  UserCheck, ListChecks, Gauge, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
@@ -72,6 +72,14 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showFeedback, setShowFeedback] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('nav.collapsed') === '1'; } catch { return false; }
+  });
+  const toggleNav = () => setNavCollapsed((v) => {
+    const n = !v;
+    try { localStorage.setItem('nav.collapsed', n ? '1' : '0'); } catch { /* noop */ }
+    return n;
+  });
 
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const timezoneMutation = trpc.auth.updateTimezone.useMutation();
@@ -112,24 +120,40 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col">
-        <div className="px-4 py-4 flex items-center gap-3">
+      <aside className={`${navCollapsed ? 'w-16' : 'w-60'} bg-ls-slate text-[#B9C3CB] flex flex-col transition-all duration-200`}>
+        <div className={`px-3 py-4 flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'}`}>
           <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(79,169,214,.45)] shrink-0">
             <svg width="16" height="16" viewBox="0 0 40 40" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round">
               <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
               <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
             </svg>
           </span>
-          <div className="leading-tight">
-            <div className="text-white font-bold text-[15px]">Lightspeed</div>
-            <div className="text-[11px] text-[#7E8B94]">AI Engagement</div>
-          </div>
+          {!navCollapsed && (
+            <div className="leading-tight flex-1 min-w-0">
+              <div className="text-white font-bold text-[15px]">Lightspeed</div>
+              <div className="text-[11px] text-[#7E8B94]">AI Engagement</div>
+            </div>
+          )}
+          {!navCollapsed && (
+            <button onClick={toggleNav} title="Collapse sidebar"
+              className="p-1 rounded-md text-[#B9C3CB] hover:bg-[#323D46] hover:text-white shrink-0">
+              <ChevronsLeft size={18} />
+            </button>
+          )}
         </div>
+        {navCollapsed && (
+          <div className="px-2 pb-2 flex justify-center">
+            <button onClick={toggleNav} title="Expand sidebar"
+              className="p-1 rounded-md text-[#B9C3CB] hover:bg-[#323D46] hover:text-white">
+              <ChevronsRight size={18} />
+            </button>
+          </div>
+        )}
 
         <nav className="flex-1 px-2 py-2 overflow-y-auto">
           {navGroups.map((group, gi) => (
             <div key={gi} className="mb-1">
-              {group.label && (
+              {group.label && !navCollapsed && (
                 <div className="px-2.5 pt-3 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] uppercase text-[#677480]">
                   {group.label}
                 </div>
@@ -141,14 +165,15 @@ export default function Layout() {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-colors ${
+                    title={navCollapsed ? item.label : undefined}
+                    className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'} px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-colors ${
                       active
                         ? 'bg-ls-active text-white font-medium shadow-[0_4px_14px_rgba(79,169,214,.3)]'
                         : 'text-[#B9C3CB] hover:bg-[#323D46] hover:text-white'
                     }`}
                   >
                     <Icon size={18} className={active ? 'opacity-100' : 'opacity-85'} />
-                    {item.label}
+                    {!navCollapsed && item.label}
                   </Link>
                 );
               })}
@@ -158,14 +183,16 @@ export default function Layout() {
 
         {user && (
           <div className="px-3 py-3 border-t border-[#36424B]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold">
+            <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+              <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold shrink-0">
                 {user.name?.charAt(0) || '?'}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-[#E3E7EA] truncate">{user.name}</div>
-                <div className="text-[11px] text-[#7E8B94]">{user.role}</div>
-              </div>
+              {!navCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-[#E3E7EA] truncate">{user.name}</div>
+                  <div className="text-[11px] text-[#7E8B94]">{user.role}</div>
+                </div>
+              )}
             </div>
           </div>
         )}

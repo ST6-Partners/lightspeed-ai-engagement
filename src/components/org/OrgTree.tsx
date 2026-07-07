@@ -111,7 +111,7 @@ export default function OrgTree({
   );
 
   return (
-    <div className="flex flex-col h-full" style={{ width: 300, borderRight: `1px solid ${TOKENS.border}`, background: TOKENS.panel }}>
+    <div className="flex flex-col h-full" style={{ width: '100%', borderRight: `1px solid ${TOKENS.border}`, background: TOKENS.panel }}>
       <div className="p-3 shrink-0" style={{ borderBottom: `1px solid ${TOKENS.borderSoft}` }}>
         <div className="flex items-center justify-between mb-2">
           <div className="font-bold text-[14px]" style={{ color: TOKENS.activeText }}>Organization</div>
