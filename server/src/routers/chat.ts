@@ -201,10 +201,15 @@ export const chatRouter = router({
           inputTokens = result.usage?.inputTokens ?? Math.ceil((assembledContext.length + input.message.length) / 4);
           outputTokens = result.usage?.outputTokens ?? Math.ceil(responseText.length / 4);
         } catch (err: any) {
-          console.error('Claude API error:', err.message);
-          // Fallback to canned response on API failure
-          responseText = 'I apologize, but I\'m having trouble connecting to the AI service right now. ' +
-            'Please try again in a moment, or check the FAQ section for quick answers.';
+          const errMsg = err?.message ?? String(err);
+          console.error('Claude API error:', errMsg);
+          // Admins/sysadmins see the real error inline to aid diagnosis;
+          // everyone else gets the friendly fallback.
+          const isPrivileged = ctx.user.role === 'admin' || ctx.user.role === 'sysadmin';
+          responseText = isPrivileged
+            ? `⚠️ AI service error (admin diagnostic): ${errMsg}`
+            : 'I apologize, but I\'m having trouble connecting to the AI service right now. ' +
+              'Please try again in a moment, or check the FAQ section for quick answers.';
           inputTokens = 0;
           outputTokens = 0;
         }
