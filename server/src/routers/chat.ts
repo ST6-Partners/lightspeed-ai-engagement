@@ -188,7 +188,7 @@ export const chatRouter = router({
           ].join('\n');
 
           const result = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic('claude-sonnet-4-6'),
             system: assembledContext + '\n' + toolGuidance,
             messages,
             tools,
@@ -294,7 +294,7 @@ export const chatRouter = router({
       looksValid: key.startsWith('sk-ant-'),
       length: key.length,
       hadWhitespace: raw !== key,
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
     };
   }),
 
