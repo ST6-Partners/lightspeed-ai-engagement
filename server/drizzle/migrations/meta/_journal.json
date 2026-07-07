@@ -190,6 +190,13 @@
       "when": 1783023234070,
       "tag": "0026_engagement_history_2025h1",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783023294070,
+      "tag": "0027_drop_vacant_seats",
+      "breakpoints": true
     }
   ]
 }
