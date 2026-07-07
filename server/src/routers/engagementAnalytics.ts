@@ -8,6 +8,7 @@ import { surveyPeriods, surveyMetrics } from '../db/schema/engagementAnalytics.j
 import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
+import { z } from 'zod';
 
 type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
@@ -62,7 +63,9 @@ function aggregate(values: number[]): Agg | null {
 interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCount: number; responseCount: number; source: string; isCurrent: boolean; }
 
 export const engagementAnalyticsRouter = router({
-  results: protectedProcedure.query(async ({ ctx }) => {
+  results: protectedProcedure
+    .input(z.object({ periodId: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
     const periodRows = await ctx.db.query.surveyPeriods.findMany();
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
 
@@ -127,7 +130,7 @@ export const engagementAnalyticsRouter = router({
       const respondents = new Set(responses.map((x) => x.respondentId).filter(Boolean));
       livePeriod = {
         id: 'live',
-        label: 'Current',
+        label: `${new Date().getFullYear()} (in progress)`,
         periodDate: new Date().toISOString().slice(0, 10),
         eligibleCount: activeEligible,
         responseCount: respondents.size || responses.length,
@@ -160,8 +163,12 @@ export const engagementAnalyticsRouter = router({
       return { hasData: false as const };
     }
 
-    const latest = periods[periods.length - 1];
-    const prev = periods.length > 1 ? periods[periods.length - 2] : null;
+    // `latest` is the selected period (defaults to the newest). `prev` is the
+    // period immediately before it, for change-vs-prior deltas.
+    const selIdx = input?.periodId ? periods.findIndex((p) => p.id === input.periodId) : -1;
+    const latest = selIdx >= 0 ? periods[selIdx] : periods[periods.length - 1];
+    const li = periods.indexOf(latest);
+    const prev = li > 0 ? periods[li - 1] : null;
 
     // ── Company summary + trend ──────────────────────────────────────────────
     const compMean = meanOf(latest, 'company', '', 'overall', '');
@@ -259,6 +266,7 @@ export const engagementAnalyticsRouter = router({
 
     return {
       hasData: true as const,
+      selectedId: latest.id,
       periods,
       company,
       drivers,
