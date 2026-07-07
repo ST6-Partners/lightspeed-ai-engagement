@@ -169,6 +169,13 @@
       "when": 1783023054070,
       "tag": "0023_official_org_chart",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783023114070,
+      "tag": "0024_official_titles_departments",
+      "breakpoints": true
     }
   ]
 }
