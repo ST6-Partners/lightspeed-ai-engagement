@@ -8,7 +8,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bot, MessageCircle, Star,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
-  Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText,
+  Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText, Award,
   UserCheck, ListChecks, Gauge, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
@@ -57,6 +57,7 @@ const navGroups: NavGroup[] = [
       { path: '/core-data/survey-questions', label: 'Survey Questions', icon: ListChecks },
       { path: '/core-data/rating-scale', label: 'Rating Scale', icon: Gauge },
       { path: '/core-data/org-data', label: 'Org Data', icon: ListChecks },
+      { path: '/core-data/values', label: 'Company Values', icon: Award },
     ],
   },
   {

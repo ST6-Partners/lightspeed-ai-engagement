@@ -32,6 +32,7 @@ import { engagementAnalyticsRouter } from './routers/engagementAnalytics.js';
 import { managerSurveyQuestionsRouter } from './routers/managerSurveyQuestions.js';
 import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
 import { managerSurveyRouter } from './routers/managerSurvey.js';
+import { valuesRouter } from './routers/values.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -63,6 +64,7 @@ export const appRouter = router({
   managerSurveyQuestions: managerSurveyQuestionsRouter,
   managerRatingScale: managerRatingScaleRouter,
   managerSurvey: managerSurveyRouter,
+  values: valuesRouter,
 });
 
 export type AppRouter = typeof appRouter;

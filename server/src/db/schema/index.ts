@@ -59,3 +59,6 @@ export {
   assessmentSummaries, assessmentCcatSections, assessmentEppAttributes,
   assessmentInsightProfiles, reviewCycles, reviewValueDetails,
 } from './orgScreen.js';
+
+// Company Values (read-only cache from ATA) + employee value evaluations (Reviews section, 2026-07-08)
+export { companyValues, valueEvaluations, valueEvaluationScores } from './values.js';

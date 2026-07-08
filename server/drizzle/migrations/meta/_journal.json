@@ -197,6 +197,13 @@
       "when": 1783023294070,
       "tag": "0027_drop_vacant_seats",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783023354070,
+      "tag": "0028_values_and_evaluations",
+      "breakpoints": true
     }
   ]
 }

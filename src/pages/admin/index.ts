@@ -21,3 +21,4 @@ export { default as EmailTestPanel } from './EmailTestPanel';
 export { default as ManagerSurveyQuestions } from './ManagerSurveyQuestions';
 export { default as ManagerRatingScale } from './ManagerRatingScale';
 export { default as OrgData } from './OrgData';
+export { default as CompanyValues } from './CompanyValues';
