@@ -33,6 +33,7 @@ import { managerSurveyQuestionsRouter } from './routers/managerSurveyQuestions.j
 import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
 import { managerSurveyRouter } from './routers/managerSurvey.js';
 import { valuesRouter } from './routers/values.js';
+import { checkinsRouter } from './routers/checkins.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -65,6 +66,7 @@ export const appRouter = router({
   managerRatingScale: managerRatingScaleRouter,
   managerSurvey: managerSurveyRouter,
   values: valuesRouter,
+  checkins: checkinsRouter,
 });
 
 export type AppRouter = typeof appRouter;

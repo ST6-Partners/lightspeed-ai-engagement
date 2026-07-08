@@ -204,6 +204,13 @@
       "when": 1783023354070,
       "tag": "0028_values_and_evaluations",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783023414070,
+      "tag": "0029_weekly_checkins",
+      "breakpoints": true
     }
   ]
 }

@@ -62,3 +62,6 @@ export {
 
 // Company Values (read-only cache from ATA) + employee value evaluations (Reviews section, 2026-07-08)
 export { companyValues, valueEvaluations, valueEvaluationScores } from './values.js';
+
+// Weekly Check-in pulse (standalone, 2026-07-08)
+export { checkinResponses } from './checkins.js';
