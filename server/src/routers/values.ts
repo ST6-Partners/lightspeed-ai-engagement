@@ -134,6 +134,77 @@ export const valuesRouter = router({
       return { upserted: remote.length, deactivatedStale: staleAta.length };
     }),
 
+  // ---------- Company values CRUD (locally managed) ----------
+  // Values are managed here in AIE. `source` = 'local' for hand-created rows;
+  // the optional ATA sync (syncFromSource) only touches 'seed'/'ATA' rows, so
+  // local values and any synced values coexist without clobbering each other.
+
+  createValue: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      name: z.string().min(1).max(200),
+      pillar: z.string().min(1).max(80),
+      category: z.string().max(100).nullable().optional(),
+      description: z.string().max(4000).nullable().optional(),
+      sortOrder: z.number().int().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dup = (await ctx.db.query.companyValues.findMany())
+        .find((v) => v.active && v.name.toLowerCase() === input.name.toLowerCase());
+      if (dup) throw new TRPCError({ code: 'CONFLICT', message: 'A value with that name already exists.' });
+      const [row] = await ctx.db.insert(companyValues).values({
+        name: input.name,
+        pillar: input.pillar,
+        category: input.category ?? null,
+        description: input.description ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        source: 'local',
+        active: true,
+      }).returning();
+      await auditChange(ctx.db, ctx.user.id, row.id, 'company_values', 'create');
+      trackActivity(ctx.db, ctx.user.id, 'company_value_create', input.name).catch(() => {});
+      return row;
+    }),
+
+  updateValue: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().min(1).max(200).optional(),
+      pillar: z.string().min(1).max(80).optional(),
+      category: z.string().max(100).nullable().optional(),
+      description: z.string().max(4000).nullable().optional(),
+      sortOrder: z.number().int().optional(),
+      active: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.companyValues.findFirst({ where: eq(companyValues.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const { id, ...rest } = input;
+      const updates: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rest)) if (v !== undefined) updates[k] = v;
+      const [row] = await ctx.db.update(companyValues)
+        .set({ ...updates, updatedAt: new Date() }).where(eq(companyValues.id, id)).returning();
+      await auditChange(ctx.db, ctx.user.id, id, 'company_values', 'update');
+      return row;
+    }),
+
+  deleteValue: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const refs = await ctx.db.query.valueEvaluationScores.findMany({ where: eq(valueEvaluationScores.valueId, input.id) });
+      if (refs.length > 0) {
+        // Referenced by past evaluations -> deactivate (preserve history) instead of hard delete.
+        await ctx.db.update(companyValues).set({ active: false, updatedAt: new Date() }).where(eq(companyValues.id, input.id));
+        await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'archive');
+        return { ok: true, deactivated: true };
+      }
+      await ctx.db.delete(companyValues).where(eq(companyValues.id, input.id));
+      await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'delete');
+      return { ok: true, deactivated: false };
+    }),
+
   // ---------- Employee picker ----------
 
   listEmployees: protectedProcedure.query(async ({ ctx }) => {
