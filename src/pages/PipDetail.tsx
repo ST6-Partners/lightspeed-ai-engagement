@@ -1,3 +1,4 @@
+import { fmtDateTime } from '../lib/date';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -32,7 +33,7 @@ function SectionHead({ n, title, right }: { n: number; title: string; right?: Re
 
 function fmtDate(d: string | null): string {
   if (!d) return '—';
-  return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 }
 
 function AddBtn({ onClick, label }: { onClick: () => void; label: string }) {
@@ -398,7 +399,7 @@ export default function PipDetail() {
                         <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
                           <Check size={14} className="text-green-600" /> {sig.signerName || 'Signed'}
                         </div>
-                        <div className="text-[11px] text-gray-400">{new Date(sig.signedAt).toLocaleString()}</div>
+                        <div className="text-[11px] text-gray-400">{fmtDateTime(sig.signedAt)}</div>
                       </div>
                       {mayThisRole && (
                         <button onClick={() => unsign.mutate({ id: sig.id })}

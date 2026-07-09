@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // SATISFACTION DASHBOARD — Reactions + Sentiment Mining (RCDO pattern)
 // Pattern: RCDO SatisfactionDashboard in AdminSettings.jsx
@@ -10,7 +11,7 @@ import { trpc } from '../../lib/trpc';
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles (matches RCDO inline patterns) ───────────────────

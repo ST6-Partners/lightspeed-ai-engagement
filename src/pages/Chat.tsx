@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // CHAT PAGE — Full AI chat interface with screen context, knowledge
 // base integration, conversation history, thumbs up/down reactions,
@@ -115,7 +116,7 @@ function formatDate(d: Date): string {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return fmtDate(d);
 }
 
 // ── Render markdown-like formatting ──────────────────────────

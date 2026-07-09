@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // WHAT'S NEW — button + modal for latest release notes (RCDO pattern)
 // Shows a sparkle icon in the top bar; clicking opens a modal
@@ -11,7 +12,7 @@ import { trpc } from '../lib/trpc';
 function formatDate(iso: string | Date | null) {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return fmtDate(d);
 }
 
 export default function WhatsNew() {

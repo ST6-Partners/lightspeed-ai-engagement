@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // RELEASE NOTES ADMIN — CRUD + publish/unpublish (RCDO pattern)
 // Pattern: Admin creates releases as drafts, publishes to notify users
@@ -9,7 +10,7 @@ import { trpc } from '../../lib/trpc';
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles ──────────────────────────────────────────────────

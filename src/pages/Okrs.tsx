@@ -1,3 +1,4 @@
+import { fmtDate } from '../lib/date';
 // OKRs — live nested objectives → key results → tasks (DD-002 Planning).
 import { useState, type ReactNode } from 'react';
 import { ChevronRight, Target, KeyRound, CheckSquare, Trash2 } from 'lucide-react';
@@ -121,7 +122,7 @@ export default function Okrs() {
                       </span>
                     </Field>
                   )}
-                  {sel.dueDate && <Field label="Due date">{sel.dueDate}</Field>}
+                  {sel.dueDate && <Field label="Due date">{fmtDate(sel.dueDate)}</Field>}
                 </dl>
                 {sel.description && (
                   <div className="mt-4">

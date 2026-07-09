@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // REVIEWS — Employee performance evaluation (Engagement group)
 //
@@ -113,7 +114,7 @@ function EvaluationList({ employeeName, rows, loading, canEdit, onOpen }: {
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => onOpen(r.id)}>
               <td className="px-3 py-2 text-gray-900">{r.periodLabel || '—'}</td>
-              <td className="px-3 py-2 text-gray-600">{new Date(r.evaluatedAt).toLocaleDateString()}</td>
+              <td className="px-3 py-2 text-gray-600">{fmtDate(r.evaluatedAt)}</td>
               <td className="px-3 py-2 text-gray-600">{r.reviewerName || '—'}</td>
               <td className={`px-3 py-2 text-center font-semibold ${band(r.avgScore)}`}>{r.avgScore != null ? r.avgScore.toFixed(1) : '—'}</td>
               <td className="px-3 py-2 text-center text-gray-500">{r.scoredCount}</td>

@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, FileText } from 'lucide-react';
@@ -170,7 +171,7 @@ export default function PromptAdmin() {
               <h2 className="text-lg font-bold text-gray-900 font-mono">{selectedKey}</h2>
               <div className="flex gap-3 text-xs text-gray-500 mt-2">
                 <span>Version: {currentPrompt.version}</span>
-                <span>Created: {new Date(currentPrompt.createdAt).toLocaleString()}</span>
+                <span>Created: {fmtDateTime(currentPrompt.createdAt)}</span>
               </div>
             </div>
 
@@ -207,7 +208,7 @@ export default function PromptAdmin() {
                       <div key={idx} className="p-3 hover:bg-gray-50">
                         <p className="text-xs font-medium text-gray-900">Version {v.version}</p>
                         <p className="text-xs text-gray-500 mt-1">
-                          {new Date(v.createdAt).toLocaleString()}
+                          {fmtDateTime(v.createdAt)}
                         </p>
                         {idx > 0 && (
                           <p className="text-xs text-gray-600 mt-2 font-mono max-h-20 overflow-hidden line-clamp-3">

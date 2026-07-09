@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // EMAIL TEST PANEL — SendGrid send form + test inbox
 // Admin-only. Send a test email; receive replies / simulated mail.
@@ -29,8 +30,7 @@ const c = {
 function fmt(ts: string | Date | null) {
   if (!ts) return '—';
   const d = new Date(ts);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-         d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 export default function EmailTestPanel() {

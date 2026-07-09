@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // CHANGE LOG PANEL — immutable audit trail with batch view (RCDO pattern)
 // Pattern: RCDO ChangeLog with individual + batch views
@@ -10,7 +11,7 @@ import { trpc } from '../../lib/trpc';
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles (matches RCDO inline patterns) ───────────────────

@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // SNAPSHOT SYNC — Pull production snapshot, preview, sync
 // Pattern: RCDO SnapshotSync with 3-step wizard (Pull → Preview → Sync)
@@ -36,7 +37,7 @@ interface PreviewData {
 function formatDate(iso: string) {
   if (!iso || iso === 'unknown') return 'Unknown';
   const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles (matches RCDO sync card styles) ──────────────────

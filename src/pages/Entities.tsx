@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 import { useState } from 'react';
 import { trpc } from '../lib/trpc';
 import { Plus, Archive, Pencil } from 'lucide-react';
@@ -87,7 +88,7 @@ export default function Entities() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(entity.createdAt).toLocaleDateString()}
+                    {fmtDate(entity.createdAt)}
                   </td>
                   <td className="px-4 py-3">
                     <button

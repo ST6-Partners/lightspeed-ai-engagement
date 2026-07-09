@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // DATABASE EXPORT — Export production snapshot for sync
 // Pattern: RCDO DatabaseExport component in AdminSettings.jsx
@@ -10,7 +11,7 @@ import { trpc } from '../../lib/trpc';
 function formatDate(iso: string) {
   if (!iso || iso === 'unknown') return 'Unknown';
   const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles (matches RCDO export card styles) ────────────────

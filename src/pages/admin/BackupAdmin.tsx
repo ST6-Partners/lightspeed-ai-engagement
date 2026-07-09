@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // BACKUP ADMIN — RCDO-pattern backup panel with SQLite snapshots
 // Create, list, download, restore, delete with retention policy
@@ -16,8 +17,7 @@ const triggerColors: Record<string, { bg: string; color: string }> = {
 function formatTime(ts: string | null) {
   if (!ts) return '—';
   const d = new Date(ts);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-         d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 // ── Styles (matches RCDO BackupAdmin inline styles) ─────────

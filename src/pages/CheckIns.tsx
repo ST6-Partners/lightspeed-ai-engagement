@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // CHECK-INS — configurable weekly pulse. Renders whatever questions are
 // marked "included" in the bank (Core Data → Check-in Questions), mixing
@@ -139,7 +140,7 @@ export default function CheckIns() {
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 rounded-lg">
                 {open ? <ChevronDown size={16} className="text-gray-400 shrink-0" /> : <ChevronRight size={16} className="text-gray-400 shrink-0" />}
                 <span className="text-sm font-semibold text-gray-900 shrink-0">{r.respondentName ?? '—'}</span>
-                <span className="text-xs text-gray-500 shrink-0">Period of {r.weekOf}</span>
+                <span className="text-xs text-gray-500 shrink-0">Period of {fmtDate(r.weekOf)}</span>
                 <span className="ml-auto flex items-center gap-2 shrink-0">
                   {avg != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">avg {avg.toFixed(1)}</span>}
                   {written > 0 && <span className="text-xs text-gray-400">{written} written</span>}

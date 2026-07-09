@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // SYSTEM JOBS — RCDO-pattern job runner UI
 // Manual triggers, filter pills, color-coded run history table
@@ -23,8 +24,7 @@ const typeColors: Record<string, { bg: string; text: string }> = {
 function formatTime(ts: string | null) {
   if (!ts) return '—';
   const d = new Date(ts);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-         d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return fmtDateTime(d);
 }
 
 function formatDuration(ms: number | null) {

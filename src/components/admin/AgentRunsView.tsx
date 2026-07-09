@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // AGENT RUNS VIEW — admin list of propose-and-approve agent runs
 //
@@ -55,7 +56,7 @@ export default function AgentRunsView() {
           {run.summary && <p className="text-xs text-gray-600 mt-1.5">{run.summary}</p>}
           <div className="text-[11px] text-gray-400 mt-1">
             {run.triggeredBy ? `${run.triggeredBy} · ` : ''}
-            {run.startedAt ? new Date(run.startedAt).toLocaleString() : ''}
+            {run.startedAt ? fmtDateTime(run.startedAt) : ''}
             {run.model ? ` · ${run.model}` : ''}
           </div>
         </div>

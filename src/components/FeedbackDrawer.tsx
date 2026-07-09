@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // FEEDBACK DRAWER — submit feedback + pre-submit AI review (SC-002)
 // Signal parity: up to 5 screenshots (auto-capture + paste + drop),
@@ -264,7 +265,7 @@ export default function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
                       </div>
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 bg-gray-100 text-gray-700">{STATUS_LABELS[fb.status] || fb.status}</span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-2">{new Date(fb.createdAt).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-400 mt-2">{fmtDate(fb.createdAt)}</div>
                     {(fb.agentDiagnosis || fb.adminNotes) && ['pm_review','approved','resolved'].includes(fb.status) && (
                       <div className="mt-2"><AgentDiagnosisPanel adminNotes={fb.adminNotes} agentDiagnosis={fb.agentDiagnosis} agentStatus={fb.agentStatus} agentPrUrl={fb.agentPrUrl} /></div>
                     )}

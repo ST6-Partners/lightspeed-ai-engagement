@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../../lib/date';
 // ============================================================
 // TELEMETRY DASHBOARD — RCDO-pattern multi-tab analytics
 // Tabs: Pulse | Overview | Trends | Activity Log | Chat Debug
@@ -43,7 +44,7 @@ const WEEK_OPTIONS = [1, 2, 4, 8, 12];
 function formatDate(iso: string) {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return fmtDate(d);
 }
 
 function initials(name: string) {
@@ -192,7 +193,7 @@ function OverviewSection({ weeks }: { weeks: number }) {
                   <td style={st.tdRight}>{Number(u.page_views).toLocaleString()}</td>
                   <td style={st.tdRight}>{Number(u.actions).toLocaleString()}</td>
                   <td style={{ ...st.td, fontSize: 12, color: '#6b7280' }}>
-                    {new Date(u.last_active).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {fmtDateTime(u.last_active)}
                   </td>
                 </tr>
               ))}
@@ -313,7 +314,7 @@ function ActivityLogSection() {
               {rows.map((entry: any) => (
                 <tr key={entry.id}>
                   <td style={{ ...st.td, fontSize: 12, whiteSpace: 'nowrap' }}>
-                    {new Date(entry.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {fmtDateTime(entry.createdAt)}
                   </td>
                   <td style={st.td}>{entry.userName || '—'}</td>
                   <td style={st.td}>
@@ -389,7 +390,7 @@ function ChatDebugSection() {
                       {expandedRow === s.id ? <ChevronDown size={14} color="#6b7280" /> : <ChevronRight size={14} color="#6b7280" />}
                     </td>
                     <td style={{ ...st.td, fontSize: 12, whiteSpace: 'nowrap' }}>
-                      {new Date(s.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      {fmtDateTime(s.createdAt)}
                     </td>
                     <td style={st.td}>{s.userName || '—'}</td>
                     <td style={st.tdRight}>{s.inputTokens?.toLocaleString() ?? '—'}</td>

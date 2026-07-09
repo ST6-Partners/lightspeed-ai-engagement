@@ -1,3 +1,4 @@
+import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // MANAGER SURVEY — upward feedback filled out AFTER a 1:1 with your manager.
 // An employee rates their manager 1..5 across the active Survey Questions.
@@ -115,7 +116,7 @@ export default function ManagerSurvey() {
                     Manager: {r.managerName ?? '—'}
                   </div>
                   <div className="text-xs text-gray-500">
-                    by {r.respondentName ?? '—'} · {r.reviewDate}
+                    by {r.respondentName ?? '—'} · {fmtDate(r.reviewDate)}
                   </div>
                 </div>
                 <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
