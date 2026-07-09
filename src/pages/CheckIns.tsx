@@ -7,7 +7,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { trpc } from '../lib/trpc';
-import { CheckCircle2, ClipboardCheck, History, Settings } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, History, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 import { weekStartISO } from '../lib/weeklyCheckin';
 import { CheckinQuestions } from './admin';
 
@@ -64,6 +64,8 @@ export default function CheckIns() {
   const [respondentId, setRespondentId] = useState('');
   const [answers, setAnswers] = useState<Record<string, Ans>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const submit = trpc.checkins.submit.useMutation({
     onSuccess: () => { setSubmitted(true); utils.checkins.list.invalidate(); },
@@ -123,26 +125,38 @@ export default function CheckIns() {
       );
     }
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         <p className="text-xs text-gray-500">{rows.length} recorded {rows.length === 1 ? 'check-in' : 'check-ins'}</p>
         {rows.map((r: any) => {
           const ans: any[] = Array.isArray(r.answers) ? r.answers : [];
+          const scales = ans.filter((a) => a.type !== 'text' && typeof a.value === 'number');
+          const avg = scales.length ? (scales.reduce((sum: number, a: any) => sum + a.value, 0) / scales.length) : null;
+          const written = ans.filter((a) => a.type === 'text' && a.answerText && a.answerText.trim()).length;
+          const open = expanded.has(r.id);
           return (
-            <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="mb-2">
-                <div className="text-sm font-semibold text-gray-900">{r.respondentName ?? '—'}</div>
-                <div className="text-xs text-gray-500">Period of {r.weekOf}</div>
-              </div>
-              <div className="space-y-1.5 text-sm">
-                {ans.map((a, i) => (
-                  <div key={i} className="border-t border-gray-100 pt-1.5 first:border-0 first:pt-0">
-                    <div className="text-xs text-gray-400">{a.text}</div>
-                    {a.type === 'text'
-                      ? <div className="text-gray-800">{a.answerText || <span className="text-gray-400">—</span>}</div>
-                      : <div className="font-semibold text-gray-900">{a.value ?? '–'}{a.type === 'enps' ? ' / 10' : ' / 5'}</div>}
-                  </div>
-                ))}
-              </div>
+            <div key={r.id} className="bg-white border border-gray-200 rounded-lg">
+              <button type="button" onClick={() => toggleRow(r.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 rounded-lg">
+                {open ? <ChevronDown size={16} className="text-gray-400 shrink-0" /> : <ChevronRight size={16} className="text-gray-400 shrink-0" />}
+                <span className="text-sm font-semibold text-gray-900 shrink-0">{r.respondentName ?? '—'}</span>
+                <span className="text-xs text-gray-500 shrink-0">Period of {r.weekOf}</span>
+                <span className="ml-auto flex items-center gap-2 shrink-0">
+                  {avg != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">avg {avg.toFixed(1)}</span>}
+                  {written > 0 && <span className="text-xs text-gray-400">{written} written</span>}
+                </span>
+              </button>
+              {open && (
+                <div className="px-4 pb-4 pt-1 space-y-1.5 text-sm border-t border-gray-100">
+                  {ans.map((a, i) => (
+                    <div key={i} className="pt-1.5">
+                      <div className="text-xs text-gray-400">{a.text}</div>
+                      {a.type === 'text'
+                        ? <div className="text-gray-800">{a.answerText || <span className="text-gray-400">—</span>}</div>
+                        : <div className="font-semibold text-gray-900">{a.value ?? '–'}{a.type === 'enps' ? ' / 10' : ' / 5'}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
