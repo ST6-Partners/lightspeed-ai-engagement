@@ -218,6 +218,13 @@
       "when": 1783023474070,
       "tag": "0030_checkin_configurable",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1783023534070,
+      "tag": "0031_checkin_full_bank",
+      "breakpoints": true
     }
   ]
 }
