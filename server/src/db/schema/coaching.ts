@@ -19,7 +19,8 @@ import {
   pgTable, uuid, varchar, text, integer, boolean, timestamp, index,
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
-import { valueEvaluations, companyValues } from './values.js';
+import { companyValues } from './values.js';
+import { reviews } from './reviews.js';
 
 export const coachingPlans = pgTable('coaching_plans', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -29,7 +30,7 @@ export const coachingPlans = pgTable('coaching_plans', {
   // The review this plan was crafted from. Kept nullable + set-null on delete
   // so a plan survives if its source review is later removed.
   evaluationId: uuid('evaluation_id')
-    .references(() => valueEvaluations.id, { onDelete: 'set null' }),
+    .references(() => reviews.id, { onDelete: 'set null' }),
   authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
   periodLabel: text('period_label'),
   status: varchar('status', { length: 16 }).notNull().default('draft'), // draft | final

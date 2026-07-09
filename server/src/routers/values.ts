@@ -16,7 +16,8 @@ import { z } from 'zod';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { companyValues, valueEvaluations, valueEvaluationScores, reviewPeriods } from '../db/schema/values.js';
+import { companyValues, reviewPeriods } from '../db/schema/values.js';
+import { reviews, reviewScores } from '../db/schema/reviews.js';
 import { users } from '../db/schema/core.js';
 import { requireAdmin, requireManager } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
@@ -193,7 +194,7 @@ export const valuesRouter = router({
     .use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const refs = await ctx.db.query.valueEvaluationScores.findMany({ where: eq(valueEvaluationScores.valueId, input.id) });
+      const refs = await ctx.db.query.reviewScores.findMany({ where: eq(reviewScores.itemId, input.id) });
       if (refs.length > 0) {
         // Referenced by past evaluations -> deactivate (preserve history) instead of hard delete.
         await ctx.db.update(companyValues).set({ active: false, updatedAt: new Date() }).where(eq(companyValues.id, input.id));
@@ -250,38 +251,31 @@ export const valuesRouter = router({
     }));
   }),
 
-  // ---------- Evaluations (owned by AIE) ----------
+  // ---------- Reviews (shared reviews/review_scores, type='values') ----------
 
   listEvaluations: protectedProcedure
     .input(z.object({ employeeId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const evals = await ctx.db.query.valueEvaluations.findMany({
-        where: eq(valueEvaluations.employeeId, input.employeeId),
-        orderBy: [desc(valueEvaluations.evaluatedAt)],
+      const evals = await ctx.db.query.reviews.findMany({
+        where: and(eq(reviews.employeeId, input.employeeId), eq(reviews.type, 'values')),
+        orderBy: [desc(reviews.evaluatedAt)],
       });
       if (evals.length === 0) return [];
       const ids = evals.map((e) => e.id);
-      const scores = await ctx.db.query.valueEvaluationScores.findMany({
-        where: inArray(valueEvaluationScores.evaluationId, ids),
-      });
+      const scores = await ctx.db.query.reviewScores.findMany({ where: inArray(reviewScores.reviewId, ids) });
       const reviewerIds = Array.from(new Set(evals.map((e) => e.reviewerId).filter(Boolean))) as string[];
       const reviewers = reviewerIds.length
         ? await ctx.db.query.users.findMany({ where: inArray(users.id, reviewerIds), columns: { id: true, name: true } })
         : [];
       const reviewerName = new Map(reviewers.map((r) => [r.id, r.name]));
       return evals.map((e) => {
-        const s = scores.filter((x) => x.evaluationId === e.id);
+        const s = scores.filter((x) => x.reviewId === e.id);
         const avg = s.length ? s.reduce((a, x) => a + x.score, 0) / s.length : null;
         return {
-          id: e.id,
-          periodLabel: e.periodLabel,
-          status: e.status,
-          overallNotes: e.overallNotes,
-          evaluatedAt: e.evaluatedAt,
-          reviewerId: e.reviewerId,
+          id: e.id, periodLabel: e.periodLabel, status: e.status, overallNotes: e.overallNotes,
+          evaluatedAt: e.evaluatedAt, reviewerId: e.reviewerId,
           reviewerName: e.reviewerId ? reviewerName.get(e.reviewerId) ?? null : null,
-          scoredCount: s.length,
-          avgScore: avg,
+          scoredCount: s.length, avgScore: avg,
         };
       });
     }),
@@ -289,28 +283,21 @@ export const valuesRouter = router({
   getEvaluation: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const evaluation = await ctx.db.query.valueEvaluations.findFirst({
-        where: eq(valueEvaluations.id, input.id),
-      });
+      const evaluation = await ctx.db.query.reviews.findFirst({ where: eq(reviews.id, input.id) });
       if (!evaluation) throw new TRPCError({ code: 'NOT_FOUND' });
-      const scores = await ctx.db.query.valueEvaluationScores.findMany({
-        where: eq(valueEvaluationScores.evaluationId, input.id),
-      });
+      const scores = await ctx.db.query.reviewScores.findMany({ where: eq(reviewScores.reviewId, input.id) });
       const values = await ctx.db.query.companyValues.findMany();
       const byId = new Map(values.map((v) => [v.id, v]));
       return {
         ...evaluation,
         scores: scores.map((s) => ({
-          valueId: s.valueId,
-          score: s.score,
-          notes: s.notes,
-          valueName: byId.get(s.valueId)?.name ?? '(retired value)',
-          pillar: byId.get(s.valueId)?.pillar ?? null,
+          valueId: s.itemId, score: s.score, notes: s.notes,
+          valueName: byId.get(s.itemId)?.name ?? '(retired value)',
+          pillar: byId.get(s.itemId)?.pillar ?? null,
         })),
       };
     }),
 
-  // Create or update an evaluation + its per-value scores (full replace).
   saveEvaluation: protectedProcedure
     .use(requireManager)
     .input(z.object({
@@ -327,41 +314,33 @@ export const valuesRouter = router({
       const result = await ctx.db.transaction(async (tx) => {
         let evalId = input.id;
         if (evalId) {
-          const existing = await tx.query.valueEvaluations.findFirst({ where: eq(valueEvaluations.id, evalId) });
+          const existing = await tx.query.reviews.findFirst({ where: eq(reviews.id, evalId) });
           if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
-          await tx.update(valueEvaluations).set({
-            employeeId: input.employeeId,
-            reviewerId,
+          await tx.update(reviews).set({
+            employeeId: input.employeeId, reviewerId,
             periodLabel: input.periodLabel ?? null,
             status: input.status ?? existing.status,
-            overallNotes: input.overallNotes ?? null,
-            updatedAt: new Date(),
-          }).where(eq(valueEvaluations.id, evalId));
+            overallNotes: input.overallNotes ?? null, updatedAt: new Date(),
+          }).where(eq(reviews.id, evalId));
         } else {
-          const [row] = await tx.insert(valueEvaluations).values({
-            employeeId: input.employeeId,
-            reviewerId,
+          const [row] = await tx.insert(reviews).values({
+            type: 'values',
+            employeeId: input.employeeId, reviewerId,
             periodLabel: input.periodLabel ?? null,
             status: input.status ?? 'draft',
             overallNotes: input.overallNotes ?? null,
           }).returning();
           evalId = row.id;
         }
-        // Full replace of scores.
-        await tx.delete(valueEvaluationScores).where(eq(valueEvaluationScores.evaluationId, evalId));
+        await tx.delete(reviewScores).where(eq(reviewScores.reviewId, evalId));
         if (input.scores.length) {
-          await tx.insert(valueEvaluationScores).values(
-            input.scores.map((s) => ({
-              evaluationId: evalId!,
-              valueId: s.valueId,
-              score: s.score,
-              notes: s.notes ?? null,
-            })),
+          await tx.insert(reviewScores).values(
+            input.scores.map((s) => ({ reviewId: evalId!, itemId: s.valueId, score: s.score, notes: s.notes ?? null })),
           );
         }
         return { id: evalId! };
       });
-      await auditChange(ctx.db, ctx.user.id, result.id, 'value_evaluations', input.id ? 'update' : 'create');
+      await auditChange(ctx.db, ctx.user.id, result.id, 'reviews', input.id ? 'update' : 'create');
       trackActivity(ctx.db, ctx.user.id, 'value_evaluation_save', input.employeeId).catch(() => {});
       return result;
     }),
@@ -370,8 +349,8 @@ export const valuesRouter = router({
     .use(requireManager)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.delete(valueEvaluations).where(eq(valueEvaluations.id, input.id));
-      await auditChange(ctx.db, ctx.user.id, input.id, 'value_evaluations', 'delete');
+      await ctx.db.delete(reviews).where(eq(reviews.id, input.id));
+      await auditChange(ctx.db, ctx.user.id, input.id, 'reviews', 'delete');
       return { ok: true };
     }),
 });

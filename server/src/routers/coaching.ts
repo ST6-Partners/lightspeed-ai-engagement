@@ -17,7 +17,8 @@ import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { router, protectedProcedure } from '../trpc.js';
 import { coachingPlans, coachingPlanFocusAreas } from '../db/schema/coaching.js';
-import { valueEvaluations, valueEvaluationScores, companyValues } from '../db/schema/values.js';
+import { companyValues } from '../db/schema/values.js';
+import { reviews, reviewScores } from '../db/schema/reviews.js';
 import { users } from '../db/schema/core.js';
 import { requireManager } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
@@ -38,15 +39,15 @@ const FocusInput = z.object({
 // ---- Review loader -----------------------------------------
 
 async function loadReview(db: any, evaluationId: string) {
-  const evaluation = await db.query.valueEvaluations.findFirst({ where: eq(valueEvaluations.id, evaluationId) });
+  const evaluation = await db.query.reviews.findFirst({ where: eq(reviews.id, evaluationId) });
   if (!evaluation) throw new TRPCError({ code: 'NOT_FOUND', message: 'Source review not found.' });
-  const scoreRows = await db.query.valueEvaluationScores.findMany({ where: eq(valueEvaluationScores.evaluationId, evaluationId) });
+  const scoreRows = await db.query.reviewScores.findMany({ where: eq(reviewScores.reviewId, evaluationId) });
   const values = await db.query.companyValues.findMany();
   const byId = new Map<string, any>(values.map((v: any) => [v.id, v]));
   const scores: ScoreRow[] = scoreRows.map((s: any) => ({
-    valueId: s.valueId, score: s.score, notes: s.notes ?? null,
-    valueName: byId.get(s.valueId)?.name ?? '(retired value)',
-    pillar: byId.get(s.valueId)?.pillar ?? null,
+    valueId: s.itemId, score: s.score, notes: s.notes ?? null,
+    valueName: byId.get(s.itemId)?.name ?? '(retired value)',
+    pillar: byId.get(s.itemId)?.pillar ?? null,
   }));
   const employee = await db.query.users.findFirst({ where: eq(users.id, evaluation.employeeId), columns: { id: true, name: true, email: true } });
   return { evaluation, scores, employeeName: employee?.name ?? employee?.email ?? 'the employee' };
