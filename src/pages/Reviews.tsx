@@ -136,6 +136,13 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
   const existing = trpc.values.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
   const save = trpc.values.saveEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
   const del = trpc.values.deleteEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
+  const periodsQuery = trpc.values.listPeriods.useQuery();
+  const createPeriod = trpc.values.createPeriod.useMutation({
+    onSuccess: (pd) => { periodsQuery.refetch(); setPeriodLabel(pd.label); setShowPeriodModal(false); setNewPeriod(''); },
+    onError: (e) => alert(e.message),
+  });
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [newPeriod, setNewPeriod] = useState('');
 
   const [periodLabel, setPeriodLabel] = useState('');
   const [status, setStatus] = useState<'draft' | 'final'>('draft');
@@ -153,6 +160,11 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
       setScores(s); setNotes(n);
     }
   }, [editingId, existing.data]);
+
+  const periodOptions = useMemo(() => {
+    const labels = (periodsQuery.data ?? []).map((pd: any) => pd.label);
+    return periodLabel && !labels.includes(periodLabel) ? [periodLabel, ...labels] : labels;
+  }, [periodsQuery.data, periodLabel]);
 
   const submit = () => {
     const scoreArr = Object.entries(scores)
@@ -182,10 +194,19 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
-        <div className="flex-1 min-w-[160px]">
+        <div className="flex-1 min-w-[200px]">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Review period</label>
-          <input className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" value={periodLabel}
-            onChange={(e) => setPeriodLabel(e.target.value)} placeholder="e.g. 2026 H1" />
+          <div className="flex gap-2">
+            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+              value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)}>
+              <option value="">Select a period…</option>
+              {periodOptions.map((label: string) => <option key={label} value={label}>{label}</option>)}
+            </select>
+            <button type="button" onClick={() => { setNewPeriod(''); setShowPeriodModal(true); }} title="Add a review period"
+              className="px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 shrink-0">
+              <Plus size={15} />
+            </button>
+          </div>
         </div>
         <div className="w-40">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Status</label>
@@ -246,6 +267,24 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
           {save.isLoading ? 'Saving…' : 'Save evaluation'}
         </button>
       </div>
+
+      {showPeriodModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPeriodModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">New review period</h3>
+            <p className="text-xs text-gray-500 mb-3">Keep the format consistent, e.g. "2026 H1", "2026 Q3", "2026 Annual".</p>
+            <input autoFocus className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-4" value={newPeriod}
+              onChange={(e) => setNewPeriod(e.target.value)} placeholder="e.g. 2026 H2"
+              onKeyDown={(e) => { if (e.key === 'Enter' && newPeriod.trim()) createPeriod.mutate({ label: newPeriod.trim() }); }} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowPeriodModal(false)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+              <button onClick={() => newPeriod.trim() && createPeriod.mutate({ label: newPeriod.trim() })}
+                disabled={!newPeriod.trim() || createPeriod.isLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Add period</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

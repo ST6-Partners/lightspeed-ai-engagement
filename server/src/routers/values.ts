@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { companyValues, valueEvaluations, valueEvaluationScores } from '../db/schema/values.js';
+import { companyValues, valueEvaluations, valueEvaluationScores, reviewPeriods } from '../db/schema/values.js';
 import { users } from '../db/schema/core.js';
 import { requireAdmin, requireManager } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
@@ -203,6 +203,39 @@ export const valuesRouter = router({
       await ctx.db.delete(companyValues).where(eq(companyValues.id, input.id));
       await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'delete');
       return { ok: true, deactivated: false };
+    }),
+
+  // ---------- Review periods (managed lookup) ----------
+
+  listPeriods: protectedProcedure
+    .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const all = await ctx.db.query.reviewPeriods.findMany({
+        orderBy: [desc(reviewPeriods.sortOrder), desc(reviewPeriods.createdAt)],
+      });
+      return input?.includeInactive ? all : all.filter((p) => p.active);
+    }),
+
+  // Managers can add a period from the Reviews "+" modal.
+  createPeriod: protectedProcedure
+    .use(requireManager)
+    .input(z.object({ label: z.string().min(1).max(120) }))
+    .mutation(async ({ ctx, input }) => {
+      const label = input.label.trim();
+      const dup = await ctx.db.query.reviewPeriods.findFirst({ where: eq(reviewPeriods.label, label) });
+      if (dup) {
+        if (!dup.active) {
+          const [row] = await ctx.db.update(reviewPeriods).set({ active: true, updatedAt: new Date() }).where(eq(reviewPeriods.id, dup.id)).returning();
+          return row;
+        }
+        throw new TRPCError({ code: 'CONFLICT', message: 'That review period already exists.' });
+      }
+      const existing = await ctx.db.query.reviewPeriods.findMany();
+      const maxSort = existing.reduce((m, p) => Math.max(m, p.sortOrder), 0);
+      const [row] = await ctx.db.insert(reviewPeriods).values({ label, sortOrder: maxSort + 10 }).returning();
+      await auditChange(ctx.db, ctx.user.id, row.id, 'review_periods', 'create');
+      trackActivity(ctx.db, ctx.user.id, 'review_period_create', label).catch(() => {});
+      return row;
     }),
 
   // ---------- Employee picker ----------

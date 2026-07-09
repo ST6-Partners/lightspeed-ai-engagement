@@ -81,3 +81,18 @@ export const valueEvaluationScores = pgTable('value_evaluation_scores', {
 }, (t) => ({
   uniqEvalValue: unique('uniq_evaluation_value').on(t.evaluationId, t.valueId),
 }));
+
+// -- review_periods -- managed lookup of evaluation periods (e.g. '2026 H1') --
+// Encourages picking a consistent period from a dropdown instead of typing
+// disparate free-text names. value_evaluations.periodLabel stores the chosen
+// label (kept as text; this table governs the option list).
+export const reviewPeriods = pgTable('review_periods', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  label: varchar('label', { length: 120 }).notNull(),
+  active: boolean('active').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqLabel: unique('uniq_review_period_label').on(t.label),
+}));
