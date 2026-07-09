@@ -7,8 +7,9 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { trpc } from '../lib/trpc';
-import { CheckCircle2, ClipboardCheck, History } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, History, Settings } from 'lucide-react';
 import { weekStartISO } from '../lib/weeklyCheckin';
+import { CheckinQuestions } from './admin';
 
 const labelCls = 'block text-[11px] uppercase tracking-wide text-gray-500 mb-1';
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -40,7 +41,7 @@ const Card = ({ children }: { children: ReactNode }) => (
 );
 
 type Ans = { value?: number; answerText?: string };
-type View = 'form' | 'history';
+type View = 'form' | 'history' | 'configure';
 
 export default function CheckIns() {
   const [view, setView] = useState<View>('form');
@@ -49,6 +50,8 @@ export default function CheckIns() {
   const { data: people } = trpc.pip.listUsers.useQuery();
   const { data: questions } = trpc.checkinQuestions.list.useQuery();
   const { data: settings } = trpc.checkinSettings.get.useQuery();
+  const { data: me } = trpc.auth.me.useQuery();
+  const isAdmin = me?.role === 'admin' || me?.role === 'sysadmin';
   const utils = trpc.useContext();
   const { data: history, isLoading: hLoading } = trpc.checkins.list.useQuery(undefined, { enabled: view === 'history' });
 
@@ -94,7 +97,8 @@ export default function CheckIns() {
   const tabBar = () => (
     <div className="flex gap-1 mb-4 border-b border-gray-200">
       {([{ key: 'form' as const, label: 'This Period', icon: ClipboardCheck },
-         { key: 'history' as const, label: 'Past Responses', icon: History }]).map(({ key, label, icon: Icon }) => {
+         { key: 'history' as const, label: 'Past Responses', icon: History },
+         ...(isAdmin ? [{ key: 'configure' as const, label: 'Configure', icon: Settings }] : [])]).map(({ key, label, icon: Icon }) => {
         const on = view === key;
         return (
           <button key={key} type="button" onClick={() => setView(key)}
@@ -217,7 +221,7 @@ export default function CheckIns() {
         A quick pulse on how you're doing, what you're focused on, and what you need — so your manager stays in the loop between reviews.
       </p>
       {tabBar()}
-      {view === 'history' ? renderHistory() : renderForm()}
+      {view === 'configure' && isAdmin ? <CheckinQuestions /> : view === 'history' ? renderHistory() : renderForm()}
     </div>
   );
 }
