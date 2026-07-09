@@ -34,6 +34,7 @@ import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
 import { managerSurveyRouter } from './routers/managerSurvey.js';
 import { valuesRouter } from './routers/values.js';
 import { performanceRouter } from './routers/performance.js';
+import { coachingRouter } from './routers/coaching.js';
 import { checkinsRouter } from './routers/checkins.js';
 import { checkinQuestionsRouter } from './routers/checkinQuestions.js';
 import { checkinSettingsRouter } from './routers/checkinSettings.js';
@@ -70,6 +71,7 @@ export const appRouter = router({
   managerSurvey: managerSurveyRouter,
   values: valuesRouter,
   performance: performanceRouter,
+  coaching: coachingRouter,
   checkins: checkinsRouter,
   checkinQuestions: checkinQuestionsRouter,
   checkinSettings: checkinSettingsRouter,

@@ -17,6 +17,8 @@ import ManagerSurvey from './pages/ManagerSurvey';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import Reviews from './pages/Reviews';
+import CoachingPlans from './pages/CoachingPlans';
+import CoachingPlanDetail from './pages/CoachingPlanDetail';
 
 export default function App() {
   return (
@@ -31,6 +33,8 @@ export default function App() {
         {/* Engagement */}
         <Route path="/check-ins" element={<CheckIns />} />
         <Route path="/reviews" element={<Reviews />} />
+        <Route path="/coaching-plans" element={<CoachingPlans />} />
+        <Route path="/coaching-plans/:id" element={<CoachingPlanDetail />} />
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />

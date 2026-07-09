@@ -69,3 +69,6 @@ export { performanceCriteria, performanceEvaluations, performanceEvaluationScore
 // Weekly Check-in pulse (standalone, 2026-07-08)
 export { checkinResponses } from './checkins.js';
 export { checkinQuestions, checkinSettings } from './checkins.js';
+
+// Coaching Plans (crafted from a review; AI-drafted narrative, PDF export — 2026-07-09)
+export { coachingPlans, coachingPlanFocusAreas } from './coaching.js';
