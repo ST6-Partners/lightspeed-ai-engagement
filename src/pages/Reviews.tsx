@@ -2,12 +2,14 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 // REVIEWS — Employee performance evaluation (Engagement group)
 //
-// A manager/reviewer picks an EMPLOYEE and scores them 1-5 against each
-// active company value (framework mirrored from ATA), with per-value notes +
-// overall notes, saved as a dated evaluation. History is listed per employee.
-// Company-value definitions are read-only here (managed in Core Data →
-// Company Values / ATA). Standalone build (2026-07-08); the Organization
-// screen's separate Review tab is intentionally untouched.
+// Flow: pick a REVIEW PERIOD, then an EMPLOYEE, then "New review". The
+// evaluation form scores the employee 1-5 against each active company value
+// (framework managed in Core Data > Company Values), with per-value + overall
+// notes, saved as a dated evaluation. The period is chosen up front and shown
+// READ-ONLY on the form. Periods come from the managed review_periods lookup
+// (dropdown + "+" modal) so names stay consistent. History is listed per
+// employee. Standalone build (2026-07-08); the Organization screen's separate
+// Review tab is intentionally untouched.
 // ============================================================
 
 import { useState, useMemo, useEffect } from 'react';
@@ -15,7 +17,6 @@ import { trpc } from '../lib/trpc';
 import { Star, Plus, Trash2, ArrowLeft } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
-const today = () => new Date().toISOString().slice(0, 10);
 const band = (n: number | null) =>
   n == null ? 'text-gray-400' : n >= 4 ? 'text-green-600' : n >= 3 ? 'text-blue-600' : n >= 2 ? 'text-amber-600' : 'text-red-600';
 
@@ -25,50 +26,76 @@ export default function Reviews() {
 
   const { data: employees } = trpc.values.listEmployees.useQuery();
   const { data: values } = trpc.values.list.useQuery();
+  const periodsQuery = trpc.values.listPeriods.useQuery();
 
+  const [periodLabel, setPeriodLabel] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [mode, setMode] = useState<'list' | 'edit'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [newPeriod, setNewPeriod] = useState('');
+
+  const createPeriod = trpc.values.createPeriod.useMutation({
+    onSuccess: (pd) => { periodsQuery.refetch(); setPeriodLabel(pd.label); setShowPeriodModal(false); setNewPeriod(''); },
+    onError: (e) => alert(e.message),
+  });
 
   const evalsQuery = trpc.values.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
   const employee = (employees ?? []).find((e: any) => e.id === employeeId);
-
-  const pillars = useMemo(
-    () => Array.from(new Set((values ?? []).map((v: any) => v.pillar))),
-    [values],
-  );
+  const periodOptions = useMemo(() => (periodsQuery.data ?? []).map((p: any) => p.label), [periodsQuery.data]);
+  const pillars = useMemo(() => Array.from(new Set((values ?? []).map((v: any) => v.pillar))), [values]);
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="ls-eyebrow mb-1">Engagement</div>
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
-      <p className="text-sm text-ls-ink-3 mb-5">Score employees against the company values.</p>
+      <p className="text-sm text-ls-ink-3 mb-5">Choose a review period and an employee, then score them against the company values.</p>
 
-      {/* Employee picker */}
-      <div className="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[220px]">
-          <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Employee</label>
-          <select
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-            value={employeeId}
-            onChange={(e) => { setEmployeeId(e.target.value); setMode('list'); setEditingId(null); }}>
-            <option value="">Select an employee…</option>
-            {(employees ?? []).map((e: any) => (
-              <option key={e.id} value={e.id}>{e.name ?? e.email}</option>
-            ))}
-          </select>
+      {/* Period + employee pickers (hidden while editing a review) */}
+      {mode === 'list' && (
+        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap items-end gap-2">
+          <div className="w-56">
+            <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Review period</label>
+            <div className="flex gap-2">
+              <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)}>
+                <option value="">Select a period…</option>
+                {periodOptions.map((label: string) => <option key={label} value={label}>{label}</option>)}
+              </select>
+              {canEdit && (
+                <button type="button" onClick={() => { setNewPeriod(''); setShowPeriodModal(true); }} title="Add a review period"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 shrink-0">
+                  <Plus size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Employee</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+              value={employeeId}
+              onChange={(e) => { setEmployeeId(e.target.value); setEditingId(null); }}>
+              <option value="">Select an employee…</option>
+              {(employees ?? []).map((e: any) => (
+                <option key={e.id} value={e.id}>{e.name ?? e.email}</option>
+              ))}
+            </select>
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => { setEditingId(null); setMode('edit'); }}
+              disabled={!periodLabel || !employeeId}
+              title={!periodLabel || !employeeId ? 'Select a period and an employee first' : 'Start a new review'}
+              className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              <Plus size={15} /> New review
+            </button>
+          )}
         </div>
-        {employeeId && canEdit && mode === 'list' && (
-          <button
-            onClick={() => { setEditingId(null); setMode('edit'); }}
-            className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">
-            <Plus size={15} /> New evaluation
-          </button>
-        )}
-      </div>
+      )}
 
       {!employeeId ? (
-        <div className="ls-card p-10 text-center text-sm text-ls-ink-3">Select an employee to see their evaluations.</div>
+        <div className="ls-card p-10 text-center text-sm text-ls-ink-3">Select an employee to see their reviews.</div>
       ) : mode === 'list' ? (
         <EvaluationList
           employeeName={employee?.name ?? employee?.email ?? ''}
@@ -82,11 +109,31 @@ export default function Reviews() {
           key={editingId ?? 'new'}
           employeeId={employeeId}
           editingId={editingId}
+          newPeriodLabel={periodLabel}
           values={values ?? []}
           pillars={pillars as string[]}
           onDone={() => { setMode('list'); setEditingId(null); evalsQuery.refetch(); }}
           onCancel={() => { setMode('list'); setEditingId(null); }}
         />
+      )}
+
+      {/* Add-period modal */}
+      {showPeriodModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPeriodModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">New review period</h3>
+            <p className="text-xs text-gray-500 mb-3">Keep the format consistent, e.g. "2026 H1", "2026 Q3", "2026 Annual".</p>
+            <input autoFocus className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-4" value={newPeriod}
+              onChange={(e) => setNewPeriod(e.target.value)} placeholder="e.g. 2026 H2"
+              onKeyDown={(e) => { if (e.key === 'Enter' && newPeriod.trim()) createPeriod.mutate({ label: newPeriod.trim() }); }} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowPeriodModal(false)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+              <button onClick={() => newPeriod.trim() && createPeriod.mutate({ label: newPeriod.trim() })}
+                disabled={!newPeriod.trim() || createPeriod.isLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Add period</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -96,7 +143,7 @@ function EvaluationList({ employeeName, rows, loading, canEdit, onOpen }: {
   employeeName: string; rows: any[]; loading: boolean; canEdit: boolean; onOpen: (id: string) => void;
 }) {
   if (loading) return <div className="text-gray-400 text-sm py-6 text-center">Loading…</div>;
-  if (rows.length === 0) return <div className="ls-card p-10 text-center text-sm text-ls-ink-3">No evaluations yet for {employeeName}.</div>;
+  if (rows.length === 0) return <div className="ls-card p-10 text-center text-sm text-ls-ink-3">No reviews yet for {employeeName}.</div>;
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
@@ -125,35 +172,30 @@ function EvaluationList({ employeeName, rows, loading, canEdit, onOpen }: {
           ))}
         </tbody>
       </table>
-      {!canEdit && <div className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">View only — manager role required to add or edit evaluations.</div>}
+      {!canEdit && <div className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">View only — manager role required to add or edit reviews.</div>}
     </div>
   );
 }
 
-function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCancel }: {
-  employeeId: string; editingId: string | null; values: any[]; pillars: string[];
+function EvaluationForm({ employeeId, editingId, newPeriodLabel, values, pillars, onDone, onCancel }: {
+  employeeId: string; editingId: string | null; newPeriodLabel: string; values: any[]; pillars: string[];
   onDone: () => void; onCancel: () => void;
 }) {
   const existing = trpc.values.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
   const save = trpc.values.saveEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
   const del = trpc.values.deleteEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
-  const periodsQuery = trpc.values.listPeriods.useQuery();
-  const createPeriod = trpc.values.createPeriod.useMutation({
-    onSuccess: (pd) => { periodsQuery.refetch(); setPeriodLabel(pd.label); setShowPeriodModal(false); setNewPeriod(''); },
-    onError: (e) => alert(e.message),
-  });
-  const [showPeriodModal, setShowPeriodModal] = useState(false);
-  const [newPeriod, setNewPeriod] = useState('');
 
-  const [periodLabel, setPeriodLabel] = useState('');
   const [status, setStatus] = useState<'draft' | 'final'>('draft');
   const [overallNotes, setOverallNotes] = useState('');
   const [scores, setScores] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
+  // Period is fixed up front: chosen at the top for a new review, or the
+  // evaluation's own stored period when editing. Shown read-only here.
+  const displayPeriod = editingId ? (existing.data?.periodLabel ?? '') : newPeriodLabel;
+
   useEffect(() => {
     if (editingId && existing.data) {
-      setPeriodLabel(existing.data.periodLabel ?? '');
       setStatus((existing.data.status as 'draft' | 'final') ?? 'draft');
       setOverallNotes(existing.data.overallNotes ?? '');
       const s: Record<string, number> = {}; const n: Record<string, string> = {};
@@ -161,11 +203,6 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
       setScores(s); setNotes(n);
     }
   }, [editingId, existing.data]);
-
-  const periodOptions = useMemo(() => {
-    const labels = (periodsQuery.data ?? []).map((pd: any) => pd.label);
-    return periodLabel && !labels.includes(periodLabel) ? [periodLabel, ...labels] : labels;
-  }, [periodsQuery.data, periodLabel]);
 
   const submit = () => {
     const scoreArr = Object.entries(scores)
@@ -175,7 +212,7 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
     save.mutate({
       id: editingId ?? undefined,
       employeeId,
-      periodLabel: periodLabel || null,
+      periodLabel: displayPeriod || null,
       status,
       overallNotes: overallNotes || null,
       scores: scoreArr,
@@ -189,25 +226,15 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
       <div className="flex items-center justify-between mb-4">
         <button onClick={onCancel} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"><ArrowLeft size={15} /> Back</button>
         {editingId && (
-          <button onClick={() => { if (confirm('Delete this evaluation?')) del.mutate({ id: editingId }); }}
+          <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
             className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
         )}
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
-        <div className="flex-1 min-w-[200px]">
+        <div className="w-48">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Review period</label>
-          <div className="flex gap-2">
-            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
-              value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)}>
-              <option value="">Select a period…</option>
-              {periodOptions.map((label: string) => <option key={label} value={label}>{label}</option>)}
-            </select>
-            <button type="button" onClick={() => { setNewPeriod(''); setShowPeriodModal(true); }} title="Add a review period"
-              className="px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 shrink-0">
-              <Plus size={15} />
-            </button>
-          </div>
+          <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-sm text-gray-700">{displayPeriod || '—'}</div>
         </div>
         <div className="w-40">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Status</label>
@@ -265,27 +292,9 @@ function EvaluationForm({ employeeId, editingId, values, pillars, onDone, onCanc
         <button onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
         <button onClick={submit} disabled={save.isLoading}
           className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-          {save.isLoading ? 'Saving…' : 'Save evaluation'}
+          {save.isLoading ? 'Saving…' : 'Save review'}
         </button>
       </div>
-
-      {showPeriodModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPeriodModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">New review period</h3>
-            <p className="text-xs text-gray-500 mb-3">Keep the format consistent, e.g. "2026 H1", "2026 Q3", "2026 Annual".</p>
-            <input autoFocus className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-4" value={newPeriod}
-              onChange={(e) => setNewPeriod(e.target.value)} placeholder="e.g. 2026 H2"
-              onKeyDown={(e) => { if (e.key === 'Enter' && newPeriod.trim()) createPeriod.mutate({ label: newPeriod.trim() }); }} />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowPeriodModal(false)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-              <button onClick={() => newPeriod.trim() && createPeriod.mutate({ label: newPeriod.trim() })}
-                disabled={!newPeriod.trim() || createPeriod.isLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Add period</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
