@@ -49,7 +49,7 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
             <div className="text-4xl font-extrabold text-ls-blue-deep">{pct(c.favorablePct)}</div>
             <div className="mb-1"><DeltaChip delta={c.prevFavorablePct != null && c.favorablePct != null ? Math.round((c.favorablePct - c.prevFavorablePct) * 10) / 10 : null} /></div>
           </div>
-          <div className="text-[12px] text-ls-ink-3 mt-1">favorable · avg {c.mean != null ? c.mean.toFixed(2) : '—'}/5 · score {c.score ?? '—'}/100</div>
+          <div className="text-[12px] text-ls-ink-3 mt-1">favorable{c.mean != null ? ` · avg response ${c.mean.toFixed(2)}` : ''}</div>
         </div>
         <div className="ls-card p-5">
           <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Participation</div>
@@ -66,6 +66,9 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
       <div className="ls-card p-5">
         <h3 className="font-bold mb-1">Engagement trend</h3>
         <p className="text-[12px] text-ls-ink-3 mb-3">Company favorability across survey periods.</p>
+        {data.periods.length <= 1 && (
+          <div className="ls-card bg-ls-bg-2/50 p-3 mb-3 text-[12px] text-ls-ink-2">Only one survey period so far ({c.label}). The trend line fills in as more periods are imported or new surveys are completed.</div>
+        )}
         <div style={{ width: '100%', height: 240 }}>
           <ResponsiveContainer>
             <LineChart data={trend} margin={{ top: 8, right: 16, bottom: 4, left: -12 }}>
@@ -113,7 +116,34 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
 export function ResultsBreakdown({ data }: { data: AnalyticsData }) {
   const [open, setOpen] = useState<string | null>(null);
   if (data.departments.length === 0) {
-    return <div className="ls-card p-8 text-center text-sm text-ls-ink-3">No department-level results for this period yet.</div>;
+    const roster = data.departmentRoster ?? [];
+    const total = roster.reduce((a, b) => a + b.headcount, 0);
+    return (
+      <div>
+        <div className="ls-card p-4 mb-4 border-l-4 border-ls-watch text-[13px] text-ls-ink-2">
+          <b>No department-level scores for {data.company.label}.</b> These results were imported company-wide — the 15Five export didn&rsquo;t include per-department numbers. Department favorability populates here when either a department-level export is imported, or employees take the survey in-app (each response records the person&rsquo;s department). The teams below come from the org chart and are ready to receive scores.
+        </div>
+        {roster.length > 0 && (
+          <>
+            <div className="font-semibold mb-2">Departments <span className="text-ls-ink-3 font-normal text-[13px]">· {roster.length} teams · {total} people</span></div>
+            <div className="ls-card overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-ls-line text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">
+                <div className="col-span-7">Department</div>
+                <div className="col-span-2 text-center">Headcount</div>
+                <div className="col-span-3 text-center">Favorability</div>
+              </div>
+              {roster.map((d) => (
+                <div key={d.name} className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b border-ls-line last:border-0">
+                  <div className="col-span-7 font-semibold">{d.name}</div>
+                  <div className="col-span-2 text-center text-[13px] text-ls-ink-2">{d.headcount}</div>
+                  <div className="col-span-3 text-center"><span className="ls-chip bg-ls-bg-2 text-ls-ink-3">awaiting data</span></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
   }
   return (
     <div>

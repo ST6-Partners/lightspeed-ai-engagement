@@ -69,6 +69,22 @@ export const engagementAnalyticsRouter = router({
     const periodRows = await ctx.db.query.surveyPeriods.findMany();
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
 
+    // Department roster from the org chart (active users grouped by department).
+    // Lets the Breakdown tab show real teams + headcount even before a period
+    // has per-department survey scores.
+    const rosterUsers = await ctx.db.query.users.findMany();
+    const rosterDepts = await ctx.db.query.departments.findMany();
+    const rosterDeptName = new Map(rosterDepts.map((d) => [d.id, d.name]));
+    const rosterCounts = new Map<string, number>();
+    for (const u of rosterUsers) {
+      if (!u.isActive) continue;
+      const dn = u.departmentId ? rosterDeptName.get(u.departmentId) : null;
+      if (dn) rosterCounts.set(dn, (rosterCounts.get(dn) ?? 0) + 1);
+    }
+    const departmentRoster = [...rosterCounts.entries()]
+      .map(([name, headcount]) => ({ name, headcount }))
+      .sort((a, b) => b.headcount - a.headcount);
+
     // metric lookup: periodId -> scope -> dept('' for company) -> dimension -> key('' for overall)
     type M = { mean: number | null; favorablePct: number | null; unfavorablePct: number | null; responseCount: number; eligibleCount: number | null };
     const mkey = (periodId: string, scope: string, dept: string, dim: string, key: string) => `${periodId}|${scope}|${dept}|${dim}|${key}`;
@@ -267,6 +283,7 @@ export const engagementAnalyticsRouter = router({
     return {
       hasData: true as const,
       selectedId: latest.id,
+      departmentRoster,
       periods,
       company,
       drivers,
