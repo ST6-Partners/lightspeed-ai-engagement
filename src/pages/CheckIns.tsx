@@ -1,23 +1,21 @@
 // ============================================================
-// CHECK-INS — the standalone weekly pulse. Fires on its own weekly clock
-// (independent of the 1:1). Every week: 3 fixed anchor taps (Best-Self /
-// Sentiment / Workload) + 2 rotating taps (driver + value) + 1 optional
-// open-text. eNPS (0..10) replaces the driver slot on rotation week 12.
-// Rotation comes from src/lib/weeklyCheckin.ts. Two sub-tabs: This Week + Past.
+// CHECK-INS — configurable weekly pulse. Renders whatever questions are
+// marked "included" in the bank (Core Data → Check-in Questions), mixing
+// tap-scales (1..5 / eNPS 0..10) and written questions. Cadence label comes
+// from settings. Two sub-tabs: This Period + Past Responses.
 // ============================================================
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { trpc } from '../lib/trpc';
 import { CheckCircle2, ClipboardCheck, History } from 'lucide-react';
-import { ANCHORS, planForDate, weekStartISO } from '../lib/weeklyCheckin';
+import { weekStartISO } from '../lib/weeklyCheckin';
 
 const labelCls = 'block text-[11px] uppercase tracking-wide text-gray-500 mb-1';
-const inputCls =
-  'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
+const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
 
-// Module-scope presentational helpers (kept out of the component body so inputs
-// don't remount / lose focus on each render).
-function Scale({ max, value, onChange }: { max: 5 | 10; value: number | null; onChange: (v: number) => void }) {
+const CADENCE_LABEL: Record<string, string> = { weekly: 'Weekly check-in', biweekly: 'Every-2-weeks check-in', monthly: 'Monthly check-in' };
+
+function Scale({ max, value, onChange }: { max: number; value: number | null; onChange: (v: number) => void }) {
   const base = Array.from({ length: max }, (_, i) => i + 1);
   const range = max === 10 ? [0, ...base] : base;
   return (
@@ -28,8 +26,7 @@ function Scale({ max, value, onChange }: { max: 5 | 10; value: number | null; on
           <button key={v} type="button" onClick={() => onChange(v)}
             className={`w-9 h-9 rounded-md text-sm font-semibold border transition-colors ${
               sel ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
-            }`}>
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'}`}>
             {v}
           </button>
         );
@@ -41,35 +38,28 @@ function Scale({ max, value, onChange }: { max: 5 | 10; value: number | null; on
 const Card = ({ children }: { children: ReactNode }) => (
   <div className="bg-white border border-gray-200 rounded-lg p-4">{children}</div>
 );
-const QRow = ({ text, children }: { text: string; children: ReactNode }) => (
-  <div className="flex items-start justify-between gap-4 py-2">
-    <span className="text-sm font-medium text-gray-900 min-w-0">{text}</span>
-    <div className="shrink-0">{children}</div>
-  </div>
-);
 
-const avgAnchors = (r: any) => {
-  const v = [r.bestSelf, r.sentiment, r.workload].filter((x: any) => typeof x === 'number');
-  return v.length ? (v.reduce((a: number, b: number) => a + b, 0) / v.length) : 0;
-};
-
+type Ans = { value?: number; answerText?: string };
 type View = 'form' | 'history';
 
 export default function CheckIns() {
   const [view, setView] = useState<View>('form');
-  const plan = useMemo(() => planForDate(new Date()), []);
-  const weekOf = useMemo(() => weekStartISO(new Date()), []);
+  const periodStart = useMemo(() => weekStartISO(new Date()), []);
 
   const { data: people } = trpc.pip.listUsers.useQuery();
+  const { data: questions } = trpc.checkinQuestions.list.useQuery();
+  const { data: settings } = trpc.checkinSettings.get.useQuery();
   const utils = trpc.useContext();
   const { data: history, isLoading: hLoading } = trpc.checkins.list.useQuery(undefined, { enabled: view === 'history' });
 
+  const included = useMemo(
+    () => (questions ?? []).filter((q: any) => q.included && q.isActive)
+      .sort((a: any, b: any) => a.sortOrder - b.sortOrder),
+    [questions],
+  );
+
   const [respondentId, setRespondentId] = useState('');
-  const [anchor, setAnchor] = useState<Record<string, number>>({});
-  const [driverVal, setDriverVal] = useState<number | null>(null);
-  const [valueVal, setValueVal] = useState<number | null>(null);
-  const [enps, setEnps] = useState<number | null>(null);
-  const [openText, setOpenText] = useState('');
+  const [answers, setAnswers] = useState<Record<string, Ans>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const submit = trpc.checkins.submit.useMutation({
@@ -77,45 +67,39 @@ export default function CheckIns() {
     onError: (e) => alert(e.message),
   });
 
-  const setAnchorVal = (k: string, v: number) => setAnchor((a) => ({ ...a, [k]: v }));
+  const setVal = (id: string, value: number) => setAnswers((a) => ({ ...a, [id]: { ...a[id], value } }));
+  const setTxt = (id: string, answerText: string) => setAnswers((a) => ({ ...a, [id]: { ...a[id], answerText } }));
 
-  const anchorsDone = ANCHORS.every((a) => anchor[a.key] != null);
-  const driverDone = plan.isEnpsWeek ? enps != null : driverVal != null;
-  const canSubmit = !!respondentId && anchorsDone && driverDone && valueVal != null && !submit.isLoading;
+  const scaleQs = included.filter((q: any) => q.type !== 'text');
+  const allScalesDone = scaleQs.every((q: any) => answers[q.id]?.value != null);
+  const canSubmit = !!respondentId && included.length > 0 && allScalesDone && !submit.isLoading;
 
-  const reset = () => {
-    setRespondentId(''); setAnchor({}); setDriverVal(null); setValueVal(null);
-    setEnps(null); setOpenText(''); setSubmitted(false);
-  };
+  const reset = () => { setRespondentId(''); setAnswers({}); setSubmitted(false); };
 
   const doSubmit = () => {
-    submit.mutate({
-      respondentId,
-      weekOf,
-      rotationIndex: plan.rotationIndex,
-      bestSelf: anchor.bestSelf,
-      sentiment: anchor.sentiment,
-      workload: anchor.workload,
-      driver: plan.isEnpsWeek
-        ? { key: 'enps', text: plan.driver.text, driver: 'commitment', value: enps ?? undefined }
-        : { key: plan.driver.key, text: plan.driver.text, driver: plan.driver.driver, value: driverVal ?? undefined },
-      valueItem: { key: plan.value.key, text: plan.value.text, driver: 'values', value: valueVal ?? undefined },
-      enps: plan.isEnpsWeek ? (enps ?? undefined) : undefined,
-      openPrompt: plan.openPrompt,
-      openText: openText.trim() || undefined,
-    });
+    const payload = included.map((q: any) => ({
+      questionId: q.id,
+      text: q.text,
+      type: q.type,
+      category: q.category,
+      driver: q.driver ?? undefined,
+      value: answers[q.id]?.value,
+      answerText: answers[q.id]?.answerText?.trim() || undefined,
+    }));
+    submit.mutate({ respondentId, periodStart, answers: payload });
   };
+
+  const cadenceLabel = CADENCE_LABEL[settings?.cadence ?? 'weekly'] ?? 'Check-in';
 
   const tabBar = () => (
     <div className="flex gap-1 mb-4 border-b border-gray-200">
-      {([{ key: 'form' as const, label: 'This Week', icon: ClipboardCheck },
+      {([{ key: 'form' as const, label: 'This Period', icon: ClipboardCheck },
          { key: 'history' as const, label: 'Past Responses', icon: History }]).map(({ key, label, icon: Icon }) => {
         const on = view === key;
         return (
           <button key={key} type="button" onClick={() => setView(key)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              on ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}>
+              on ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
             <Icon size={16} /> {label}
           </button>
         );
@@ -137,32 +121,27 @@ export default function CheckIns() {
     return (
       <div className="space-y-3">
         <p className="text-xs text-gray-500">{rows.length} recorded {rows.length === 1 ? 'check-in' : 'check-ins'}</p>
-        {rows.map((r: any) => (
-          <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="min-w-0">
+        {rows.map((r: any) => {
+          const ans: any[] = Array.isArray(r.answers) ? r.answers : [];
+          return (
+            <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="mb-2">
                 <div className="text-sm font-semibold text-gray-900">{r.respondentName ?? '—'}</div>
-                <div className="text-xs text-gray-500">Week of {r.weekOf} · cycle week {r.rotationIndex + 1}</div>
+                <div className="text-xs text-gray-500">Period of {r.weekOf}</div>
               </div>
-              <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
-                avg {avgAnchors(r).toFixed(1)}
-              </span>
+              <div className="space-y-1.5 text-sm">
+                {ans.map((a, i) => (
+                  <div key={i} className="border-t border-gray-100 pt-1.5 first:border-0 first:pt-0">
+                    <div className="text-xs text-gray-400">{a.text}</div>
+                    {a.type === 'text'
+                      ? <div className="text-gray-800">{a.answerText || <span className="text-gray-400">—</span>}</div>
+                      : <div className="font-semibold text-gray-900">{a.value ?? '–'}{a.type === 'enps' ? ' / 10' : ' / 5'}</div>}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-2 text-center">
-              {[['Best-Self', r.bestSelf], ['Lightspeed', r.sentiment], ['Workload', r.workload]].map(([lbl, v]) => (
-                <div key={lbl as string} className="bg-gray-50 rounded-md py-1.5">
-                  <div className="text-base font-bold text-gray-900">{(v as number) ?? '–'}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-gray-500">{lbl}</div>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-1 text-sm">
-              {r.driver && <div className="flex justify-between gap-3"><span className="text-gray-600 min-w-0">{r.driver.text}</span><span className="shrink-0 font-semibold text-gray-900">{r.driver.value ?? '–'}</span></div>}
-              {r.valueItem && <div className="flex justify-between gap-3"><span className="text-gray-600 min-w-0">{r.valueItem.text}</span><span className="shrink-0 font-semibold text-gray-900">{r.valueItem.value ?? '–'}</span></div>}
-              {r.openText && <div className="mt-1 text-gray-700"><span className="text-xs text-gray-400 block">{r.openPrompt}</span>{r.openText}</div>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -173,11 +152,18 @@ export default function CheckIns() {
         <div className="max-w-xl mx-auto mt-10 text-center">
           <CheckCircle2 className="mx-auto text-green-600 mb-3" size={44} />
           <h2 className="text-xl font-bold text-gray-900">Check-in submitted</h2>
-          <p className="text-sm text-gray-500 mt-1">Thanks — that takes less than a minute and it really helps.</p>
+          <p className="text-sm text-gray-500 mt-1">Thanks — that really helps your manager keep a pulse on how you're doing.</p>
           <div className="mt-5 flex items-center justify-center gap-2">
             <button onClick={reset} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">Submit another</button>
             <button onClick={() => { setSubmitted(false); setView('history'); }} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:border-blue-400 hover:text-blue-700">View past responses</button>
           </div>
+        </div>
+      );
+    }
+    if (included.length === 0) {
+      return (
+        <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+          <p className="text-sm text-gray-500">No questions are included in the check-in yet. Add them in Core Data → Check-in Questions.</p>
         </div>
       );
     }
@@ -191,30 +177,27 @@ export default function CheckIns() {
               {(people ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">{plan.weekLabel}</span>
+          <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">{cadenceLabel}</span>
         </div>
 
-        <Card>
-          <div className="text-[11px] uppercase tracking-wide text-blue-600 font-semibold mb-1">This week</div>
-          {ANCHORS.map((a) => (
-            <QRow key={a.key} text={a.text}>
-              <Scale max={5} value={anchor[a.key] ?? null} onChange={(v) => setAnchorVal(a.key, v)} />
-            </QRow>
-          ))}
-        </Card>
-
-        <Card>
-          {plan.isEnpsWeek
-            ? <QRow text={plan.driver.text}><Scale max={10} value={enps} onChange={setEnps} /></QRow>
-            : <QRow text={plan.driver.text}><Scale max={5} value={driverVal} onChange={setDriverVal} /></QRow>}
-          <QRow text={plan.value.text}><Scale max={5} value={valueVal} onChange={setValueVal} /></QRow>
-        </Card>
-
-        <Card>
-          <label className={labelCls}>{plan.openPrompt} <span className="normal-case text-gray-400">(optional)</span></label>
-          <textarea rows={2} className={`${inputCls} w-full`} value={openText} onChange={(e) => setOpenText(e.target.value)}
-            placeholder="Optional — a sentence is plenty." />
-        </Card>
+        {included.map((q: any) => (
+          <Card key={q.id}>
+            {q.type === 'text' ? (
+              <>
+                <label className={labelCls}>{q.text}</label>
+                <textarea rows={2} className={`${inputCls} w-full`} value={answers[q.id]?.answerText ?? ''}
+                  onChange={(e) => setTxt(q.id, e.target.value)} placeholder="A sentence or two is plenty." />
+              </>
+            ) : (
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-sm font-medium text-gray-900 min-w-0">{q.text}</span>
+                <div className="shrink-0">
+                  <Scale max={q.type === 'enps' ? 10 : 5} value={answers[q.id]?.value ?? null} onChange={(v) => setVal(q.id, v)} />
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
 
         <div className="flex justify-end">
           <button onClick={doSubmit} disabled={!canSubmit}
@@ -231,7 +214,7 @@ export default function CheckIns() {
       <div className="ls-eyebrow mb-1">Engagement</div>
       <h1 className="text-2xl font-bold tracking-tight">Check-ins</h1>
       <p className="text-sm text-ls-ink-3 mb-5">
-        A quick weekly pulse — under a minute. Same three questions every week plus a couple that rotate, so we can see how you're doing over time.
+        A quick pulse on how you're doing, what you're focused on, and what you need — so your manager stays in the loop between reviews.
       </p>
       {tabBar()}
       {view === 'history' ? renderHistory() : renderForm()}

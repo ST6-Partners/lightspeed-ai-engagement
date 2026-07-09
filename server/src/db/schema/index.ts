@@ -65,3 +65,4 @@ export { companyValues, valueEvaluations, valueEvaluationScores } from './values
 
 // Weekly Check-in pulse (standalone, 2026-07-08)
 export { checkinResponses } from './checkins.js';
+export { checkinQuestions, checkinSettings } from './checkins.js';

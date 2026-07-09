@@ -22,3 +22,4 @@ export { default as ManagerSurveyQuestions } from './ManagerSurveyQuestions';
 export { default as ManagerRatingScale } from './ManagerRatingScale';
 export { default as OrgData } from './OrgData';
 export { default as CompanyValues } from './CompanyValues';
+export { default as CheckinQuestions } from './CheckinQuestions';

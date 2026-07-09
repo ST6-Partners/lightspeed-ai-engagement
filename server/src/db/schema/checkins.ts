@@ -1,43 +1,66 @@
 // ============================================================
-// WEEKLY CHECK-IN PULSE — standalone weekly pulse (fires on its own clock,
-// independent of the 1:1). One row per submitted pulse.
-//
-// Fixed anchors, trended every week (typed columns): bestSelf, sentiment,
-// workload — each 1..5. Two rotating items (driver + value) and the optional
-// open-text vary by the 12-week rotation (see src/lib/weeklyCheckin.ts); they
-// are stored as jsonb so the asked question travels with the answer. eNPS is a
-// quarterly 0..10 that appears on rotation week 12.
+// WEEKLY CHECK-IN — configurable pulse.
+//  • checkin_questions — the admin-managed question BANK. Each question has a
+//    type (scale5 | enps | text) and a category (morale | priorities |
+//    manager_support | values | growth | general). `included` marks whether it
+//    is part of the live check-in; `isActive` retires without deleting history.
+//  • checkin_settings — singleton config (cadence: weekly | biweekly | monthly).
+//  • checkin_responses — one row per submitted check-in. `answers` holds the
+//    per-question answers (scaled value or written text) with the question text
+//    denormalized so history stays readable. Respondent kept (not anonymized).
 // ============================================================
 
-import { pgTable, uuid, varchar, integer, jsonb, text, date, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, jsonb, text, date, timestamp, boolean } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 
-export interface CheckinRotatingItem {
-  key: string;        // stable slot key, e.g. 'execution_confidence' | 'value_owns_outcome'
-  text: string;       // the exact statement/question asked
-  driver?: string;    // engagement driver this rolls up into
-  value?: number;     // the 1..5 answer (or 0..10 for eNPS driver on wk 12)
+export type CheckinQuestionType = 'scale5' | 'enps' | 'text';
+
+export const checkinQuestions = pgTable('checkin_questions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  text: text('text').notNull(),
+  type: varchar('type', { length: 16 }).notNull().default('scale5'),       // scale5 | enps | text
+  category: varchar('category', { length: 40 }).notNull().default('general'),
+  driver: varchar('driver', { length: 40 }),                                // optional engagement-driver tag
+  isActive: boolean('is_active').notNull().default(true),                   // in the bank
+  included: boolean('included').notNull().default(false),                   // part of the live check-in
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const checkinSettings = pgTable('checkin_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cadence: varchar('cadence', { length: 16 }).notNull().default('weekly'),  // weekly | biweekly | monthly
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export interface CheckinAnswer {
+  questionId: string;
+  text: string;
+  type: CheckinQuestionType;
+  category?: string;
+  driver?: string;
+  value?: number;       // for scale5 (1..5) / enps (0..10)
+  answerText?: string;  // for written questions
 }
 
 export const checkinResponses = pgTable('checkin_responses', {
   id: uuid('id').primaryKey().defaultRandom(),
-  // Respondent (kept — may be needed by HR; not anonymized). Null if user removed.
   respondentId: uuid('respondent_id').references(() => users.id, { onDelete: 'set null' }),
   respondentName: varchar('respondent_name', { length: 200 }),
-  weekOf: date('week_of').notNull(),
-  rotationIndex: integer('rotation_index').notNull(),      // 0..11
-  // Fixed anchors (1..5)
+  weekOf: date('week_of').notNull(),                 // period start (submission date)
+  rotationIndex: integer('rotation_index').notNull().default(0),  // legacy; retained
+  // legacy fixed anchors (nullable, retained for back-compat with 0029)
   bestSelf: integer('best_self'),
   sentiment: integer('sentiment'),
   workload: integer('workload'),
-  // Rotating items (question + answer travel together)
-  driver: jsonb('driver').$type<CheckinRotatingItem>(),
-  valueItem: jsonb('value_item').$type<CheckinRotatingItem>(),
-  // Quarterly eNPS (0..10) — present only on rotation week 12
+  driver: jsonb('driver'),
+  valueItem: jsonb('value_item'),
   enps: integer('enps'),
-  // Optional open-text question of the week
   openPrompt: text('open_prompt'),
   openText: text('open_text'),
+  // configurable answers (current model)
+  answers: jsonb('answers').$type<CheckinAnswer[]>().notNull().default([]),
   submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

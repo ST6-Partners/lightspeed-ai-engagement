@@ -211,6 +211,13 @@
       "when": 1783023414070,
       "tag": "0029_weekly_checkins",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1783023474070,
+      "tag": "0030_checkin_configurable",
+      "breakpoints": true
     }
   ]
 }
