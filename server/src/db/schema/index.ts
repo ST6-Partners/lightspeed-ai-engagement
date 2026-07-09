@@ -63,6 +63,9 @@ export {
 // Company Values (read-only cache from ATA) + employee value evaluations (Reviews section, 2026-07-08)
 export { companyValues, valueEvaluations, valueEvaluationScores, reviewPeriods } from './values.js';
 
+// Performance criteria (AIE-owned) + employee performance evaluations (Reviews section, 2026-07-09)
+export { performanceCriteria, performanceEvaluations, performanceEvaluationScores } from './performance.js';
+
 // Weekly Check-in pulse (standalone, 2026-07-08)
 export { checkinResponses } from './checkins.js';
 export { checkinQuestions, checkinSettings } from './checkins.js';
