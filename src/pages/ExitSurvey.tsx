@@ -4,7 +4,7 @@
 // matrix, auto-flags, coaching brief, anonymity guard). People leave bosses, so
 // the questions diagnose manager quality; the signature mechanic is "surprise",
 // which flips owner by exit type.
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../server/src/router';
@@ -22,10 +22,10 @@ const REASONS_VOL = ['Manager / leadership', 'Career growth & opportunity', 'Com
 const REASONS_INVOL = ['Performance', 'Role fit / skills', 'Behavior / conduct', 'Attendance', 'Role eliminated / restructure'];
 
 type QType = 'scale' | 'choice' | 'chips' | 'behaviors' | 'text';
-interface Q { key: string; num: string; topic: string; branch: 'shared' | 'adapts' | 'split'; type: QType; sig?: boolean; vol: string; invol: string; lo?: string; hi?: string; volOpts?: string[]; involOpts?: string[]; }
+interface Q { key: string; num: string; topic: string; branch: 'shared' | 'adapts' | 'split'; type: QType; sig?: boolean; rank?: boolean; riskHint?: string; vol: string; invol: string; lo?: string; hi?: string; volOpts?: string[]; involOpts?: string[]; }
 
 const PART_A: Q[] = [
-  { key: 'reason', num: 'Q1', topic: 'Reason', branch: 'adapts', type: 'chips', vol: 'Primary reason for leaving?', invol: 'Your understanding of why you were let go?', volOpts: REASONS_VOL, involOpts: REASONS_INVOL },
+  { key: 'reason', num: 'Q1', topic: 'Reason', branch: 'adapts', type: 'chips', rank: true, vol: 'Primary reason for leaving?', invol: 'Your understanding of why you were let go?', volOpts: REASONS_VOL, involOpts: REASONS_INVOL },
   { key: 'pushpull', num: 'Q2', topic: 'Push vs. pull', branch: 'adapts', type: 'choice', vol: 'Which is closer to the truth?', invol: 'Was the decision clearly explained to you?', volOpts: ['Actively looking (pushed)', "Wasn't looking — pulled", 'A specific event decided it'], involOpts: ['Yes — clearly', 'Somewhat — vague', "No — I don't understand why"] },
   { key: 'surprise', num: 'Q3', topic: 'Surprise', branch: 'adapts', type: 'scale', sig: true, vol: 'How surprised do you think your manager was?', invol: 'How surprised were YOU to be let go?', lo: 'Saw it', hi: 'Blindsided' },
   { key: 'concerns', num: 'Q4', topic: 'Warning / concerns', branch: 'adapts', type: 'choice', vol: 'Did you make your concerns known to your manager?', invol: 'Had your manager clearly told you your job was at risk?', volOpts: ['Yes — clearly & more than once', 'I hinted, never directly', "No — didn't feel safe", 'Nothing to raise'], involOpts: ['Yes — clearly & more than once', 'Hinted, never directly', 'No — first I am hearing it'] },
@@ -36,7 +36,7 @@ const PART_A: Q[] = [
   { key: 'timeline', num: 'Q9', topic: 'Timeline', branch: 'adapts', type: 'chips', vol: 'When did you first start thinking about leaving?', invol: 'When were you first told there was a problem?', volOpts: ['This month', '1–3 months', '3–6 months', '6–12 months', 'Over a year'], involOpts: ['Only today', 'Past 2 weeks', 'Past month', 'Past quarter', 'Never until now'] },
   { key: 'safety', num: 'Q10', topic: 'Psychological safety', branch: 'shared', type: 'scale', vol: 'Did you feel safe raising problems on this team?', invol: 'Did you feel safe raising problems on this team?', lo: 'Not at all', hi: 'Completely' },
   { key: 'open', num: 'Q11', topic: 'Open text', branch: 'adapts', type: 'text', vol: 'One thing your manager could have done differently?', invol: 'One thing that, handled differently, might have changed this?' },
-  { key: 'closing', num: 'Q12', topic: 'Closing', branch: 'split', type: 'scale', vol: 'Would you consider returning someday?', invol: 'Did this process feel fair?', lo: 'Never', hi: 'Definitely' },
+  { key: 'closing', num: 'Q12', topic: 'Closing', branch: 'split', type: 'scale', riskHint: 'A low score here is an early signal of legal / reputational risk worth HR review.', vol: 'Would you consider returning someday?', invol: 'Did this process feel fair?', lo: 'Never', hi: 'Definitely' },
 ];
 const PART_B: Q[] = [
   { key: 'surprise', num: 'M1', topic: 'Surprise', branch: 'adapts', type: 'scale', sig: true, vol: 'How surprised were you by this resignation?', invol: 'How surprised do you think they were to be let go?', lo: 'Saw it', hi: 'Blindsided' },
@@ -71,6 +71,18 @@ export default function ExitSurvey() {
 function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => void; onOpen: (id: string) => void }) {
   const create = trpc.exitSurvey.create.useMutation({ onSuccess: () => { setName(''); setRole(''); setMgr(''); refetch(); } });
   const [name, setName] = useState(''); const [role, setRole] = useState(''); const [mgr, setMgr] = useState(''); const [type, setType] = useState<Mode>('vol');
+  const { data: org } = trpc.organization.list.useQuery();
+  const { data: titles } = trpc.jobTitles.list.useQuery();
+  const members = org?.members ?? [];
+  const titleNames = (titles ?? []).map((t) => t.title);
+  const managerIds = new Set(members.map((m) => m.managerId).filter(Boolean));
+  const managerOptions = members.filter((m) => managerIds.has(m.id));
+  const managerNames = [...new Set((managerOptions.length ? managerOptions : members).map((m) => m.name))];
+  const pickEmployee = (nm: string) => {
+    setName(nm);
+    const m = members.find((x) => x.name === nm);
+    if (m) { setRole(m.role ?? ''); setMgr(m.managerName ?? ''); }
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -87,9 +99,20 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
       <div className="ls-card p-4 mb-5">
         <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-3">New exit diagnostic</div>
         <div className="grid sm:grid-cols-3 gap-3">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Departing person's name…" className="text-sm border border-ls-line rounded-lg px-3 py-2 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50" />
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role (optional)" className="text-sm border border-ls-line rounded-lg px-3 py-2 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50" />
-          <input value={mgr} onChange={(e) => setMgr(e.target.value)} placeholder="Manager (optional)" className="text-sm border border-ls-line rounded-lg px-3 py-2 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50" />
+          <select value={name} onChange={(e) => pickEmployee(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
+            <option value="">Select employee…</option>
+            {members.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
+            <option value="">Role — from Job Titles…</option>
+            {role && !titleNames.includes(role) && <option value={role}>{role}</option>}
+            {titleNames.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={mgr} onChange={(e) => setMgr(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
+            <option value="">Select manager…</option>
+            {mgr && !managerNames.includes(mgr) && <option value={mgr}>{mgr}</option>}
+            {managerNames.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
         <div className="flex items-center gap-3 mt-3 flex-wrap">
           <div className="flex bg-ls-bg-2 rounded-full p-1 gap-1">
@@ -127,7 +150,7 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
 }
 
 // ---------------- DETAIL ----------------
-const DTABS = ['Overview', 'Part A · Employee', 'Part B · Manager', 'Comparison'] as const;
+const DTABS = ['Overview', 'Part A · Employee', 'Part B · Manager', 'HR Comparison'] as const;
 type DTab = (typeof DTABS)[number];
 
 function Detail({ record, all, onBack, refetch }: { record: ExitRow; all: ExitRow[]; onBack: () => void; refetch: () => void }) {
@@ -162,13 +185,13 @@ function Detail({ record, all, onBack, refetch }: { record: ExitRow; all: ExitRo
           <div className="ls-card p-5 sm:col-span-2">
             <div className="flex items-center justify-between mb-1"><h3 className="font-bold">Comparison</h3><span className={`ls-chip ${aDone && bDone ? 'bg-ls-blue-50 text-ls-blue-deep' : 'bg-ls-bg-2 text-ls-ink-3'}`}>{aDone && bDone ? 'Ready' : 'Needs both responses'}</span></div>
             <p className="text-sm text-ls-ink-2">{aDone && bDone ? 'Both responses are in — open the comparison for divergence, the surprise quadrant, and the coaching brief.' : 'The comparison unlocks once both Part A and Part B are saved.'}</p>
-            {aDone && bDone && <button onClick={() => setTab('Comparison')} className="ls-btn ls-btn-primary mt-3 text-[13px]">Open comparison →</button>}
+            {aDone && bDone && <button onClick={() => setTab('HR Comparison')} className="ls-btn ls-btn-primary mt-3 text-[13px]">Open comparison →</button>}
           </div>
         </div>
       )}
       {tab === 'Part A · Employee' && <SurveyForm record={record} part="A" refetch={refetch} />}
       {tab === 'Part B · Manager' && <SurveyForm record={record} part="B" refetch={refetch} />}
-      {tab === 'Comparison' && <Comparison record={record} all={all} />}
+      {tab === 'HR Comparison' && <Comparison record={record} all={all} />}
     </div>
   );
 }
@@ -191,6 +214,16 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
   const [vals, setVals] = useState<Answers>({ ...initial });
   const save = trpc.exitSurvey.saveResponse.useMutation({ onSuccess: () => refetch() });
   const set = (k: string, v: number | string) => setVals((p) => ({ ...p, [k]: v }));
+  const ranked = str(vals, 'reasonRanked').split('||').filter(Boolean);
+  const toggleRank = (o: string) => {
+    const cur = str(vals, 'reasonRanked').split('||').filter(Boolean);
+    const i = cur.indexOf(o);
+    let next: string[];
+    if (i >= 0) next = cur.filter((x) => x !== o);
+    else if (cur.length >= 3) return;
+    else next = [...cur, o];
+    setVals((p) => ({ ...p, reasonRanked: next.join('||'), reason: next[0] ?? '' }));
+  };
 
   return (
     <div>
@@ -209,7 +242,8 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
                 <span className={`ls-chip ${bcls}`}>{bl}</span>
                 <span className="text-[12px] text-ls-ink-3">{q.topic}</span>
               </div>
-              <div className="text-[15px] font-semibold mb-3">{text}</div>
+              <div className="text-[15px] font-semibold mb-2">{text}</div>
+              {q.riskHint && !vol && <p className="text-[12px] text-ls-risk mb-2.5">{q.riskHint}</p>}
               {q.type === 'scale' && (
                 <div>
                   <div className="flex gap-2 flex-wrap">
@@ -227,7 +261,24 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
                   ))}
                 </div>
               )}
-              {q.type === 'chips' && (
+              {q.type === 'chips' && q.rank && vol && (
+                <div>
+                  <p className="text-[12px] text-ls-ink-3 mb-2">Tap to rank your top 3 — #1 matters most.</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {opts.map((o) => {
+                      const r = ranked.indexOf(o);
+                      const sel = r >= 0;
+                      return (
+                        <button key={o} onClick={() => toggleRank(o)} className={`text-[13px] border rounded-full pl-2 pr-3.5 py-2 flex items-center gap-1.5 ${sel ? (r === 0 ? 'border-ls-blue bg-ls-active text-white font-semibold' : 'border-ls-blue bg-ls-blue-50 text-ls-blue-deep font-semibold') : 'border-ls-line hover:border-ls-blue'}`}>
+                          <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${sel ? (r === 0 ? 'bg-white text-ls-blue-deep' : 'bg-ls-blue text-white') : 'bg-ls-bg-2 text-ls-ink-3'}`}>{sel ? r + 1 : '+'}</span>
+                          {o}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {q.type === 'chips' && !(q.rank && vol) && (
                 <div className="flex gap-2 flex-wrap">
                   {opts.map((o) => (
                     <button key={o} onClick={() => set(q.key, o)} className={`text-[13px] border rounded-full px-3.5 py-2 ${str(vals, q.key) === o ? 'border-ls-blue bg-ls-blue-50 text-ls-blue-deep font-semibold' : 'border-ls-line hover:border-ls-blue'}`}>{o}</button>
@@ -293,6 +344,10 @@ function Comparison({ record, all }: { record: ExitRow; all: ExitRow[] }) {
   if (redFlag) flags.push(['Surprise gap', `A ${gap}-point gap between the two stories — the signature of feedback that wasn't landing.`]);
   if (!reasonMatch) flags.push(['Reason mismatch', `Employee: "${str(A, 'reason')}" · Manager: "${str(B, 'reason')}". Managers under-attribute exits to themselves.`]);
   if (Math.abs(fb('A', 0) - fb('B', 0)) >= 2) flags.push(['Feedback blind spot', `Manager self-rates feedback ${fb('B', 0)}/5; employee felt ${fb('A', 0)}/5.`]);
+  if (!vol) {
+    const fair = num(A, 'closing');
+    if (fair && fair <= 2) flags.push(['Fairness / legal risk', `Employee rated the exit process ${fair}/5 for fairness. A low fairness score on an involuntary exit is an early legal / reputational risk signal — worth HR review.`]);
+  }
 
   return (
     <div className="space-y-5">
@@ -309,6 +364,8 @@ function Comparison({ record, all }: { record: ExitRow; all: ExitRow[] }) {
           <div><div className="text-[11px] uppercase tracking-wide text-ls-ink-3">{vol ? 'Manager → own surprise' : "Manager → employee's surprise"}</div><div className="text-3xl font-extrabold text-ls-blue">{sm} / 5</div></div>
         </div>
       </div>
+
+      <SurpriseMatrix record={record} />
 
       <div>
         <h3 className="font-bold mb-2">Mirrored answers, side by side</h3>
@@ -360,6 +417,100 @@ function Comparison({ record, all }: { record: ExitRow; all: ExitRow[] }) {
           <li><b>Coach toward:</b> a real 1:1 cadence and a monthly "where you stand" conversation, so no future exit is a surprise.</li>
           <li><b>Calibration:</b> feed this exit back into the continual-signals flight-risk model.</li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- SURPRISE MATRIX ----------------
+type MCell = { label: string; title: string; desc: string; tone: 'good' | 'warn' | 'bad' };
+
+function SurpriseMatrix({ record }: { record: ExitRow }) {
+  const vol = record.exitType === 'vol';
+  const A = record.partA ?? {};
+  const B = record.partB ?? {};
+  const se = record.surpriseEmployee ?? num(A, 'surprise');
+  const sm = record.surpriseManager ?? num(B, 'surprise');
+
+  let colHeads: [string, string];
+  let rowHeads: [string, string];
+  let cells: MCell[][];
+  let activeRow: 0 | 1;
+  let activeCol: 0 | 1;
+
+  if (vol) {
+    colHeads = ['Manager: “Not surprised”', 'Manager: “Blindsided”'];
+    rowHeads = ['Employee: I made it known', 'Employee: It built quietly'];
+    cells = [
+      [
+        { label: '● Healthy', title: 'Known & managed', desc: 'Both saw it coming. The feedback loop worked — an honest, often pull-driven exit.', tone: 'good' },
+        { label: '▲ Manager red flag', title: 'Wasn’t listening', desc: 'Employee raised concerns; the manager never registered them. Poor feedback culture.', tone: 'bad' },
+      ],
+      [
+        { label: '◆ Watch', title: 'Silent & seen', desc: 'Manager sensed it but didn’t act. Coaching gap.', tone: 'warn' },
+        { label: '◆ Watch', title: 'Mutual blind spot', desc: 'Nobody was talking. A 1:1 cadence problem.', tone: 'warn' },
+      ],
+    ];
+    activeRow = str(A, 'concerns').startsWith('Yes') ? 0 : 1;
+    activeCol = sm >= 3 ? 1 : 0;
+  } else {
+    colHeads = ['Manager: “Gave clear feedback”', 'Manager: “Little / no feedback”'];
+    rowHeads = ['Employee: I saw it coming', 'Employee: Blindsided'];
+    cells = [
+      [
+        { label: '● Healthy process', title: 'Fair & clear', desc: 'Feedback landed and a chance to improve was given — it just didn’t work out.', tone: 'good' },
+        { label: '◆ Watch', title: 'Knew without being told', desc: 'Employee read the writing on the wall; the manager never made it explicit. Documentation risk.', tone: 'warn' },
+      ],
+      [
+        { label: '▲ Manager red flag', title: 'Said but not heard', desc: 'Manager claims clear feedback; the employee was blindsided. The feedback wasn’t actually clear.', tone: 'bad' },
+        { label: '▲ Red flag + legal risk', title: 'No warning at all', desc: 'No clear feedback and a blindsided employee. Coaching failure and termination-defensibility risk.', tone: 'bad' },
+      ],
+    ];
+    activeRow = se >= 3 ? 1 : 0;
+    activeCol = str(B, 'awareness').startsWith('Yes') ? 0 : 1;
+  }
+
+  const border = (t: string) => (t === 'good' ? 'border-ls-thrive' : t === 'warn' ? 'border-ls-watch' : 'border-ls-risk');
+  const text = (t: string) => (t === 'good' ? 'text-ls-thrive' : t === 'warn' ? 'text-ls-watch' : 'text-ls-risk');
+  const bg = (t: string) => (t === 'good' ? 'bg-ls-thrive-bg' : t === 'warn' ? 'bg-ls-watch-bg' : 'bg-ls-risk-bg');
+  const ring = (t: string) => (t === 'good' ? 'ring-ls-thrive' : t === 'warn' ? 'ring-ls-watch' : 'ring-ls-risk');
+  const active = cells[activeRow][activeCol];
+
+  return (
+    <div>
+      <h3 className="font-bold mb-2">Surprise matrix</h3>
+      <div className="ls-card p-5">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className={`ls-chip ${bg(active.tone)} ${text(active.tone)}`}>{active.label} · {active.title}</span>
+          <span className="text-[12px] text-ls-ink-3">{vol ? `Manager surprise ${sm}/5` : `Employee surprise ${se}/5`}</span>
+        </div>
+        <p className="text-[13px] text-ls-ink-2 mb-4">{vol
+          ? 'The employee’s read (did they surface it?) crossed against the manager’s surprise. The red quadrant is the manager red flag.'
+          : 'The employee’s surprise crossed against whether the manager gave clear feedback. The red quadrant is the same manager failure.'}</p>
+        <div className="grid grid-cols-[6.5rem_1fr_1fr] gap-2 items-stretch">
+          <div />
+          {colHeads.map((c, i) => (
+            <div key={i} className={`text-[10.5px] font-bold uppercase tracking-wide text-center px-1.5 py-1.5 ${i === activeCol ? 'text-ls-ink-2' : 'text-ls-ink-3'}`}>{c}</div>
+          ))}
+          {[0, 1].map((r) => (
+            <Fragment key={r}>
+              <div className={`text-[10.5px] font-bold uppercase tracking-wide flex items-center justify-end text-right px-1 ${r === activeRow ? 'text-ls-ink-2' : 'text-ls-ink-3'}`}>{rowHeads[r]}</div>
+              {[0, 1].map((c) => {
+                const cell = cells[r][c];
+                const isActive = r === activeRow && c === activeCol;
+                return (
+                  <div key={c} className={`rounded-xl border p-3.5 ${border(cell.tone)} ${isActive ? `${bg(cell.tone)} ring-2 ring-offset-1 ${ring(cell.tone)}` : 'opacity-40'}`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${text(cell.tone)}`}>{cell.label}</div>
+                    <div className="font-semibold text-[14px] mb-1">{cell.title}</div>
+                    <p className="text-[12px] text-ls-ink-2">{cell.desc}</p>
+                    {isActive && <div className="mt-2 text-[11px] font-semibold text-ls-ink-3">◀ This exit lands here</div>}
+                  </div>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+        <p className="text-[12px] text-ls-ink-3 mt-4">The diagnostic is the <b>delta</b>: someone got bad news and didn’t see it coming — because the feedback loop was broken.</p>
       </div>
     </div>
   );
