@@ -10,7 +10,7 @@ import { trpc } from '../lib/trpc';
 type Light = 'green' | 'yellow' | 'red';
 interface OkrRow {
   id: string; parentId: string | null; type: string; title: string;
-  owner: string | null; ownerUserId: string | null; status: string; light: string | null;
+  owner: string | null; ownerUserId: string | null; departmentId: string | null; status: string; light: string | null;
   startDate: string | null; dueDate: string | null; description: string | null; sortOrder: number;
 }
 
@@ -47,13 +47,14 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 
 interface EditForm {
   title: string; ownerUserId: string; status: string; light: string;
-  startDate: string; dueDate: string; description: string;
+  startDate: string; dueDate: string; description: string; departmentId: string;
 }
 
 export default function Okrs() {
   const { data, isLoading, refetch } = trpc.okrs.list.useQuery();
   const archivedQ = trpc.okrs.listArchived.useQuery();
   const { data: org } = trpc.organization.list.useQuery();
+  const { data: depts } = trpc.departments.list.useQuery();
 
   const bump = () => { refetch(); archivedQ.refetch(); };
   const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
@@ -70,7 +71,7 @@ export default function Okrs() {
   const [showPersonMenu, setShowPersonMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EditForm>({
-    title: '', ownerUserId: '', status: 'not_started', light: '', startDate: '', dueDate: '', description: '',
+    title: '', ownerUserId: '', status: 'not_started', light: '', startDate: '', dueDate: '', description: '', departmentId: '',
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
@@ -83,6 +84,7 @@ export default function Okrs() {
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
   const members = org?.members ?? [];
+  const deptList = depts ?? [];
   const childrenOf = (pid: string | null) =>
     rows.filter((r) => r.parentId === pid).sort((a, b) => a.sortOrder - b.sortOrder);
   // Root list = top-level nodes PLUS any active node whose parent is archived
@@ -110,6 +112,7 @@ export default function Okrs() {
     setForm({
       title: sel.title,
       ownerUserId: sel.ownerUserId ?? '',
+      departmentId: sel.departmentId ?? '',
       status: sel.status,
       light: sel.light ?? '',
       startDate: sel.startDate ?? todayISO(),
@@ -127,6 +130,7 @@ export default function Okrs() {
     setForm({
       title: row.title,
       ownerUserId: row.ownerUserId ?? '',
+      departmentId: row.departmentId ?? '',
       status: row.status,
       light: row.light ?? '',
       startDate: row.startDate ?? todayISO(),
@@ -159,6 +163,7 @@ export default function Okrs() {
         title: form.title.trim(),
         ownerUserId: form.ownerUserId,
         owner,
+        departmentId: form.departmentId || null,
         status: form.status as never,
         light: form.light as never,
         startDate: form.startDate,
@@ -219,14 +224,12 @@ export default function Okrs() {
     while (stack.length) { const n = stack.pop()!; out.push(n); stack.push(...childrenOf(n.id)); }
     return out;
   };
-  const teams = Array.from(
-    new Set(members.map((m) => m.departmentName).filter((d): d is string => !!d)),
-  ).sort();
-  const teamMemberIds = new Set(members.filter((m) => m.departmentName === selectedTeam).map((m) => m.id));
-  const onTeam = (n: OkrRow) => !!n.ownerUserId && teamMemberIds.has(n.ownerUserId);
+  const teamMemberIds = new Set(members.filter((m) => m.departmentId === selectedTeam).map((m) => m.id));
+  const onTeam = (n: OkrRow) => n.departmentId === selectedTeam || (!!n.ownerUserId && teamMemberIds.has(n.ownerUserId));
   const teamObjectives = selectedTeam
     ? rows.filter((n) => n.type === 'objective' && (onTeam(n) || descendantsOf(n.id).some(onTeam)))
     : [];
+  const selectedTeamName = deptList.find((d) => d.id === selectedTeam)?.name ?? '';
   const toggleTeam = (id: string) => setTeamExpanded((e) => ({ ...e, [id]: !e[id] }));
 
   const renderNode = (n: OkrRow, depth: number): ReactNode => {
@@ -317,6 +320,15 @@ export default function Okrs() {
                         <p className="text-[11px] text-ls-ink-3 mt-1">From the Organization directory.</p>
                       </div>
                       <div>
+                        <label className={labelCls}>Team</label>
+                        <select className={inputCls} value={form.departmentId}
+                          onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}>
+                          <option value="">— No team</option>
+                          {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <p className="text-[11px] text-ls-ink-3 mt-1">Tag this OKR to a team (optional).</p>
+                      </div>
+                      <div>
                         <label className={labelCls}>Status *</label>
                         <select className={`${inputCls}${missingField(!form.status)}`} value={form.status}
                           onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
@@ -369,6 +381,7 @@ export default function Okrs() {
                   <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
                   <dl className="grid grid-cols-2 gap-4 text-sm">
                     <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
+                    <Field label="Team">{deptList.find((d) => d.id === sel.departmentId)?.name ?? '—'}</Field>
                     <Field label="Status">{STATUS_LABEL[sel.status] ?? sel.status.replace('_', ' ')}</Field>
                     <Field label="Status light">
                       {sel.light ? (
@@ -478,7 +491,7 @@ export default function Okrs() {
           <div className="max-w-sm mb-5">
             <select className={inputCls} value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}>
               <option value="">Select a team…</option>
-              {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+              {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <p className="text-[11px] text-ls-ink-3 mt-1">Teams come from the Organization directory (department). Goals are grouped by each OKR owner's team.</p>
           </div>
@@ -486,7 +499,7 @@ export default function Okrs() {
           {!selectedTeam ? (
             <div className="text-sm text-ls-ink-3">Select a team above to see its goals and how they break down by person.</div>
           ) : teamObjectives.length === 0 ? (
-            <div className="text-sm text-ls-ink-3">No OKRs owned by anyone on {selectedTeam} yet.</div>
+            <div className="text-sm text-ls-ink-3">No OKRs for {selectedTeamName} yet.</div>
           ) : (
             <div className="space-y-2">
               {teamObjectives.map((o) => {
@@ -505,7 +518,7 @@ export default function Okrs() {
                     {isExp && (
                       <div className="px-3 py-2">
                         {subGoals.length === 0 ? (
-                          <div className="text-[12.5px] text-ls-ink-3 py-1">No individual goals assigned to {selectedTeam} under this objective yet.</div>
+                          <div className="text-[12.5px] text-ls-ink-3 py-1">No individual goals for {selectedTeamName} under this objective yet.</div>
                         ) : subGoals.map((n) => {
                           const Icon = TYPE_ICON[n.type] ?? KeyRound;
                           return (

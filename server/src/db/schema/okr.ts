@@ -9,6 +9,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
+import { departments } from './departments.js';
 
 export const okrNodes = pgTable('okr_nodes', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -19,6 +20,8 @@ export const okrNodes = pgTable('okr_nodes', {
   // Optional FK to the owning user — enables reliable per-person OKR fetch
   // on the Org screen while `owner` stays for name display / seeding.
   ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Optional explicit team tag (department). Independent of the owner's team.
+  departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
   status: varchar('status', { length: 24 }).notNull().default('not_started'),
     // 'not_started' | 'in_progress' | 'on_hold' | 'complete'
   light: varchar('light', { length: 8 }),                 // 'green' | 'yellow' | 'red' (outcomes only)
