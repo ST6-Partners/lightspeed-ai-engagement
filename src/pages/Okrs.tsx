@@ -78,7 +78,7 @@ export default function Okrs() {
   const [archivePerson, setArchivePerson] = useState('');
   const [archiveDate, setArchiveDate] = useState('');
   const [newNodeId, setNewNodeId] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState('');
+  const [teamScope, setTeamScope] = useState('all');
   const [teamExpanded, setTeamExpanded] = useState<Record<string, boolean>>({});
 
   const rows = (data ?? []) as OkrRow[];
@@ -224,12 +224,29 @@ export default function Okrs() {
     while (stack.length) { const n = stack.pop()!; out.push(n); stack.push(...childrenOf(n.id)); }
     return out;
   };
-  const teamMemberIds = new Set(members.filter((m) => m.departmentId === selectedTeam).map((m) => m.id));
-  const onTeam = (n: OkrRow) => n.departmentId === selectedTeam || (!!n.ownerUserId && teamMemberIds.has(n.ownerUserId));
-  const teamObjectives = selectedTeam
-    ? rows.filter((n) => n.type === 'objective' && (onTeam(n) || descendantsOf(n.id).some(onTeam)))
-    : [];
-  const selectedTeamName = deptList.find((d) => d.id === selectedTeam)?.name ?? '';
+  const deptOptions = [...new Set(members.map((m) => m.departmentName).filter((d): d is string => !!d))].sort();
+  const managerOptions = (() => {
+    const ids = new Set(members.map((m) => m.managerId).filter((x): x is string => !!x));
+    return members.filter((m) => ids.has(m.id)).map((m) => ({ id: m.id, name: m.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+  const teamScopeMemberIds: Set<string> | null =
+    teamScope === 'all' ? null
+    : teamScope.startsWith('dept:') ? new Set(members.filter((m) => m.departmentName === teamScope.slice(5)).map((m) => m.id))
+    : teamScope.startsWith('mgr:') ? new Set(members.filter((m) => m.managerId === teamScope.slice(4)).map((m) => m.id))
+    : new Set();
+  const scopeDeptId = teamScope.startsWith('dept:')
+    ? (deptList.find((d) => d.name === teamScope.slice(5))?.id ?? null) : null;
+  const onTeam = (n: OkrRow) => {
+    if (teamScope === 'all') return true;
+    if (scopeDeptId && n.departmentId === scopeDeptId) return true;
+    return !!n.ownerUserId && !!teamScopeMemberIds && teamScopeMemberIds.has(n.ownerUserId);
+  };
+  const teamObjectives = rows.filter((n) => n.type === 'objective' && (onTeam(n) || descendantsOf(n.id).some(onTeam)));
+  const teamScopeLabel = teamScope === 'all' ? 'Everyone'
+    : teamScope.startsWith('dept:') ? teamScope.slice(5)
+    : `${managerOptions.find((m) => `mgr:${m.id}` === teamScope)?.name ?? ''}’s team`;
+  const teamSize = teamScopeMemberIds ? teamScopeMemberIds.size : members.length;
   const toggleTeam = (id: string) => setTeamExpanded((e) => ({ ...e, [id]: !e[id] }));
 
   const renderNode = (n: OkrRow, depth: number): ReactNode => {
@@ -488,18 +505,27 @@ export default function Okrs() {
 
       {view === 'team' && (
         <div className="ls-card p-5 min-h-[520px]">
-          <div className="max-w-sm mb-5">
-            <select className={inputCls} value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}>
-              <option value="">Select a team…</option>
-              {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <label className="text-[11px] uppercase tracking-wide text-ls-ink-3">Team</label>
+            <select value={teamScope} onChange={(e) => setTeamScope(e.target.value)}
+              className="px-3 py-2 border border-ls-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-blue">
+              <option value="all">Everyone</option>
+              {deptOptions.length > 0 && (
+                <optgroup label="By department">
+                  {deptOptions.map((d) => <option key={d} value={`dept:${d}`}>{d}</option>)}
+                </optgroup>
+              )}
+              {managerOptions.length > 0 && (
+                <optgroup label="By manager">
+                  {managerOptions.map((m) => <option key={m.id} value={`mgr:${m.id}`}>{m.name}’s team</option>)}
+                </optgroup>
+              )}
             </select>
-            <p className="text-[11px] text-ls-ink-3 mt-1">Teams come from the Organization directory (department). Goals are grouped by each OKR owner's team.</p>
+            <span className="text-xs text-ls-ink-3">{teamSize} {teamSize === 1 ? 'person' : 'people'}</span>
           </div>
 
-          {!selectedTeam ? (
-            <div className="text-sm text-ls-ink-3">Select a team above to see its goals and how they break down by person.</div>
-          ) : teamObjectives.length === 0 ? (
-            <div className="text-sm text-ls-ink-3">No OKRs for {selectedTeamName} yet.</div>
+          {teamObjectives.length === 0 ? (
+            <div className="text-sm text-ls-ink-3">No OKRs for {teamScopeLabel} yet.</div>
           ) : (
             <div className="space-y-2">
               {teamObjectives.map((o) => {
@@ -518,7 +544,7 @@ export default function Okrs() {
                     {isExp && (
                       <div className="px-3 py-2">
                         {subGoals.length === 0 ? (
-                          <div className="text-[12.5px] text-ls-ink-3 py-1">No individual goals for {selectedTeamName} under this objective yet.</div>
+                          <div className="text-[12.5px] text-ls-ink-3 py-1">No individual goals for {teamScopeLabel} under this objective yet.</div>
                         ) : subGoals.map((n) => {
                           const Icon = TYPE_ICON[n.type] ?? KeyRound;
                           return (

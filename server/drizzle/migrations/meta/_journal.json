@@ -274,6 +274,13 @@
       "when": 1783023954070,
       "tag": "0038_okr_team_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1783024014070,
+      "tag": "0039_seed_sample_okrs",
+      "breakpoints": true
     }
   ]
 }
