@@ -90,12 +90,6 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
       <h1 className="text-2xl font-bold tracking-tight">Exit Survey</h1>
       <p className="text-sm text-ls-ink-3 mb-5">A two-part exit diagnostic — departing employee and manager — built for side-by-side comparison. Click any row to open the full record: both completed forms and the HR comparison.</p>
 
-      <div className="grid sm:grid-cols-3 gap-4 mb-5">
-        <Card title="Mirrored pairs">Every diagnostic question on Part A has a twin on Part B. Built for comparison, not collection.</Card>
-        <Card title="Manager-quality core">The behavior block — feedback, recognition, growth, fairness, honesty — is identical in both permutations.</Card>
-        <Card title="Surprise, flipped by type">A blindsided manager (resignation) and a blindsided employee (termination) are the same diagnosis. The gap is the signal.</Card>
-      </div>
-
       <div className="ls-card p-4 mb-5">
         <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-3">New exit diagnostic</div>
         <div className="grid sm:grid-cols-3 gap-3">
@@ -534,15 +528,6 @@ function SurpriseMatrix({ record }: { record: ExitRow }) {
         </div>
         <p className="text-[12px] text-ls-ink-3 mt-4">The diagnostic is the <b>delta</b>: someone got bad news and didn’t see it coming — because the feedback loop was broken.</p>
       </div>
-    </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: string }) {
-  return (
-    <div className="ls-card p-4">
-      <h4 className="font-semibold mb-1.5">{title}</h4>
-      <p className="text-[13px] text-ls-ink-2">{children}</p>
     </div>
   );
 }
