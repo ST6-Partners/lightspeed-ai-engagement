@@ -1,6 +1,6 @@
 // OKRs router — flat node list (client builds the tree) + CRUD. (DD-002 Planning)
 import { z } from 'zod';
-import { eq, asc, isNull, and } from 'drizzle-orm';
+import { eq, asc, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { okrNodes } from '../db/schema/okr.js';
@@ -8,6 +8,25 @@ import { okrNodes } from '../db/schema/okr.js';
 const nodeType = z.enum(['objective', 'key_result', 'task']);
 const light = z.enum(['green', 'yellow', 'red']);
 const status = z.enum(['not_started', 'in_progress', 'on_hold', 'complete']);
+
+// Collect a node id + every descendant id (adjacency walk over the flat list).
+// Used so archive/restore act on the whole subtree, not just the clicked node.
+function subtreeIds(all: { id: string; parentId: string | null }[], rootId: string): string[] {
+  const byParent = new Map<string | null, string[]>();
+  for (const n of all) {
+    const arr = byParent.get(n.parentId) ?? [];
+    arr.push(n.id);
+    byParent.set(n.parentId, arr);
+  }
+  const out: string[] = [];
+  const stack = [rootId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    out.push(id);
+    for (const child of byParent.get(id) ?? []) stack.push(child);
+  }
+  return out;
+}
 
 export const okrsRouter = router({
   // Per-person OKRs for the Org screen card. Matches on ownerUserId (reliable)
@@ -35,6 +54,14 @@ export const okrsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.query.okrNodes.findMany({
       where: isNull(okrNodes.archivedAt),
+      orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+    });
+  }),
+
+  // Archived OKRs for the Archive section.
+  listArchived: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db.query.okrNodes.findMany({
+      where: isNotNull(okrNodes.archivedAt),
       orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
     });
   }),
@@ -91,14 +118,42 @@ export const okrsRouter = router({
       return row;
     }),
 
+  // Archive (soft-delete) — moves the node and its whole subtree to the Archive
+  // section by stamping archived_at. Reversible via unarchive; nothing is lost.
+  archive: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const all = await ctx.db.query.okrNodes.findMany({
+        columns: { id: true, parentId: true },
+      });
+      const ids = subtreeIds(all, input.id);
+      if (!ids.length) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.update(okrNodes)
+        .set({ archivedAt: new Date(), updatedAt: new Date() })
+        .where(inArray(okrNodes.id, ids));
+      return { ok: true, count: ids.length };
+    }),
+
+  // Restore an archived node and its subtree back to the active plan.
+  unarchive: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const all = await ctx.db.query.okrNodes.findMany({
+        columns: { id: true, parentId: true },
+      });
+      const ids = subtreeIds(all, input.id);
+      if (!ids.length) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.update(okrNodes)
+        .set({ archivedAt: null, updatedAt: new Date() })
+        .where(inArray(okrNodes.id, ids));
+      return { ok: true, count: ids.length };
+    }),
+
+  // Hard delete — permanently removes the node; descendants go via FK cascade.
   remove: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      // soft-delete the node and (hard) its subtree via FK cascade on hard delete;
-      // here we soft-delete just this node and its descendants explicitly.
-      await ctx.db.delete(okrNodes).where(
-        and(eq(okrNodes.id, input.id), isNull(okrNodes.archivedAt)),
-      );
+      await ctx.db.delete(okrNodes).where(eq(okrNodes.id, input.id));
       return { ok: true };
     }),
 });

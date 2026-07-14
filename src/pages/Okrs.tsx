@@ -1,9 +1,10 @@
 import { fmtDate } from '../lib/date';
 // OKRs — live nested objectives → key results → tasks (DD-002 Planning).
-// Editable: title, owner (linked to the Organization directory), status,
-// status light, due date, description; add key results / tasks inline.
-import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus } from 'lucide-react';
+// Editable (title, owner linked to the Org directory, status, light, due,
+// description); add key results / tasks inline; archive (reversible) vs delete
+// (permanent); By-Person view via employee search; Archived section.
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus, Archive, RotateCcw, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 type Light = 'green' | 'yellow' | 'red';
@@ -30,8 +31,8 @@ const LIGHT_OPTS: { value: string; label: string }[] = [
   { value: 'red', label: 'Red' },
 ];
 const CHILD_TYPE: Record<string, { type: 'key_result' | 'task'; label: string; title: string } | undefined> = {
-  objective: { type: 'key_result', label: '+ Key Result', title: 'New Key Result' },
-  key_result: { type: 'task', label: '+ Task', title: 'New Task' },
+  objective: { type: 'key_result', label: 'Key Result', title: 'New Key Result' },
+  key_result: { type: 'task', label: 'Task', title: 'New Task' },
 };
 const PERSON_GROUPS = [
   { type: 'objective', label: 'Objectives' },
@@ -50,30 +51,38 @@ interface EditForm {
 
 export default function Okrs() {
   const { data, isLoading, refetch } = trpc.okrs.list.useQuery();
-  const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
-  const update = trpc.okrs.update.useMutation({ onSuccess: () => refetch() });
-  const remove = trpc.okrs.remove.useMutation({ onSuccess: () => { setSelected(null); refetch(); } });
+  const archivedQ = trpc.okrs.listArchived.useQuery();
   const { data: org } = trpc.organization.list.useQuery();
 
-  const [view, setView] = useState<'plan' | 'people'>('plan');
+  const bump = () => { refetch(); archivedQ.refetch(); };
+  const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
+  const update = trpc.okrs.update.useMutation({ onSuccess: () => refetch() });
+  const archive = trpc.okrs.archive.useMutation({ onSuccess: () => { setSelected(null); bump(); } });
+  const unarchive = trpc.okrs.unarchive.useMutation({ onSuccess: bump });
+  const remove = trpc.okrs.remove.useMutation({ onSuccess: () => { setSelected(null); bump(); } });
+
+  const [view, setView] = useState<'plan' | 'people' | 'archived'>('plan');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [personQuery, setPersonQuery] = useState('');
+  const [showPersonMenu, setShowPersonMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EditForm>({
     title: '', ownerUserId: '', status: 'not_started', light: '', dueDate: '', description: '',
   });
 
   const rows = (data ?? []) as OkrRow[];
+  const archivedRows = (archivedQ.data ?? []) as OkrRow[];
   const members = org?.members ?? [];
   const childrenOf = (pid: string | null) =>
     rows.filter((r) => r.parentId === pid).sort((a, b) => a.sortOrder - b.sortOrder);
   const sel = rows.find((r) => r.id === selected) ?? null;
   const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  // Owner display resolves through the Organization directory via the user
-  // link first, so a renamed/updated employee always shows current data; the
-  // denormalized name is only a fallback for unlinked legacy rows.
+  // Owner display resolves through the Organization directory via the user link
+  // first, so a renamed employee always shows current data; the denormalized
+  // name is only a fallback for unlinked legacy rows.
   const ownerName = (n: OkrRow): string | null => {
     if (n.ownerUserId) {
       const m = members.find((x) => x.id === n.ownerUserId);
@@ -82,7 +91,6 @@ export default function Okrs() {
     return n.owner && n.owner.trim() ? n.owner : null;
   };
 
-  // Leaving a node or switching nodes cancels an in-progress edit.
   useEffect(() => { setEditing(false); }, [selected]);
 
   const startEdit = () => {
@@ -109,7 +117,7 @@ export default function Okrs() {
         title: form.title.trim() || sel.title,
         ownerUserId: form.ownerUserId || null,
         owner,
-        status: form.status as OkrRow['status'] as never,
+        status: form.status as never,
         light: (form.light || null) as never,
         dueDate: form.dueDate || null,
         description: form.description.trim() || null,
@@ -129,6 +137,18 @@ export default function Okrs() {
     );
   };
 
+  const deleteNode = (id: string) => {
+    if (window.confirm('Permanently delete this OKR and everything under it? This cannot be undone.')) {
+      remove.mutate({ id });
+    }
+  };
+
+  // ── By Person: searchable employee picker ──
+  const filteredMembers = useMemo(() => {
+    const q = personQuery.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((m) => m.name.toLowerCase().includes(q) || (m.role ?? '').toLowerCase().includes(q));
+  }, [members, personQuery]);
   const selectedPerson = members.find((p) => p.id === selectedPersonId) ?? null;
   const ownedOkrs = selectedPerson
     ? rows.filter((n) =>
@@ -169,11 +189,11 @@ export default function Okrs() {
       <p className="text-sm text-ls-ink-3 mb-5">Objectives down to key results and the tasks teams commit to.</p>
 
       <div className="inline-flex gap-1 p-1 rounded-lg bg-ls-bg-2 mb-5">
-        {([['plan', 'Plan'], ['people', 'By Person']] as const).map(([v, label]) => (
+        {([['plan', 'Plan'], ['people', 'By Person'], ['archived', 'Archived']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
             className={`text-sm font-semibold px-3.5 py-1.5 rounded-md ${
               view === v ? 'bg-ls-card text-ls-blue-deep shadow-sm' : 'text-ls-ink-3 hover:text-ls-ink-2'
-            }`}>{label}</button>
+            }`}>{label}{v === 'archived' && archivedRows.length ? ` (${archivedRows.length})` : ''}</button>
         ))}
       </div>
 
@@ -257,12 +277,14 @@ export default function Okrs() {
                       {childSpec && (
                         <button onClick={addChild} disabled={create.isPending}
                           className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep">
-                          <Plus size={13} /> {childSpec.label.replace('+ ', '')}</button>
+                          <Plus size={13} /> {childSpec.label}</button>
                       )}
                       <button onClick={startEdit}
                         className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Pencil size={13} /> Edit</button>
-                      <button onClick={() => remove.mutate({ id: sel.id })}
-                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Archive</button>
+                      <button onClick={() => archive.mutate({ id: sel.id })} disabled={archive.isPending}
+                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Archive size={13} /> Archive</button>
+                      <button onClick={() => deleteNode(sel.id)} disabled={remove.isPending}
+                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
                     </div>
                   </div>
                   <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
@@ -293,72 +315,119 @@ export default function Okrs() {
       )}
 
       {view === 'people' && (
-        <div className="ls-card overflow-hidden flex min-h-[520px]">
-          <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
-            <div className="px-3 pb-2 mb-1 border-b border-ls-line">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">People</span>
-            </div>
-            {members.map((p) => {
-              const isSel = p.id === selectedPersonId;
-              return (
-                <button key={p.id} onClick={() => setSelectedPersonId(p.id)}
-                  className={`w-full text-left flex items-center gap-2.5 py-1.5 px-3 rounded-md ${
-                    isSel ? 'bg-ls-bg-2' : 'hover:bg-ls-bg-2'
-                  }`}>
-                  <span className="w-7 h-7 rounded-full bg-ls-bg-2 text-ls-ink-2 flex items-center justify-center text-[11px] font-bold shrink-0">
-                    {initials(p.name)}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium text-ls-ink truncate">{p.name}</span>
-                    <span className="block text-[12px] text-ls-ink-3 truncate">{p.role}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex-1 p-5 min-w-0">
-            {selectedPerson ? (
-              <>
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="w-11 h-11 rounded-full bg-ls-active text-white flex items-center justify-center font-bold shrink-0">
-                    {initials(selectedPerson.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[14.5px]">{selectedPerson.name}</div>
-                    <div className="text-[12.5px] text-ls-ink-3">{selectedPerson.role}</div>
-                  </div>
-                </div>
-
-                {ownedOkrs.length === 0 ? (
-                  <div className="text-sm text-ls-ink-3">No OKRs owned yet.</div>
-                ) : (
-                  PERSON_GROUPS.map((g) => {
-                    const items = ownedOkrs.filter((n) => n.type === g.type);
-                    if (items.length === 0) return null;
-                    return (
-                      <div key={g.type} className="mb-4 last:mb-0">
-                        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">{g.label}</div>
-                        {items.map((n) => (
-                          <div key={n.id} className="flex items-start gap-2.5 py-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
-                              style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-ls-ink">{n.title}</div>
-                              <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}</div>
-                              {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })
-                )}
-              </>
-            ) : (
-              <div className="h-full flex items-center justify-center text-sm text-ls-ink-3">Select a person to see their OKRs.</div>
+        <div className="ls-card p-5 min-h-[520px]">
+          <div className="relative max-w-sm mb-5">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ls-ink-3" />
+            <input
+              className={`${inputCls} pl-9`}
+              placeholder="Search employees by name…"
+              value={personQuery}
+              onFocus={() => setShowPersonMenu(true)}
+              onBlur={() => setTimeout(() => setShowPersonMenu(false), 150)}
+              onChange={(e) => { setPersonQuery(e.target.value); setShowPersonMenu(true); setSelectedPersonId(null); }}
+            />
+            {showPersonMenu && filteredMembers.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-ls-card border border-ls-line rounded-md shadow-lg max-h-64 overflow-y-auto py-1">
+                {filteredMembers.map((p) => (
+                  <button key={p.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSelectedPersonId(p.id);
+                      setPersonQuery(p.name);
+                      setShowPersonMenu(false);
+                    }}
+                    className="w-full text-left flex items-center gap-2.5 py-1.5 px-3 hover:bg-ls-bg-2">
+                    <span className="w-7 h-7 rounded-full bg-ls-bg-2 text-ls-ink-2 flex items-center justify-center text-[11px] font-bold shrink-0">
+                      {initials(p.name)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-ls-ink truncate">{p.name}</span>
+                      <span className="block text-[12px] text-ls-ink-3 truncate">{p.role}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+
+          {selectedPerson ? (
+            <>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-11 h-11 rounded-full bg-ls-active text-white flex items-center justify-center font-bold shrink-0">
+                  {initials(selectedPerson.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[14.5px]">{selectedPerson.name}</div>
+                  <div className="text-[12.5px] text-ls-ink-3">{selectedPerson.role}</div>
+                </div>
+              </div>
+
+              {ownedOkrs.length === 0 ? (
+                <div className="text-sm text-ls-ink-3">No OKRs owned yet.</div>
+              ) : (
+                PERSON_GROUPS.map((g) => {
+                  const items = ownedOkrs.filter((n) => n.type === g.type);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={g.type} className="mb-4 last:mb-0">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">{g.label}</div>
+                      {items.map((n) => (
+                        <div key={n.id} className="flex items-start gap-2.5 py-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                            style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-ls-ink">{n.title}</div>
+                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}</div>
+                            {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-ls-ink-3">Search for an employee above to see the OKRs they own.</div>
+          )}
+        </div>
+      )}
+
+      {view === 'archived' && (
+        <div className="ls-card p-5 min-h-[520px]">
+          <div className="flex items-center gap-2 mb-4">
+            <Archive size={16} className="text-ls-ink-3" />
+            <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Archived OKRs</span>
+          </div>
+          {archivedQ.isLoading && <div className="text-sm text-ls-ink-3">Loading…</div>}
+          {!archivedQ.isLoading && archivedRows.length === 0 && (
+            <div className="text-sm text-ls-ink-3">Nothing archived. Archived OKRs are kept here and can be restored to the plan.</div>
+          )}
+          {PERSON_GROUPS.map((g) => {
+            const items = archivedRows.filter((n) => n.type === g.type);
+            if (items.length === 0) return null;
+            return (
+              <div key={g.type} className="mb-4 last:mb-0">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">{g.label}</div>
+                {items.map((n) => (
+                  <div key={n.id} className="flex items-center gap-2.5 py-2 border-b border-ls-line last:border-0">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-ls-ink truncate">{n.title}</div>
+                      <div className="text-[12px] text-ls-ink-3">
+                        {ownerName(n) ?? 'Unassigned'} · {STATUS_LABEL[n.status] ?? n.status}
+                      </div>
+                    </div>
+                    <button onClick={() => unarchive.mutate({ id: n.id })} disabled={unarchive.isPending}
+                      className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep"><RotateCcw size={13} /> Restore</button>
+                    <button onClick={() => deleteNode(n.id)} disabled={remove.isPending}
+                      className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
