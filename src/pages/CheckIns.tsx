@@ -241,7 +241,7 @@ export default function CheckIns() {
       </p>
       {tabBar()}
       {view === 'configure' && isAdmin ? <CheckinQuestions />
-        : view === 'analytics' ? <CheckinAnalytics rows={(history ?? []) as any} peopleCount={(people ?? []).length} loading={hLoading} />
+        : view === 'analytics' ? <CheckinAnalytics rows={(history ?? []) as any} loading={hLoading} />
         : view === 'history' ? renderHistory()
         : renderForm()}
     </div>

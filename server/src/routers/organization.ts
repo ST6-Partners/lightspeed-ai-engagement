@@ -4,6 +4,7 @@ import { desc } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
+import { departments } from '../db/schema/departments.js';
 import { weeklyCheckins } from '../db/schema/weeklyPlan.js';
 
 type Status = 'thrive' | 'watch' | 'risk' | 'none';
@@ -31,6 +32,9 @@ export const organizationRouter = router({
     // consistent with Core Data. Falls back to the free-text title, then role.
     const titleRows = await ctx.db.query.jobTitles.findMany();
     const titleById = new Map(titleRows.map((t) => [t.id, t.title]));
+    const deptRows = await ctx.db.query.departments.findMany();
+    const deptById = new Map(deptRows.map((d) => [d.id, d.name]));
+    const nameById = new Map(people.map((u) => [u.id, u.name ?? u.email]));
     const checkins = await ctx.db.query.weeklyCheckins.findMany({
       orderBy: [desc(weeklyCheckins.weekStart)],
     });
@@ -59,6 +63,10 @@ export const organizationRouter = router({
         spark,
         lastCheckIn: cs[0]?.weekStart ?? null,
         checkinCount: cs.length,
+        departmentId: u.departmentId ?? null,
+        departmentName: u.departmentId ? (deptById.get(u.departmentId) ?? null) : null,
+        managerId: u.managerId ?? null,
+        managerName: u.managerId ? (nameById.get(u.managerId) ?? null) : null,
       };
     });
 
