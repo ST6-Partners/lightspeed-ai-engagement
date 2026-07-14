@@ -59,7 +59,7 @@ export default function Okrs() {
   const bump = () => { refetch(); archivedQ.refetch(); };
   const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
   const update = trpc.okrs.update.useMutation({ onSuccess: () => refetch() });
-  const archive = trpc.okrs.archive.useMutation({ onSuccess: () => { setSelected(null); bump(); } });
+  const archive = trpc.okrs.archive.useMutation({ onSuccess: () => { setSelected(null); setDetailOpen(false); bump(); } });
   const unarchive = trpc.okrs.unarchive.useMutation({ onSuccess: bump });
   const remove = trpc.okrs.remove.useMutation({ onSuccess: bump });
 
@@ -80,6 +80,7 @@ export default function Okrs() {
   const [newNodeId, setNewNodeId] = useState<string | null>(null);
   const [teamScope, setTeamScope] = useState('all');
   const [teamExpanded, setTeamExpanded] = useState<Record<string, boolean>>({});
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
@@ -187,10 +188,13 @@ export default function Okrs() {
     );
   };
 
+  const openDetail = (id: string) => { setSelected(id); setEditing(false); setFormError(null); setDetailOpen(true); };
+
   const deleteNode = (id: string) => {
     if (window.confirm('Permanently delete this OKR and everything under it? This cannot be undone.')) {
       remove.mutate({ id }, { onSuccess: () => setSelected(null) });
       setNewNodeId(null);
+      setDetailOpen(false);
     }
   };
 
@@ -273,36 +277,8 @@ export default function Okrs() {
 
   const childSpec = sel ? CHILD_TYPE[sel.type] : undefined;
 
-  return (
-    <div className="max-w-5xl mx-auto">
-      <div className="ls-eyebrow mb-1">Planning</div>
-      <h1 className="text-2xl font-bold tracking-tight">OKRs</h1>
-      <p className="text-sm text-ls-ink-3 mb-5">Objectives down to key results and the tasks teams commit to.</p>
-
-      <div className="inline-flex gap-1 p-1 rounded-lg bg-ls-bg-2 mb-5">
-        {([['plan', 'Plan'], ['people', 'By Person'], ['team', 'By Team'], ['archived', 'Archived']] as const).map(([v, label]) => (
-          <button key={v} onClick={() => setView(v)}
-            className={`text-sm font-semibold px-3.5 py-1.5 rounded-md ${
-              view === v ? 'bg-ls-surface text-ls-blue-deep shadow-sm' : 'text-ls-ink-3 hover:text-ls-ink-2'
-            }`}>{label}{v === 'archived' && archivedRows.length ? ` (${archivedRows.length})` : ''}</button>
-        ))}
-      </div>
-
-      {view === 'plan' && (
-        <div className="ls-card overflow-hidden flex min-h-[520px]">
-          <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
-            <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Plan</span>
-              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green' }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
-                disabled={create.isPending}
-                className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
-            </div>
-            {isLoading && <div className="px-3 py-3 text-sm text-ls-ink-3">Loading…</div>}
-            {!isLoading && rootNodes.map((n) => renderNode(n, 0))}
-          </div>
-
-          <div className="flex-1 p-5 min-w-0">
-            {sel ? (
+  const renderDetail = () => (
+    sel ? (
               editing ? (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -419,7 +395,39 @@ export default function Okrs() {
               )
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-ls-ink-3">Select an item to see its details.</div>
-            )}
+            )
+  );
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="ls-eyebrow mb-1">Planning</div>
+      <h1 className="text-2xl font-bold tracking-tight">OKRs</h1>
+      <p className="text-sm text-ls-ink-3 mb-5">Objectives down to key results and the tasks teams commit to.</p>
+
+      <div className="inline-flex gap-1 p-1 rounded-lg bg-ls-bg-2 mb-5">
+        {([['plan', 'Plan'], ['people', 'By Person'], ['team', 'By Team'], ['archived', 'Archived']] as const).map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)}
+            className={`text-sm font-semibold px-3.5 py-1.5 rounded-md ${
+              view === v ? 'bg-ls-surface text-ls-blue-deep shadow-sm' : 'text-ls-ink-3 hover:text-ls-ink-2'
+            }`}>{label}{v === 'archived' && archivedRows.length ? ` (${archivedRows.length})` : ''}</button>
+        ))}
+      </div>
+
+      {view === 'plan' && (
+        <div className="ls-card overflow-hidden flex min-h-[520px]">
+          <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
+            <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Plan</span>
+              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green' }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
+                disabled={create.isPending}
+                className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
+            </div>
+            {isLoading && <div className="px-3 py-3 text-sm text-ls-ink-3">Loading…</div>}
+            {!isLoading && rootNodes.map((n) => renderNode(n, 0))}
+          </div>
+
+          <div className="flex-1 p-5 min-w-0">
+            {renderDetail()}
           </div>
         </div>
       )}
@@ -482,7 +490,7 @@ export default function Okrs() {
                     <div key={g.type} className="mb-4 last:mb-0">
                       <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">{g.label}</div>
                       {items.map((n) => (
-                        <div key={n.id} className="flex items-start gap-2.5 py-1.5">
+                        <div key={n.id} onClick={() => openDetail(n.id)} className="flex items-start gap-2.5 py-1.5 cursor-pointer hover:bg-ls-bg-2 rounded-md px-2 -mx-2">
                           <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
                             style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
                           <div className="flex-1 min-w-0">
@@ -537,7 +545,7 @@ export default function Okrs() {
                       className="w-full flex items-center gap-2 px-3 py-2.5 bg-ls-bg-2 hover:bg-ls-line text-left">
                       <ChevronRight size={14} className={`shrink-0 text-ls-ink-3 transition-transform ${isExp ? 'rotate-90' : ''}`} />
                       <Target size={15} className="shrink-0 text-ls-blue-deep" />
-                      <span className="flex-1 font-semibold text-sm truncate">{o.title}</span>
+                      <span onClick={(e) => { e.stopPropagation(); openDetail(o.id); }} className="flex-1 font-semibold text-sm truncate cursor-pointer hover:underline">{o.title}</span>
                       {o.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[o.light as Light] }} />}
                       <span className="text-[12px] text-ls-ink-3 shrink-0">{subGoals.length} {subGoals.length === 1 ? 'goal' : 'goals'}</span>
                     </button>
@@ -548,7 +556,7 @@ export default function Okrs() {
                         ) : subGoals.map((n) => {
                           const Icon = TYPE_ICON[n.type] ?? KeyRound;
                           return (
-                            <div key={n.id} className="flex items-start gap-2.5 py-1.5">
+                            <div key={n.id} onClick={() => openDetail(n.id)} className="flex items-start gap-2.5 py-1.5 cursor-pointer hover:bg-ls-bg-2 rounded-md px-2 -mx-2">
                               <Icon size={14} className="shrink-0 text-ls-blue-deep mt-0.5" />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm text-ls-ink">{n.title}</div>
@@ -626,6 +634,18 @@ export default function Okrs() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {detailOpen && sel && (
+        <div className="fixed inset-0 z-40 bg-black/30 flex items-start justify-center p-6 overflow-y-auto"
+          onClick={() => setDetailOpen(false)}>
+          <div className="ls-card bg-ls-surface w-full max-w-2xl p-5 my-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setDetailOpen(false)} className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Close</button>
+            </div>
+            {renderDetail()}
+          </div>
         </div>
       )}
     </div>
