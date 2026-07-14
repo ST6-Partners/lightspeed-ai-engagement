@@ -8,9 +8,10 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { trpc } from '../lib/trpc';
-import { CheckCircle2, ClipboardCheck, History, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, History, Settings, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
 import { weekStartISO } from '../lib/weeklyCheckin';
 import { CheckinQuestions } from './admin';
+import CheckinAnalytics from '../components/checkin/CheckinAnalytics';
 
 const labelCls = 'block text-[11px] uppercase tracking-wide text-gray-500 mb-1';
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -42,7 +43,7 @@ const Card = ({ children }: { children: ReactNode }) => (
 );
 
 type Ans = { value?: number; answerText?: string };
-type View = 'form' | 'history' | 'configure';
+type View = 'form' | 'history' | 'analytics' | 'configure';
 
 export default function CheckIns() {
   const [view, setView] = useState<View>('form');
@@ -54,7 +55,7 @@ export default function CheckIns() {
   const { data: me } = trpc.auth.me.useQuery();
   const isAdmin = me?.role === 'admin' || me?.role === 'sysadmin';
   const utils = trpc.useContext();
-  const { data: history, isLoading: hLoading } = trpc.checkins.list.useQuery(undefined, { enabled: view === 'history' });
+  const { data: history, isLoading: hLoading } = trpc.checkins.list.useQuery(undefined, { enabled: view === 'history' || view === 'analytics' });
 
   const included = useMemo(
     () => (questions ?? []).filter((q: any) => q.included && q.isActive)
@@ -101,6 +102,7 @@ export default function CheckIns() {
     <div className="flex gap-1 mb-4 border-b border-gray-200">
       {([{ key: 'form' as const, label: 'This Period', icon: ClipboardCheck },
          { key: 'history' as const, label: 'Past Responses', icon: History },
+         { key: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
          ...(isAdmin ? [{ key: 'configure' as const, label: 'Configure', icon: Settings }] : [])]).map(({ key, label, icon: Icon }) => {
         const on = view === key;
         return (
@@ -130,8 +132,9 @@ export default function CheckIns() {
         <p className="text-xs text-gray-500">{rows.length} recorded {rows.length === 1 ? 'check-in' : 'check-ins'}</p>
         {rows.map((r: any) => {
           const ans: any[] = Array.isArray(r.answers) ? r.answers : [];
-          const scales = ans.filter((a) => a.type !== 'text' && typeof a.value === 'number');
+          const scales = ans.filter((a) => a.type === 'scale5' && typeof a.value === 'number');
           const avg = scales.length ? (scales.reduce((sum: number, a: any) => sum + a.value, 0) / scales.length) : null;
+          const enpsAns = ans.find((a) => a.type === 'enps' && typeof a.value === 'number');
           const written = ans.filter((a) => a.type === 'text' && a.answerText && a.answerText.trim()).length;
           const open = expanded.has(r.id);
           return (
@@ -143,6 +146,7 @@ export default function CheckIns() {
                 <span className="text-xs text-gray-500 shrink-0">Period of {fmtDate(r.weekOf)}</span>
                 <span className="ml-auto flex items-center gap-2 shrink-0">
                   {avg != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">avg {avg.toFixed(1)}</span>}
+                  {enpsAns && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-bold">eNPS {enpsAns.value}</span>}
                   {written > 0 && <span className="text-xs text-gray-400">{written} written</span>}
                 </span>
               </button>
@@ -236,7 +240,10 @@ export default function CheckIns() {
         A quick pulse on how you're doing, what you're focused on, and what you need — so your manager stays in the loop between reviews.
       </p>
       {tabBar()}
-      {view === 'configure' && isAdmin ? <CheckinQuestions /> : view === 'history' ? renderHistory() : renderForm()}
+      {view === 'configure' && isAdmin ? <CheckinQuestions />
+        : view === 'analytics' ? <CheckinAnalytics rows={(history ?? []) as any} peopleCount={(people ?? []).length} loading={hLoading} />
+        : view === 'history' ? renderHistory()
+        : renderForm()}
     </div>
   );
 }
