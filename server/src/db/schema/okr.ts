@@ -29,6 +29,8 @@ export const okrNodes = pgTable('okr_nodes', {
   dueDate: date('due_date'),
   description: text('description'),
   sortOrder: integer('sort_order').notNull().default(0),
+  // Relative weight vs. sibling nodes under the same parent (weighted rollup).
+  weight: integer('weight').notNull().default(1),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

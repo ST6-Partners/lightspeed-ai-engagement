@@ -8,7 +8,7 @@ const MOODS = ['😞', '😐', '🙂', '😀', '🤩'];
 const MOOD_LABELS = ['Drained', 'Low', 'Okay', 'Good', 'Energized'];
 const PULSE = ['Disagree', 'Neutral', 'Agree'];
 
-type Priority = { text: string; okrNodeId: string | null };
+type Priority = { text: string; okrNodeId: string | null; done?: boolean };
 
 // One objective with its key-result children, for the grouped OKR picker.
 type OkrGroup = {
@@ -19,7 +19,8 @@ type OkrGroup = {
 export default function WeeklyPlan() {
   const { data, refetch } = trpc.weeklyPlan.getCurrent.useQuery();
   const save = trpc.weeklyPlan.save.useMutation({ onSuccess: () => refetch() });
-  const { data: okrs } = trpc.okrs.list.useQuery();
+  const { data: okrs, refetch: refetchOkrs } = trpc.okrs.list.useQuery();
+  const updateOkr = trpc.okrs.update.useMutation({ onSuccess: () => refetchOkrs() });
   const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
 
   const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
@@ -38,8 +39,8 @@ export default function WeeklyPlan() {
     if (!data) return;
     const c = data.checkin;
     const raw = c?.priorities ?? [];
-    const norm: Priority[] = raw.map((p: string | { text: string; okrNodeId?: string | null }) =>
-      typeof p === 'string' ? { text: p, okrNodeId: null } : { text: p.text, okrNodeId: p.okrNodeId ?? null },
+    const norm: Priority[] = raw.map((p: string | { text: string; okrNodeId?: string | null; done?: boolean }) =>
+      typeof p === 'string' ? { text: p, okrNodeId: null, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false },
     );
     setPriorities(norm.length ? norm : [{ text: '', okrNodeId: null }]);
     setWins(c?.wins ?? '');
@@ -80,6 +81,10 @@ export default function WeeklyPlan() {
     setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, text: v } : x)));
   const setLink = (i: number, id: string | null) =>
     setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, okrNodeId: id } : x)));
+  const setDone = (i: number, v: boolean) =>
+    setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, done: v } : x)));
+  const okrDone = (id: string | null) => !!id && (okrs ?? []).find((n) => n.id === id)?.status === 'complete';
+  const toggleLinked = (id: string, done: boolean) => updateOkr.mutate({ id, status: done ? 'complete' : 'not_started' });
   const removeRow = (i: number) => setPriorities((p) => p.filter((_, idx) => idx !== i));
   const addOwn = () => setPriorities((p) => [...p, { text: '', okrNodeId: null }]);
   const addFromNode = (id: string, title: string) =>
@@ -97,7 +102,7 @@ export default function WeeklyPlan() {
       weekStart,
       priorities: priorities
         .filter((p) => p.text.trim() || p.okrNodeId)
-        .map((p) => ({ text: p.text, okrNodeId: p.okrNodeId })),
+        .map((p) => ({ text: p.text, okrNodeId: p.okrNodeId, done: p.done ?? false })),
       wins, blockers, mood, pulseAnswer: pulse, status: 'saved',
     });
 
@@ -193,10 +198,17 @@ export default function WeeklyPlan() {
             return (
               <div key={i} className="flex items-center gap-2">
                 <input
+                  type="checkbox"
+                  checked={p.okrNodeId ? okrDone(p.okrNodeId) : !!p.done}
+                  onChange={(e) => { const v = e.target.checked; if (p.okrNodeId) toggleLinked(p.okrNodeId, v); else setDone(i, v); }}
+                  title={p.okrNodeId ? 'Mark this OKR complete' : 'Mark done'}
+                  className="w-4 h-4 shrink-0 accent-ls-blue-deep cursor-pointer"
+                />
+                <input
                   value={p.text}
                   onChange={(e) => setText(i, e.target.value)}
                   placeholder="Add a priority…"
-                  className="flex-1 text-sm border border-ls-line rounded-lg px-3 py-2.5 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50"
+                  className={`flex-1 text-sm border border-ls-line rounded-lg px-3 py-2.5 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50 ${(p.okrNodeId ? okrDone(p.okrNodeId) : p.done) ? 'line-through text-ls-ink-3' : ''}`}
                 />
                 {linked ? (
                   <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep inline-flex items-center gap-1 whitespace-nowrap">

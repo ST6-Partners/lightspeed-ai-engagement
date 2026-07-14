@@ -24,7 +24,7 @@ export const weeklyPlanRouter = router({
         // Legacy rows may hold plain strings; normalize so the client always gets objects.
         const raw = row.priorities as unknown as Array<string | WeeklyPriority>;
         row.priorities = raw.map((p) =>
-          typeof p === 'string' ? { text: p, okrNodeId: null } : { text: p.text, okrNodeId: p.okrNodeId ?? null },
+          typeof p === 'string' ? { text: p, okrNodeId: null, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false },
         );
       }
       return { weekStart, checkin: row ?? null };
@@ -35,8 +35,8 @@ export const weeklyPlanRouter = router({
       weekStart: z.string(),
       priorities: z.array(z.union([
         z.string(),
-        z.object({ text: z.string(), okrNodeId: z.string().uuid().nullable().optional() }),
-      ])).default([]).transform((arr) => arr.map((p) => (typeof p === 'string' ? { text: p } : { text: p.text, okrNodeId: p.okrNodeId ?? null }))),
+        z.object({ text: z.string(), okrNodeId: z.string().uuid().nullable().optional(), done: z.boolean().optional() }),
+      ])).default([]).transform((arr) => arr.map((p) => (typeof p === 'string' ? { text: p, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false }))),
       wins: z.string().optional(),
       blockers: z.string().optional(),
       mood: z.number().int().min(1).max(5).nullable().optional(),

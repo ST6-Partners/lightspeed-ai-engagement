@@ -11,7 +11,7 @@ type Light = 'green' | 'yellow' | 'red';
 interface OkrRow {
   id: string; parentId: string | null; type: string; title: string;
   owner: string | null; ownerUserId: string | null; departmentId: string | null; status: string; light: string | null;
-  startDate: string | null; dueDate: string | null; description: string | null; sortOrder: number;
+  startDate: string | null; dueDate: string | null; description: string | null; sortOrder: number; weight: number;
 }
 
 const LIGHT_HEX: Record<Light, string> = { green: '#2E9E7B', yellow: '#C99300', red: '#C2615A' };
@@ -47,7 +47,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 
 interface EditForm {
   title: string; ownerUserId: string; status: string; light: string;
-  startDate: string; dueDate: string; description: string; departmentId: string;
+  startDate: string; dueDate: string; description: string; departmentId: string; weight: string;
 }
 
 export default function Okrs() {
@@ -71,7 +71,7 @@ export default function Okrs() {
   const [showPersonMenu, setShowPersonMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EditForm>({
-    title: '', ownerUserId: '', status: 'not_started', light: '', startDate: '', dueDate: '', description: '', departmentId: '',
+    title: '', ownerUserId: '', status: 'not_started', light: '', startDate: '', dueDate: '', description: '', departmentId: '', weight: '1',
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
@@ -107,6 +107,17 @@ export default function Okrs() {
     }
     return n.owner && n.owner.trim() ? n.owner : null;
   };
+  const isUnassigned = (n: OkrRow) => !ownerName(n);
+  const unassignedCount = rows.filter(isUnassigned).length;
+  // Weighted progress rollup: a leaf reads its status; a parent is the
+  // weight-weighted average of its children, recursively up the tree.
+  const statusPct = (n: OkrRow) => (n.status === 'complete' ? 100 : n.status === 'in_progress' ? 50 : 0);
+  const progressOf = (n: OkrRow): number => {
+    const kids = childrenOf(n.id);
+    if (!kids.length) return statusPct(n);
+    const totW = kids.reduce((a, k) => a + (k.weight || 1), 0) || 1;
+    return kids.reduce((a, k) => a + progressOf(k) * (k.weight || 1), 0) / totW;
+  };
 
   const startEdit = () => {
     if (!sel) return;
@@ -119,6 +130,7 @@ export default function Okrs() {
       startDate: sel.startDate ?? todayISO(),
       dueDate: sel.dueDate ?? '',
       description: sel.description ?? '',
+      weight: String(sel.weight ?? 1),
     });
     setFormError(null);
     setEditing(true);
@@ -137,6 +149,7 @@ export default function Okrs() {
       startDate: row.startDate ?? todayISO(),
       dueDate: row.dueDate ?? '',
       description: row.description ?? '',
+      weight: String(row.weight ?? 1),
     });
     setFormError(null);
     setEditing(true);
@@ -170,6 +183,7 @@ export default function Okrs() {
         startDate: form.startDate,
         dueDate: form.dueDate,
         description: form.description.trim(),
+        weight: Math.max(1, parseInt(form.weight, 10) || 1),
       },
       { onSuccess: () => { setNewNodeId(null); setEditing(false); } },
     );
@@ -268,6 +282,8 @@ export default function Okrs() {
             style={{ visibility: kids.length ? 'visible' : 'hidden' }}><ChevronRight size={13} /></button>
           <Icon size={14} className="shrink-0 text-ls-blue-deep" />
           <span className={`flex-1 text-[13px] truncate ${n.type === 'objective' ? 'font-semibold' : ''}`}>{n.title}</span>
+          {isUnassigned(n) && <span title="Unassigned — needs an owner" className="w-1.5 h-1.5 rounded-full bg-ls-watch shrink-0" />}
+          {kids.length > 0 && <span className="text-[11px] text-ls-ink-3 shrink-0 tabular-nums">{Math.round(progressOf(n))}%</span>}
           {n.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[n.light as Light] }} />}
         </div>
         {isExp && kids.map((c) => renderNode(c, depth + 1))}
@@ -345,6 +361,12 @@ export default function Okrs() {
                         <input type="date" className={`${inputCls}${missingField(!form.dueDate)}`} value={form.dueDate}
                           onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                       </div>
+                      <div>
+                        <label className={labelCls}>Weight</label>
+                        <input type="number" min={1} className={inputCls} value={form.weight}
+                          onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))} />
+                        <p className="text-[11px] text-ls-ink-3 mt-1">Relative weight vs. sibling items (drives rollup).</p>
+                      </div>
                     </div>
                     <div>
                       <label className={labelCls}>Description *</label>
@@ -372,6 +394,10 @@ export default function Okrs() {
                     </div>
                   </div>
                   <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
+                  <div className="mb-4">
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Progress{childrenOf(sel.id).length > 0 ? ' (rolled up)' : ''}</div>
+                    <ProgressBar pct={progressOf(sel)} />
+                  </div>
                   <dl className="grid grid-cols-2 gap-4 text-sm">
                     <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
                     <Field label="Team">{deptList.find((d) => d.id === sel.departmentId)?.name ?? '—'}</Field>
@@ -386,6 +412,7 @@ export default function Okrs() {
                     </Field>
                     <Field label="Start date">{sel.startDate ? fmtDate(sel.startDate) : '—'}</Field>
                     <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
+                    <Field label="Weight">{sel.weight ?? 1}</Field>
                   </dl>
                   <div className="mt-4">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
@@ -414,6 +441,13 @@ export default function Okrs() {
       </div>
 
       {view === 'plan' && (
+        <>
+          {unassignedCount > 0 && (
+            <div className="mb-3 flex items-center gap-2 text-[12.5px] text-ls-watch border border-ls-watch rounded-md px-3 py-2" style={{ background: '#FBF2DC' }}>
+              <span className="w-2 h-2 rounded-full bg-ls-watch shrink-0" />
+              {unassignedCount} {unassignedCount === 1 ? 'item has' : 'items have'} no owner yet — open one to assign it.
+            </div>
+          )}
         <div className="ls-card overflow-hidden flex min-h-[520px]">
           <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
             <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
@@ -430,6 +464,7 @@ export default function Okrs() {
             {renderDetail()}
           </div>
         </div>
+        </>
       )}
 
       {view === 'people' && (
@@ -495,7 +530,7 @@ export default function Okrs() {
                             style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm text-ls-ink">{n.title}</div>
-                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}</div>
+                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}{childrenOf(n.id).length > 0 ? ` · ${Math.round(progressOf(n))}%` : ''}</div>
                             {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
                           </div>
                         </div>
@@ -547,6 +582,7 @@ export default function Okrs() {
                       <Target size={15} className="shrink-0 text-ls-blue-deep" />
                       <span onClick={(e) => { e.stopPropagation(); openDetail(o.id); }} className="flex-1 font-semibold text-sm truncate cursor-pointer hover:underline">{o.title}</span>
                       {o.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[o.light as Light] }} />}
+                      <span className="text-[12px] text-ls-ink-3 shrink-0 tabular-nums">{Math.round(progressOf(o))}%</span>
                       <span className="text-[12px] text-ls-ink-3 shrink-0">{subGoals.length} {subGoals.length === 1 ? 'goal' : 'goals'}</span>
                     </button>
                     {isExp && (
@@ -648,6 +684,18 @@ export default function Okrs() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProgressBar({ pct }: { pct: number }) {
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-2 rounded-full bg-ls-bg-2 overflow-hidden min-w-[80px]">
+        <div className="h-2 rounded-full" style={{ width: `${p}%`, background: '#2E9E7B' }} />
+      </div>
+      <span className="text-[12px] text-ls-ink-3 tabular-nums w-9 text-right">{p}%</span>
     </div>
   );
 }

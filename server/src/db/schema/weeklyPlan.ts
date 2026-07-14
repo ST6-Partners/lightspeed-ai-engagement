@@ -8,7 +8,7 @@ import {
 import { users } from './core.js';
 
 // A single weekly priority. Optionally linked to an OKR node (objective or key result).
-export type WeeklyPriority = { text: string; okrNodeId?: string | null };
+export type WeeklyPriority = { text: string; okrNodeId?: string | null; done?: boolean };
 
 export const weeklyCheckins = pgTable('weekly_checkins', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -80,6 +80,7 @@ export const okrsRouter = router({
       dueDate: z.string().optional(),
       description: z.string().optional(),
       sortOrder: z.number().int().optional(),
+      weight: z.number().int().min(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.insert(okrNodes).values({
@@ -95,6 +96,7 @@ export const okrsRouter = router({
         dueDate: input.dueDate ?? null,
         description: input.description ?? null,
         sortOrder: input.sortOrder ?? 0,
+        weight: input.weight ?? 1,
       }).returning();
       return row;
     }),
@@ -112,6 +114,7 @@ export const okrsRouter = router({
       dueDate: z.string().nullable().optional(),
       description: z.string().nullable().optional(),
       sortOrder: z.number().int().optional(),
+      weight: z.number().int().min(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...rest } = input;
