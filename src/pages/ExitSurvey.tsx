@@ -224,6 +224,20 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
     else next = [...cur, o];
     setVals((p) => ({ ...p, reasonRanked: next.join('||'), reason: next[0] ?? '' }));
   };
+  const [attempted, setAttempted] = useState(false);
+  const isAnswered = (q: Q): boolean => {
+    if (q.type === 'behaviors') return [0, 1, 2, 3, 4, 5].every((i) => num(vals, 'b' + i) > 0);
+    if (q.type === 'scale') return num(vals, q.key) > 0;
+    if (q.type === 'text') return str(vals, q.key).trim() !== '';
+    if (q.type === 'chips' && q.rank && vol) return ranked.length > 0;
+    return str(vals, q.key) !== '';
+  };
+  const remaining = qs.filter((q) => !isAnswered(q)).length;
+  const complete = remaining === 0;
+  const submit = () => {
+    if (!complete) { setAttempted(true); return; }
+    save.mutate({ id: record.id, part, answers: vals, surprise: num(vals, 'surprise') || undefined });
+  };
 
   return (
     <div>
@@ -233,17 +247,15 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
         {qs.map((q) => {
           const text = vol ? q.vol : q.invol;
           const opts = (vol ? q.volOpts : q.involOpts) ?? [];
-          const [bl, bcls] = BRANCH_LABEL[q.branch];
+          const missing = attempted && !isAnswered(q);
           return (
-            <div key={q.key} className={`ls-card p-5 ${q.sig ? 'border-ls-blue ring-1 ring-ls-blue' : ''}`}>
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <div key={q.key} className={`ls-card p-5 ${missing ? 'border-ls-risk ring-1 ring-ls-risk' : ''}`}>
+              <div className="flex items-center gap-2 mb-2">
                 <span className="text-[11px] font-bold tracking-wider text-ls-ink-3">{q.num}</span>
-                {q.sig && <span className="ls-chip bg-ls-active text-white">★ Coordinated</span>}
-                <span className={`ls-chip ${bcls}`}>{bl}</span>
-                <span className="text-[12px] text-ls-ink-3">{q.topic}</span>
+                <span className="text-ls-risk text-[13px] font-bold" title="Required">*</span>
+                {missing && <span className="text-[11px] text-ls-risk font-semibold">Required</span>}
               </div>
-              <div className="text-[15px] font-semibold mb-2">{text}</div>
-              {q.riskHint && !vol && <p className="text-[12px] text-ls-risk mb-2.5">{q.riskHint}</p>}
+              <div className="text-[15px] font-semibold mb-3">{text}</div>
               {q.type === 'scale' && (
                 <div>
                   <div className="flex gap-2 flex-wrap">
@@ -306,8 +318,10 @@ function SurveyForm({ record, part, refetch }: { record: ExitRow; part: 'A' | 'B
           );
         })}
       </div>
-      <div className="flex items-center gap-3 mt-4">
-        <button disabled={save.isPending} onClick={() => save.mutate({ id: record.id, part, answers: vals, surprise: num(vals, 'surprise') || undefined })} className="ls-btn ls-btn-primary disabled:opacity-50">{(part === 'A' ? record.partA : record.partB) ? 'Update response' : 'Save response'}</button>
+      <div className="flex items-center gap-3 mt-4 flex-wrap">
+        <button disabled={save.isPending} onClick={submit} className="ls-btn ls-btn-primary disabled:opacity-50">{(part === 'A' ? record.partA : record.partB) ? 'Update response' : 'Save response'}</button>
+        {!complete && <span className="text-[13px] text-ls-ink-3">All questions are required — {remaining} left to answer.</span>}
+        {complete && !save.isSuccess && <span className="text-[13px] text-ls-thrive">All answered — ready to submit.</span>}
         {save.isSuccess && <span className="ls-chip bg-ls-thrive-bg text-ls-thrive">Saved</span>}
       </div>
     </div>
@@ -329,13 +343,14 @@ function Comparison({ record, all }: { record: ExitRow; all: ExitRow[] }) {
   const fb = (k: 'A' | 'B', i: number) => num(k === 'A' ? A : B, 'b' + i);
   const mgrCount = all.filter((r) => r.managerName && r.managerName === record.managerName).length;
 
-  const rows: Array<[string, string, string, 'align' | 'partial' | 'div']> = [
-    ['Primary reason', str(A, 'reason') || '—', str(B, 'reason') || '—', reasonMatch ? 'align' : 'div'],
-    [vol ? 'Manager surprised?' : 'Employee surprised?', `${se}/5`, `${sm}/5`, redFlag ? 'div' : gap === 2 ? 'partial' : 'align'],
-    ['Concerns surfaced vs. heard', str(A, 'concerns') || '—', str(B, 'awareness') || '—', str(A, 'concerns').startsWith('Yes') && str(B, 'awareness').startsWith('No') ? 'div' : 'partial'],
-    ['Gave clear, direct feedback', `${fb('A', 0)}/5`, `${fb('B', 0)}/5`, Math.abs(fb('A', 0) - fb('B', 0)) >= 2 ? 'div' : 'align'],
-    [vol ? 'Intervention attempted' : 'Chance to course-correct', str(A, 'course') || '—', str(B, 'intervention') || '—', 'partial'],
-    ['Manager eNPS / regret', `Work again: ${num(A, 'enps') || '—'}/5`, `${vol ? 'Regret' : 'Feedback-fix'}: ${num(B, 'regret') || '—'}/5`, 'align'],
+  type Branch = 'shared' | 'adapts' | 'split';
+  const rows: Array<[string, string, string, 'align' | 'partial' | 'div', Branch, boolean]> = [
+    ['Primary reason', str(A, 'reason') || '—', str(B, 'reason') || '—', reasonMatch ? 'align' : 'div', 'adapts', false],
+    [vol ? 'Manager surprised?' : 'Employee surprised?', `${se}/5`, `${sm}/5`, redFlag ? 'div' : gap === 2 ? 'partial' : 'align', 'adapts', true],
+    ['Concerns surfaced vs. heard', str(A, 'concerns') || '—', str(B, 'awareness') || '—', str(A, 'concerns').startsWith('Yes') && str(B, 'awareness').startsWith('No') ? 'div' : 'partial', 'adapts', false],
+    ['Gave clear, direct feedback', `${fb('A', 0)}/5`, `${fb('B', 0)}/5`, Math.abs(fb('A', 0) - fb('B', 0)) >= 2 ? 'div' : 'align', 'shared', false],
+    [vol ? 'Intervention attempted' : 'Chance to course-correct', str(A, 'course') || '—', str(B, 'intervention') || '—', 'partial', 'adapts', false],
+    ['Manager eNPS / regret', `Work again: ${num(A, 'enps') || '—'}/5`, `${vol ? 'Regret' : 'Feedback-fix'}: ${num(B, 'regret') || '—'}/5`, 'align', 'shared', true],
   ];
   const toneCls = (t: string) => t === 'align' ? 'bg-ls-thrive-bg text-ls-thrive' : t === 'partial' ? 'bg-ls-watch-bg text-ls-watch' : 'bg-ls-risk-bg text-ls-risk';
   const toneLbl = (t: string) => t === 'align' ? 'Aligned' : t === 'partial' ? 'Partial' : 'Divergent';
@@ -370,16 +385,23 @@ function Comparison({ record, all }: { record: ExitRow; all: ExitRow[] }) {
       <div>
         <h3 className="font-bold mb-2">Mirrored answers, side by side</h3>
         <div className="ls-card overflow-hidden">
-          {rows.map(([q, e, m, t], i) => (
-            <div key={i} className="p-3.5 border-b border-ls-line last:border-0">
-              <div className="text-[13px] font-semibold text-ls-ink-2 mb-1.5">{q}</div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 text-sm text-ls-blue-deep">{e}</div>
-                <span className={`ls-chip ${toneCls(t)}`}>{toneLbl(t)}</span>
-                <div className="flex-1 text-sm text-right">{m}</div>
+          {rows.map(([q, e, m, t, br, sig], i) => {
+            const [bl, bcls] = BRANCH_LABEL[br];
+            return (
+              <div key={i} className="p-3.5 border-b border-ls-line last:border-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span className="text-[13px] font-semibold text-ls-ink-2">{q}</span>
+                  {sig && <span className="ls-chip bg-ls-active text-white text-[11px]">★ Coordinated</span>}
+                  <span className={`ls-chip ${bcls} text-[11px]`}>{bl}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 text-sm text-ls-blue-deep">{e}</div>
+                  <span className={`ls-chip ${toneCls(t)}`}>{toneLbl(t)}</span>
+                  <div className="flex-1 text-sm text-right">{m}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
