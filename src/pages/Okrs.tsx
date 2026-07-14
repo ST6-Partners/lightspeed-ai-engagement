@@ -1,24 +1,37 @@
 import { fmtDate } from '../lib/date';
 // OKRs — live nested objectives → key results → tasks (DD-002 Planning).
-import { useState, type ReactNode } from 'react';
-import { ChevronRight, Target, KeyRound, CheckSquare, Trash2 } from 'lucide-react';
+// Editable: title, owner (linked to the Organization directory), status,
+// status light, due date, description; add key results / tasks inline.
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 type Light = 'green' | 'yellow' | 'red';
 interface OkrRow {
   id: string; parentId: string | null; type: string; title: string;
-  owner: string | null; status: string; light: string | null;
+  owner: string | null; ownerUserId: string | null; status: string; light: string | null;
   dueDate: string | null; description: string | null; sortOrder: number;
 }
 
 const LIGHT_HEX: Record<Light, string> = { green: '#2E9E7B', yellow: '#C99300', red: '#C2615A' };
 const TYPE_ICON: Record<string, typeof Target> = { objective: Target, key_result: KeyRound, task: CheckSquare };
 
-const STATUS_LABEL: Record<string, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  on_hold: 'On hold',
-  complete: 'Complete',
+const STATUS_OPTS: { value: string; label: string }[] = [
+  { value: 'not_started', label: 'Not started' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'complete', label: 'Complete' },
+];
+const STATUS_LABEL: Record<string, string> = Object.fromEntries(STATUS_OPTS.map((s) => [s.value, s.label]));
+const LIGHT_OPTS: { value: string; label: string }[] = [
+  { value: '', label: '— None' },
+  { value: 'green', label: 'Green' },
+  { value: 'yellow', label: 'Yellow' },
+  { value: 'red', label: 'Red' },
+];
+const CHILD_TYPE: Record<string, { type: 'key_result' | 'task'; label: string; title: string } | undefined> = {
+  objective: { type: 'key_result', label: '+ Key Result', title: 'New Key Result' },
+  key_result: { type: 'task', label: '+ Task', title: 'New Task' },
 };
 const PERSON_GROUPS = [
   { type: 'objective', label: 'Objectives' },
@@ -26,9 +39,19 @@ const PERSON_GROUPS = [
   { type: 'task', label: 'Tasks' },
 ] as const;
 
+const inputCls =
+  'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-active';
+const labelCls = 'block text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1';
+
+interface EditForm {
+  title: string; ownerUserId: string; status: string; light: string;
+  dueDate: string; description: string;
+}
+
 export default function Okrs() {
   const { data, isLoading, refetch } = trpc.okrs.list.useQuery();
   const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
+  const update = trpc.okrs.update.useMutation({ onSuccess: () => refetch() });
   const remove = trpc.okrs.remove.useMutation({ onSuccess: () => { setSelected(null); refetch(); } });
   const { data: org } = trpc.organization.list.useQuery();
 
@@ -36,18 +59,81 @@ export default function Okrs() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<EditForm>({
+    title: '', ownerUserId: '', status: 'not_started', light: '', dueDate: '', description: '',
+  });
 
   const rows = (data ?? []) as OkrRow[];
+  const members = org?.members ?? [];
   const childrenOf = (pid: string | null) =>
     rows.filter((r) => r.parentId === pid).sort((a, b) => a.sortOrder - b.sortOrder);
   const sel = rows.find((r) => r.id === selected) ?? null;
   const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  const members = org?.members ?? [];
+  // Owner display resolves through the Organization directory via the user
+  // link first, so a renamed/updated employee always shows current data; the
+  // denormalized name is only a fallback for unlinked legacy rows.
+  const ownerName = (n: OkrRow): string | null => {
+    if (n.ownerUserId) {
+      const m = members.find((x) => x.id === n.ownerUserId);
+      if (m) return m.name;
+    }
+    return n.owner && n.owner.trim() ? n.owner : null;
+  };
+
+  // Leaving a node or switching nodes cancels an in-progress edit.
+  useEffect(() => { setEditing(false); }, [selected]);
+
+  const startEdit = () => {
+    if (!sel) return;
+    setForm({
+      title: sel.title,
+      ownerUserId: sel.ownerUserId ?? '',
+      status: sel.status,
+      light: sel.light ?? '',
+      dueDate: sel.dueDate ?? '',
+      description: sel.description ?? '',
+    });
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    if (!sel) return;
+    const owner = form.ownerUserId
+      ? (members.find((m) => m.id === form.ownerUserId)?.name ?? null)
+      : null;
+    update.mutate(
+      {
+        id: sel.id,
+        title: form.title.trim() || sel.title,
+        ownerUserId: form.ownerUserId || null,
+        owner,
+        status: form.status as OkrRow['status'] as never,
+        light: (form.light || null) as never,
+        dueDate: form.dueDate || null,
+        description: form.description.trim() || null,
+      },
+      { onSuccess: () => setEditing(false) },
+    );
+  };
+
+  const addChild = () => {
+    if (!sel) return;
+    const spec = CHILD_TYPE[sel.type];
+    if (!spec) return;
+    const siblings = childrenOf(sel.id);
+    create.mutate(
+      { parentId: sel.id, type: spec.type, title: spec.title, sortOrder: (siblings.length + 1) * 10 },
+      { onSuccess: () => setExpanded((e) => ({ ...e, [sel.id]: true })) },
+    );
+  };
+
   const selectedPerson = members.find((p) => p.id === selectedPersonId) ?? null;
   const ownedOkrs = selectedPerson
-    ? rows.filter(
-        (n) => (n.owner ?? '').trim().toLowerCase() === selectedPerson.name.trim().toLowerCase(),
+    ? rows.filter((n) =>
+        n.ownerUserId === selectedPerson.id ||
+        (!n.ownerUserId && (n.owner ?? '').trim().toLowerCase() === selectedPerson.name.trim().toLowerCase()),
       )
     : [];
   const initials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2);
@@ -73,6 +159,8 @@ export default function Okrs() {
       </div>
     );
   };
+
+  const childSpec = sel ? CHILD_TYPE[sel.type] : undefined;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -104,33 +192,99 @@ export default function Okrs() {
 
           <div className="flex-1 p-5 min-w-0">
             {sel ? (
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
-                  <button onClick={() => remove.mutate({ id: sel.id })}
-                    className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Archive</button>
-                </div>
-                <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
-                <dl className="grid grid-cols-2 gap-4 text-sm">
-                  <Field label="Owner">{sel.owner ?? '—'}</Field>
-                  <Field label="Status">{sel.status.replace('_', ' ')}</Field>
-                  {sel.light && (
+              editing ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditing(false)}
+                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Cancel</button>
+                      <button onClick={saveEdit} disabled={update.isPending}
+                        className="ls-btn ls-btn-primary text-xs py-1.5 px-3">
+                        {update.isPending ? 'Saving…' : 'Save'}</button>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={labelCls}>Title</label>
+                      <input className={inputCls} value={form.title}
+                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Owner</label>
+                        <select className={inputCls} value={form.ownerUserId}
+                          onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))}>
+                          <option value="">— Unassigned</option>
+                          {members.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}{m.role ? ` · ${m.role}` : ''}</option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-ls-ink-3 mt-1">From the Organization directory.</p>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Status</label>
+                        <select className={inputCls} value={form.status}
+                          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
+                          {STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Status light</label>
+                        <select className={inputCls} value={form.light}
+                          onChange={(e) => setForm((f) => ({ ...f, light: e.target.value }))}>
+                          {LIGHT_OPTS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Due date</label>
+                        <input type="date" className={inputCls} value={form.dueDate}
+                          onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Description</label>
+                      <textarea className={inputCls} rows={4} value={form.description}
+                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
+                    <div className="flex gap-2">
+                      {childSpec && (
+                        <button onClick={addChild} disabled={create.isPending}
+                          className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep">
+                          <Plus size={13} /> {childSpec.label.replace('+ ', '')}</button>
+                      )}
+                      <button onClick={startEdit}
+                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Pencil size={13} /> Edit</button>
+                      <button onClick={() => remove.mutate({ id: sel.id })}
+                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Archive</button>
+                    </div>
+                  </div>
+                  <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
+                  <dl className="grid grid-cols-2 gap-4 text-sm">
+                    <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
+                    <Field label="Status">{STATUS_LABEL[sel.status] ?? sel.status.replace('_', ' ')}</Field>
                     <Field label="Status light">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: LIGHT_HEX[sel.light as Light] }} />
-                        <span className="capitalize">{sel.light}</span>
-                      </span>
+                      {sel.light ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: LIGHT_HEX[sel.light as Light] }} />
+                          <span className="capitalize">{sel.light}</span>
+                        </span>
+                      ) : '—'}
                     </Field>
-                  )}
-                  {sel.dueDate && <Field label="Due date">{fmtDate(sel.dueDate)}</Field>}
-                </dl>
-                {sel.description && (
+                    <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
+                  </dl>
                   <div className="mt-4">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
-                    <p className="text-sm text-ls-ink-2">{sel.description}</p>
+                    <p className="text-sm text-ls-ink-2 whitespace-pre-wrap">{sel.description || '—'}</p>
                   </div>
-                )}
-              </>
+                </>
+              )
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-ls-ink-3">Select an item to see its details.</div>
             )}
