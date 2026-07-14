@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Hand, Link2, X, Trash2, Pencil } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { fmtDate } from '../lib/date';
 
 const MOODS = ['😞', '😐', '🙂', '😀', '🤩'];
 const MOOD_LABELS = ['Drained', 'Low', 'Okay', 'Good', 'Energized'];
@@ -19,12 +20,14 @@ export default function WeeklyPlan() {
   const { data, refetch } = trpc.weeklyPlan.getCurrent.useQuery();
   const save = trpc.weeklyPlan.save.useMutation({ onSuccess: () => refetch() });
   const { data: okrs } = trpc.okrs.list.useQuery();
+  const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
 
   const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
   const [wins, setWins] = useState('');
   const [blockers, setBlockers] = useState('');
   const [mood, setMood] = useState<number | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
+  const [addedCi, setAddedCi] = useState<Set<number>>(new Set());
 
   // Which picker is open: 'add' for the Add-priority button, or a row index for a row's link control.
   const [picker, setPicker] = useState<'add' | number | null>(null);
@@ -81,6 +84,13 @@ export default function WeeklyPlan() {
   const addOwn = () => setPriorities((p) => [...p, { text: '', okrNodeId: null }]);
   const addFromNode = (id: string, title: string) =>
     setPriorities((p) => [...p, { text: title, okrNodeId: id }]);
+  const addCiOne = (i: number, text: string) => { setPriorities((p) => [...p, { text, okrNodeId: null }]); setAddedCi((sx) => new Set(sx).add(i)); };
+  const addCiAll = () => {
+    const items = ciPriorities?.items ?? [];
+    const toAdd = items.filter((_, i) => !addedCi.has(i));
+    if (toAdd.length) setPriorities((p) => [...p, ...toAdd.map((t) => ({ text: t, okrNodeId: null }))]);
+    setAddedCi(new Set(items.map((_, i) => i)));
+  };
 
   const onSave = () =>
     save.mutate({
@@ -149,6 +159,31 @@ export default function WeeklyPlan() {
           <p className="text-sm text-ls-ink-3 mt-1.5">Optional weekly check-in — no scoring, no lock.{weekStart ? ` Week of ${weekStart}.` : ''}</p>
         </div>
       </div>
+
+      {ciPriorities && ciPriorities.items.length > 0 && (
+        <section className="ls-card p-5 mt-5">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <h2 className="font-bold">Priorities from check-in</h2>
+            <button onClick={addCiAll} className="text-sm font-medium text-ls-blue-deep hover:underline whitespace-nowrap">+ Add all to my priorities</button>
+          </div>
+          <p className="text-sm text-ls-ink-3 mb-3">From your check-in on {fmtDate(ciPriorities.weekOf)} — add any of these to your plan below.</p>
+          <ul className="space-y-2">
+            {ciPriorities.items.map((it, i) => {
+              const added = addedCi.has(i);
+              return (
+                <li key={i} className="flex items-center gap-2">
+                  <span className="text-ls-ink-3 shrink-0">•</span>
+                  <span className="flex-1 text-sm text-ls-ink">{it}</span>
+                  <button disabled={added} onClick={() => addCiOne(i, it)}
+                    className={`text-sm font-medium inline-flex items-center gap-1 whitespace-nowrap ${added ? 'text-ls-thrive' : 'text-ls-blue-deep hover:underline'}`}>
+                    {added ? '✓ Added' : '+ add to my priorities'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="ls-card p-5 mt-5">
         <h2 className="font-bold mb-3">Priorities this week</h2>

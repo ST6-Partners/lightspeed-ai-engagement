@@ -48,4 +48,26 @@ export const checkinsRouter = router({
       orderBy: [desc(checkinResponses.submittedAt)],
     });
   }),
+
+  // The signed-in user's most recent check-in 'priorities' answer, split into
+  // individual to-do items so the Weekly Plan can offer them for one-click add.
+  myLatestPriorities: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.checkinResponses.findMany({
+      where: eq(checkinResponses.respondentId, ctx.user.id),
+      orderBy: [desc(checkinResponses.submittedAt)],
+    });
+    const splitItems = (t: string): string[] =>
+      t.split(/\r?\n|\u2022|\u00b7/).map((x) => x.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+    type A = { type: string; category?: string | null; text: string; answerText?: string | null };
+    for (const r of rows) {
+      const ans = (Array.isArray(r.answers) ? r.answers : []) as A[];
+      let prio = ans.filter((a) => a.type === 'text' && (a.category ?? '') === 'priorities' && !!a.answerText && a.answerText.trim().length > 0);
+      if (prio.length === 0) prio = ans.filter((a) => a.type === 'text' && /priorit/i.test(a.text) && !!a.answerText && a.answerText.trim().length > 0);
+      if (prio.length > 0) {
+        const items = prio.flatMap((a) => splitItems(a.answerText as string));
+        if (items.length > 0) return { weekOf: r.weekOf, submittedAt: r.submittedAt, questionText: prio[0].text, items };
+      }
+    }
+    return null;
+  }),
 });
