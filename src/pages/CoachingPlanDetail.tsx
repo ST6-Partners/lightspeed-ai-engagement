@@ -12,11 +12,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
-import { ArrowLeft, Trash2, Save, Sparkles, Printer, Plus, X, HeartHandshake } from 'lucide-react';
+import { ArrowLeft, Trash2, Save, Sparkles, Printer, Plus, X, HeartHandshake, ShieldAlert } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 
-type Focus = { valueId: string | null; title: string; coachingNote: string };
+type Focus = { valueId: string | null; itemType: 'value' | 'criterion' | null; itemId: string | null; itemName: string | null; title: string; coachingNote: string };
 
 export default function CoachingPlanDetail() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +31,11 @@ export default function CoachingPlanDetail() {
   const save = trpc.coaching.save.useMutation({ onSuccess: () => planQuery.refetch(), onError: (e) => alert(e.message) });
   const remove = trpc.coaching.remove.useMutation({ onSuccess: () => navigate('/coaching-plans'), onError: (e) => alert(e.message) });
   const regen = trpc.coaching.draftFromReview.useMutation({ onError: (e) => alert(e.message) });
+  const regenSession = trpc.reviewSession.draftFromSession.useMutation({ onError: (e) => alert(e.message) });
+  const forkPip = trpc.reviewSession.forkToPip.useMutation({
+    onSuccess: (r) => navigate(`/pips/${r.pipId}`),
+    onError: (e) => alert(e.message),
+  });
 
   const [status, setStatus] = useState<'draft' | 'final'>('draft');
   const [summary, setSummary] = useState('');
@@ -44,7 +49,7 @@ export default function CoachingPlanDetail() {
       setSummary(plan.summaryNarrative ?? '');
       setStrengths(plan.strengths ?? '');
       setAiGenerated(plan.aiGenerated ?? false);
-      setFocus((plan.focusAreas ?? []).map((f: any) => ({ valueId: f.valueId, title: f.title, coachingNote: f.coachingNote ?? '' })));
+      setFocus((plan.focusAreas ?? []).map((f: any) => ({ valueId: f.valueId, itemType: f.itemType ?? (f.valueId ? 'value' : null), itemId: f.itemId ?? f.valueId ?? null, itemName: f.valueName ?? null, title: f.title, coachingNote: f.coachingNote ?? '' })));
     }
   }, [plan]);
 
@@ -52,27 +57,37 @@ export default function CoachingPlanDetail() {
   if (!plan) return <div className="p-8 text-center text-gray-500">Plan not found. <Link className="text-blue-600" to="/coaching-plans">Back to list</Link></div>;
 
   const updateFocus = (i: number, patch: Partial<Focus>) => setFocus((f) => f.map((x, idx) => idx === i ? { ...x, ...patch } : x));
-  const addFocus = () => setFocus((f) => f.length >= 3 ? f : [...f, { valueId: null, title: '', coachingNote: '' }]);
+  const addFocus = () => setFocus((f) => f.length >= 3 ? f : [...f, { valueId: null, itemType: null, itemId: null, itemName: null, title: '', coachingNote: '' }]);
   const removeFocus = (i: number) => setFocus((f) => f.filter((_, idx) => idx !== i));
 
   const doSave = () => {
     const cleaned = focus.filter((f) => f.title.trim());
     save.mutate({
       id: plan.id, status, summaryNarrative: summary || null, strengths: strengths || null,
-      aiGenerated, focusAreas: cleaned.map((f) => ({ valueId: f.valueId, title: f.title.trim(), coachingNote: f.coachingNote || null })),
+      aiGenerated, focusAreas: cleaned.map((f) => ({ valueId: f.valueId, itemType: f.itemType, itemId: f.itemId, title: f.title.trim(), coachingNote: f.coachingNote || null })),
     });
   };
 
-  const regenerate = () => {
-    if (!plan.evaluationId) { alert('This plan is not linked to a review, so it cannot be regenerated.'); return; }
-    if (!confirm('Replace the narrative, strengths, and focus areas with a fresh AI draft from the source review? Unsaved edits will be lost.')) return;
-    regen.mutate({ evaluationId: plan.evaluationId }, {
-      onSuccess: (d) => {
-        setSummary(d.summaryNarrative); setStrengths(d.strengths); setAiGenerated(d.aiGenerated);
-        setFocus(d.focusAreas.map((f) => ({ valueId: f.valueId, title: f.title, coachingNote: f.coachingNote })));
-      },
-    });
+  const applyDraft = (d: any) => {
+    setSummary(d.summaryNarrative); setStrengths(d.strengths); setAiGenerated(d.aiGenerated);
+    setFocus((d.focusAreas ?? []).map((f: any) => ({
+      valueId: f.valueId ?? (f.itemType === 'value' ? f.itemId : null),
+      itemType: f.itemType ?? (f.valueId ? 'value' : null), itemId: f.itemId ?? f.valueId ?? null,
+      itemName: null, title: f.title, coachingNote: f.coachingNote,
+    })));
   };
+
+  const regenerate = () => {
+    if (!confirm('Replace the narrative, strengths, and focus areas with a fresh AI draft from the review? Unsaved edits will be lost.')) return;
+    if (plan.sessionId) {
+      regenSession.mutate({ employeeId: plan.employeeId as string, periodLabel: plan.periodLabel ?? null }, { onSuccess: applyDraft });
+    } else if (plan.evaluationId) {
+      regen.mutate({ evaluationId: plan.evaluationId }, { onSuccess: applyDraft });
+    } else {
+      alert('This plan is not linked to a review, so it cannot be regenerated.');
+    }
+  };
+  const regenerating = regen.isLoading || regenSession.isLoading;
 
   const exportPdf = () => printPlan({
     employeeName: plan.employeeName, periodLabel: plan.periodLabel, authorName: plan.authorName,
@@ -92,9 +107,10 @@ export default function CoachingPlanDetail() {
           <h1 className="text-2xl font-bold tracking-tight">{plan.employeeName}</h1>
           <p className="text-sm text-ls-ink-3 mt-0.5">
             {plan.periodLabel || 'No period'}
-            {plan.evaluationId ? <> · from review · </> : <> · </>}
+            {(plan.sessionId || plan.evaluationId) ? <> · from review · </> : <> · </>}
             <span className="text-gray-400">created {fmtDate(plan.createdAt as any)}{plan.authorName ? ` by ${plan.authorName}` : ''}</span>
             {aiGenerated && <span className="ml-1.5 inline-flex items-center gap-1 text-violet-600"><Sparkles size={12} /> AI-drafted</span>}
+            {(plan as any).track === 'pip' && <span className="ml-1.5 inline-flex items-center gap-1 text-rose-600 font-medium"><ShieldAlert size={12} /> PIP track</span>}
           </p>
         </div>
         <button onClick={exportPdf}
@@ -115,11 +131,21 @@ export default function CoachingPlanDetail() {
             <option value="final">Final</option>
           </select>
         </div>
-        {canEdit && plan.evaluationId && (
-          <button onClick={regenerate} disabled={regen.isLoading}
+        {canEdit && (plan.sessionId || plan.evaluationId) && (
+          <button onClick={regenerate} disabled={regenerating}
             className="inline-flex items-center gap-1.5 px-3 py-2 border border-violet-200 text-violet-700 rounded-md text-sm font-medium hover:bg-violet-50 disabled:opacity-50">
-            <Sparkles size={14} /> {regen.isLoading ? 'Regenerating…' : 'Regenerate with AI'}
+            <Sparkles size={14} /> {regenerating ? 'Regenerating…' : 'Regenerate with AI'}
           </button>
+        )}
+        {canEdit && plan.sessionId && (plan as any).track !== 'pip' && (
+          <button onClick={() => { if (confirm('Convert this into a PIP track? A Performance Improvement Plan will be created, seeded from this review\'s weakest items and the focus areas below. The coaching plan stays intact.')) forkPip.mutate({ planId: plan.id }); }}
+            disabled={forkPip.isLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-rose-200 text-rose-700 rounded-md text-sm font-medium hover:bg-rose-50 disabled:opacity-50">
+            <ShieldAlert size={14} /> {forkPip.isLoading ? 'Creating PIP…' : 'Convert to PIP'}
+          </button>
+        )}
+        {(plan as any).track === 'pip' && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md"><ShieldAlert size={14} /> PIP attached — find it under PIPs</span>
         )}
       </div>
 
@@ -151,9 +177,13 @@ export default function CoachingPlanDetail() {
                 )}
               </div>
               <div className="flex flex-col gap-2 pl-8">
-                <select disabled={!canEdit} value={f.valueId ?? ''} onChange={(e) => updateFocus(i, { valueId: e.target.value || null })}
+                {f.itemType === 'criterion' && f.itemName && (
+                  <div className="text-xs text-gray-500">Mapped to performance criterion: <span className="font-medium text-gray-700">{f.itemName}</span></div>
+                )}
+                <select disabled={!canEdit} value={f.itemType === 'criterion' ? '' : (f.valueId ?? '')}
+                  onChange={(e) => { const v = e.target.value || null; updateFocus(i, { valueId: v, itemType: v ? 'value' : null, itemId: v, itemName: null }); }}
                   className="w-full sm:w-64 px-3 py-1.5 border border-gray-300 rounded-md text-xs bg-white disabled:bg-gray-50">
-                  <option value="">Not tied to a value</option>
+                  <option value="">{f.itemType === 'criterion' ? 'Keep performance-criterion mapping' : 'Not tied to a value'}</option>
                   {(values ?? []).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
                 <textarea disabled={!canEdit} rows={2} value={f.coachingNote} onChange={(e) => updateFocus(i, { coachingNote: e.target.value })}

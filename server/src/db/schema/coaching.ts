@@ -31,6 +31,12 @@ export const coachingPlans = pgTable('coaching_plans', {
   // so a plan survives if its source review is later removed.
   evaluationId: uuid('evaluation_id')
     .references(() => reviews.id, { onDelete: 'set null' }),
+  // The review-session container this plan belongs to (FK in migration 0040). The
+  // go-forward reads BOTH passes (values + performance) through the session.
+  sessionId: uuid('session_id'),
+  // The go-forward track. 'coaching' = growth areas only; 'pip' = a PIP addendum
+  // is attached (see pips.source_session_id). Every plan starts as 'coaching'.
+  track: varchar('track', { length: 16 }).notNull().default('coaching'),
   authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
   periodLabel: text('period_label'),
   status: varchar('status', { length: 16 }).notNull().default('draft'), // draft | final
@@ -54,6 +60,10 @@ export const coachingPlanFocusAreas = pgTable('coaching_plan_focus_areas', {
   // The company value this growth area maps to (nullable — a focus area can be
   // free-standing). set-null so retiring a value doesn't drop the focus area.
   valueId: uuid('value_id').references(() => companyValues.id, { onDelete: 'set null' }),
+  // Polymorphic mapping (migration 0040): a focus area can map to a company value
+  // OR a performance criterion, or stand free. item_type resolves item_id's table.
+  itemType: varchar('item_type', { length: 16 }),
+  itemId: uuid('item_id'),
   title: varchar('title', { length: 200 }).notNull(),
   coachingNote: text('coaching_note'),
   sortOrder: integer('sort_order').notNull().default(0),

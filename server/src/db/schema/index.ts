@@ -64,6 +64,8 @@ export {
 export { companyValues, reviewPeriods } from './values.js';
 // Shared employee reviews (values + performance), 2026-07-09 consolidation
 export { reviews, reviewScores } from './reviews.js';
+// Review session container (the Reviews feature; groups both passes + go-forward — 2026-07-14)
+export { reviewSessions } from './reviewSessions.js';
 
 // Performance criteria (AIE-owned) + employee performance evaluations (Reviews section, 2026-07-09)
 export { performanceCriteria } from './performance.js';

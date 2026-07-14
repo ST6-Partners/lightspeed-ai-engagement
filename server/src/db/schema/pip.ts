@@ -76,6 +76,9 @@ export const pips = pgTable('pips', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedBy: uuid('archived_by').references(() => users.id),
 
+  // The review session this PIP was forked from (Reviews go-forward fork; FK in migration 0040).
+  sourceSessionId: uuid('source_session_id'),
+
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

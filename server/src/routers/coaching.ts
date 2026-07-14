@@ -18,6 +18,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { router, protectedProcedure } from '../trpc.js';
 import { coachingPlans, coachingPlanFocusAreas } from '../db/schema/coaching.js';
 import { companyValues } from '../db/schema/values.js';
+import { performanceCriteria } from '../db/schema/performance.js';
 import { reviews, reviewScores } from '../db/schema/reviews.js';
 import { users } from '../db/schema/core.js';
 import { requireManager } from '../services/permissions.js';
@@ -32,6 +33,8 @@ type Draft = { summaryNarrative: string; strengths: string; focusAreas: DraftFoc
 
 const FocusInput = z.object({
   valueId: z.string().uuid().nullable().optional(),
+  itemType: z.enum(['value', 'criterion']).nullable().optional(),
+  itemId: z.string().uuid().nullable().optional(),
   title: z.string().min(1).max(200),
   coachingNote: z.string().max(4000).nullable().optional(),
 });
@@ -212,6 +215,8 @@ export const coachingRouter = router({
       });
       const values = await ctx.db.query.companyValues.findMany();
       const valById = new Map(values.map((v) => [v.id, v]));
+      const criteria = await ctx.db.query.performanceCriteria.findMany();
+      const critById = new Map(criteria.map((c: any) => [c.id, c]));
       const employee = await ctx.db.query.users.findFirst({ where: eq(users.id, plan.employeeId), columns: { id: true, name: true, email: true } });
       const author = plan.authorId
         ? await ctx.db.query.users.findFirst({ where: eq(users.id, plan.authorId), columns: { id: true, name: true } })
@@ -220,10 +225,16 @@ export const coachingRouter = router({
         ...plan,
         employeeName: employee?.name ?? employee?.email ?? '—',
         authorName: author?.name ?? null,
-        focusAreas: focus.map((f) => ({
-          id: f.id, valueId: f.valueId, title: f.title, coachingNote: f.coachingNote, sortOrder: f.sortOrder,
-          valueName: f.valueId ? valById.get(f.valueId)?.name ?? null : null,
-        })),
+        focusAreas: focus.map((f: any) => {
+          const itemName = f.itemType === 'criterion'
+            ? (f.itemId ? critById.get(f.itemId)?.name ?? null : null)
+            : (f.itemId ?? f.valueId ? valById.get(f.itemId ?? f.valueId)?.name ?? null : null);
+          return {
+            id: f.id, valueId: f.valueId, itemType: f.itemType ?? (f.valueId ? 'value' : null), itemId: f.itemId ?? f.valueId ?? null,
+            title: f.title, coachingNote: f.coachingNote, sortOrder: f.sortOrder,
+            valueName: itemName,
+          };
+        }),
       };
     }),
 
@@ -275,6 +286,7 @@ export const coachingRouter = router({
     .input(z.object({
       id: z.string().uuid(),
       status: z.enum(['draft', 'final']).optional(),
+      track: z.enum(['coaching', 'pip']).optional(),
       periodLabel: z.string().max(120).nullable().optional(),
       summaryNarrative: z.string().max(20000).nullable().optional(),
       strengths: z.string().max(20000).nullable().optional(),
@@ -287,6 +299,7 @@ export const coachingRouter = router({
       await ctx.db.transaction(async (tx: any) => {
         await tx.update(coachingPlans).set({
           status: input.status ?? existing.status,
+          track: input.track ?? (existing as any).track ?? 'coaching',
           periodLabel: input.periodLabel === undefined ? existing.periodLabel : input.periodLabel,
           summaryNarrative: input.summaryNarrative === undefined ? existing.summaryNarrative : input.summaryNarrative,
           strengths: input.strengths === undefined ? existing.strengths : input.strengths,
@@ -296,10 +309,15 @@ export const coachingRouter = router({
         await tx.delete(coachingPlanFocusAreas).where(eq(coachingPlanFocusAreas.planId, input.id));
         if (input.focusAreas.length) {
           await tx.insert(coachingPlanFocusAreas).values(
-            input.focusAreas.map((f, i) => ({
-              planId: input.id, valueId: f.valueId ?? null, title: f.title,
-              coachingNote: f.coachingNote ?? null, sortOrder: (i + 1) * 10,
-            })),
+            input.focusAreas.map((f, i) => {
+              const itemType = f.itemType ?? (f.valueId ? 'value' : null);
+              const itemId = f.itemId ?? f.valueId ?? null;
+              return {
+                planId: input.id, valueId: itemType === 'value' ? itemId : (f.valueId ?? null),
+                itemType, itemId, title: f.title,
+                coachingNote: f.coachingNote ?? null, sortOrder: (i + 1) * 10,
+              };
+            }),
           );
         }
       });

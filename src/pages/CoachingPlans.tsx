@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
-import { HeartHandshake, Plus, Trash2, ChevronRight, Sparkles } from 'lucide-react';
+import { HeartHandshake, Plus, Trash2, ChevronRight, Sparkles, CheckCircle2, Circle } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 
@@ -99,47 +99,70 @@ export default function CoachingPlans() {
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { data: employees } = trpc.values.listEmployees.useQuery();
+  const { data: periods } = trpc.values.listPeriods.useQuery();
   const [employeeId, setEmployeeId] = useState('');
-  const [evaluationId, setEvaluationId] = useState('');
-  const evalsQuery = trpc.values.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
-  const create = trpc.coaching.createFromReview.useMutation({
+  const [periodLabel, setPeriodLabel] = useState('');
+  const ready = !!employeeId && !!periodLabel;
+  const statusQ = trpc.reviewSession.status.useQuery({ employeeId, periodLabel }, { enabled: ready });
+  const st = statusQ.data;
+  const create = trpc.reviewSession.createFromSession.useMutation({
     onSuccess: (r) => onCreated(r.id),
     onError: (e) => alert(e.message),
   });
 
-  const evals = evalsQuery.data ?? [];
+  const Check = ({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) => (
+    <div className="flex items-center gap-2 text-sm py-0.5">
+      {ok ? <CheckCircle2 size={15} className="text-green-600 shrink-0" /> : <Circle size={15} className="text-gray-300 shrink-0" />}
+      <span className={ok ? 'text-gray-800' : 'text-gray-500'}>{label}</span>
+      {hint && <span className="text-xs text-gray-400">— {hint}</span>}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2"><Sparkles size={16} className="text-violet-500" /> New coaching plan</h3>
-        <p className="text-xs text-gray-500 mb-4">Pick an employee and one of their reviews. We'll draft the narrative, strengths, and growth areas — you can edit everything after.</p>
+        <p className="text-xs text-gray-500 mb-4">The go-forward is built from the whole review — both the values and performance passes. Finish and mark the <b>performance</b> review final, then generate.</p>
 
         <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Employee</label>
         <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white mb-3"
-          value={employeeId} onChange={(e) => { setEmployeeId(e.target.value); setEvaluationId(''); }}>
+          value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
           <option value="">Select an employee…</option>
           {(employees ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.name ?? e.email}</option>)}
         </select>
 
-        <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Source review</label>
-        <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white mb-1 disabled:bg-gray-50"
-          value={evaluationId} onChange={(e) => setEvaluationId(e.target.value)} disabled={!employeeId || evalsQuery.isLoading}>
-          <option value="">{!employeeId ? 'Select an employee first' : evalsQuery.isLoading ? 'Loading…' : 'Select a review…'}</option>
-          {evals.map((r: any) => (
-            <option key={r.id} value={r.id}>
-              {(r.periodLabel || 'Review')} · {fmtDate(r.evaluatedAt)} · avg {r.avgScore != null ? r.avgScore.toFixed(1) : '—'} ({r.scoredCount} values)
-            </option>
-          ))}
+        <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Review period</label>
+        <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white mb-3"
+          value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)}>
+          <option value="">Select a period…</option>
+          {(periods ?? []).map((p: any) => <option key={p.id} value={p.label}>{p.label}</option>)}
         </select>
-        {employeeId && !evalsQuery.isLoading && evals.length === 0 && (
-          <p className="text-xs text-amber-600 mb-2">No reviews found for this employee yet. Create a review first under Reviews.</p>
+
+        {ready && statusQ.isLoading && <div className="text-xs text-gray-400 mb-2">Checking the review…</div>}
+
+        {ready && st && st.planId && (
+          <div className="rounded-md border border-blue-200 bg-blue-50 p-3 mb-2 text-sm">
+            A coaching plan already exists for this review.
+            <button onClick={() => onCreated(st.planId!)} className="ml-1 font-medium text-blue-700 underline">Open it</button>.
+          </div>
+        )}
+
+        {ready && st && !st.planId && (
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 mb-2">
+            <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1.5">Rearview readiness</div>
+            <Check ok={st.hasValues} label="Values review" hint={st.hasValues ? undefined : 'not started'} />
+            <Check ok={st.performanceFinal} label="Performance review — final"
+              hint={st.performanceFinal ? undefined : st.hasPerformance ? 'scored, not yet marked final' : 'not started'} />
+            {!st.canDraft && (
+              <p className="text-xs text-amber-600 mt-1.5">The performance review must be complete and marked <b>Final</b> under Reviews before the go-forward can be generated.</p>
+            )}
+          </div>
         )}
 
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onClose} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-          <button onClick={() => evaluationId && create.mutate({ evaluationId })}
-            disabled={!evaluationId || create.isLoading}
+          <button onClick={() => create.mutate({ employeeId, periodLabel })}
+            disabled={!st?.canDraft || !!st?.planId || create.isLoading}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             <Sparkles size={14} /> {create.isLoading ? 'Drafting…' : 'Generate plan'}
           </button>

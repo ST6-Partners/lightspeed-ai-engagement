@@ -16,8 +16,9 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { Star, Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 const band = (n: number | null) =>
@@ -118,6 +119,10 @@ export default function Reviews() {
         </div>
       )}
 
+      {mode === 'list' && !!periodLabel && !!employeeId && (
+        <GoForwardBanner employeeId={employeeId} periodLabel={periodLabel} canEdit={canEdit} />
+      )}
+
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 mb-4">
         {([['values', 'Values'], ['performance', 'Performance']] as [Tab, string][]).map(([key, label]) => (
@@ -181,6 +186,64 @@ export default function Reviews() {
 // ============================================================
 // VALUES TAB — existing behavior preserved verbatim.
 // ============================================================
+
+function GoForwardBanner({ employeeId, periodLabel, canEdit }: { employeeId: string; periodLabel: string; canEdit: boolean }) {
+  const navigate = useNavigate();
+  const statusQ = trpc.reviewSession.status.useQuery({ employeeId, periodLabel });
+  const create = trpc.reviewSession.createFromSession.useMutation({
+    onSuccess: (r) => navigate(`/coaching-plans/${r.id}`),
+    onError: (e) => alert(e.message),
+  });
+  const st = statusQ.data;
+  if (!st) return null;
+
+  if (st.planId) {
+    return (
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm text-emerald-800">
+          <ShieldCheck size={16} className="text-emerald-600" />
+          Go-forward plan created for this review{st.planTrack === 'pip' ? ' · PIP track' : ''}.
+        </div>
+        <button onClick={() => navigate(`/coaching-plans/${st.planId}`)}
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 shrink-0">
+          Open plan <ArrowRight size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  const Item = ({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) => (
+    <span className="inline-flex items-center gap-1.5 text-xs">
+      {ok ? <CheckCircle2 size={14} className="text-green-600" /> : <Circle size={14} className="text-gray-300" />}
+      <span className={ok ? 'text-gray-700' : 'text-gray-500'}>{label}</span>
+      {hint && <span className="text-gray-400">({hint})</span>}
+    </span>
+  );
+
+  return (
+    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">Go-forward</span>
+          <Item ok={st.hasValues} label="Values" />
+          <Item ok={st.performanceFinal} label="Performance final"
+            hint={st.performanceFinal ? undefined : st.hasPerformance ? 'not final' : 'not started'} />
+        </div>
+        {canEdit && (
+          <button onClick={() => create.mutate({ employeeId, periodLabel })}
+            disabled={!st.canDraft || create.isLoading}
+            title={st.canDraft ? 'Draft the coaching plan from this review' : 'Mark the performance review Final first'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0">
+            {create.isLoading ? 'Drafting…' : 'Create coaching plan'} <ArrowRight size={14} />
+          </button>
+        )}
+      </div>
+      {!st.canDraft && (
+        <p className="text-xs text-amber-600 mt-1.5">Complete the performance review and mark it <b>Final</b> to unlock the go-forward.</p>
+      )}
+    </div>
+  );
+}
 
 function ValuesTab({ employeeId, employeeName, canEdit, values, periodLabel, mode, editingId, onOpen, onDone, onCancel }: {
   employeeId: string; employeeName: string; canEdit: boolean; values: any[]; periodLabel: string;

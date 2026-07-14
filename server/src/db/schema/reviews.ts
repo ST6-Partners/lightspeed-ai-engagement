@@ -24,6 +24,8 @@ export const reviews = pgTable('reviews', {
   employeeId: uuid('employee_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
   periodLabel: text('period_label'),
+  // The review-session container this pass belongs to (FK enforced in migration 0040).
+  sessionId: uuid('session_id'),
   status: varchar('status', { length: 16 }).notNull().default('draft'),
   overallNotes: text('overall_notes'),
   evaluatedAt: timestamp('evaluated_at', { withTimezone: true }).notNull().defaultNow(),
