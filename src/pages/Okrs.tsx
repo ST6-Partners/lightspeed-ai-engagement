@@ -3,7 +3,7 @@ import { fmtDate } from '../lib/date';
 // Editable (title, owner linked to the Org directory, status, light, due,
 // description); add key results / tasks inline; archive (reversible) vs delete
 // (permanent); By-Person view via employee search; Archived section.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus, Archive, RotateCcw, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
@@ -71,6 +71,7 @@ export default function Okrs() {
   const [form, setForm] = useState<EditForm>({
     title: '', ownerUserId: '', status: 'not_started', light: '', dueDate: '', description: '',
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
@@ -91,8 +92,6 @@ export default function Okrs() {
     return n.owner && n.owner.trim() ? n.owner : null;
   };
 
-  useEffect(() => { setEditing(false); }, [selected]);
-
   const startEdit = () => {
     if (!sel) return;
     setForm({
@@ -103,28 +102,57 @@ export default function Okrs() {
       dueDate: sel.dueDate ?? '',
       description: sel.description ?? '',
     });
+    setFormError(null);
+    setEditing(true);
+  };
+
+  // A freshly created node opens straight into edit mode, populated from the
+  // returned row, so the user completes it immediately.
+  const openInEdit = (row: OkrRow) => {
+    setSelected(row.id);
+    setForm({
+      title: row.title,
+      ownerUserId: row.ownerUserId ?? '',
+      status: row.status,
+      light: row.light ?? '',
+      dueDate: row.dueDate ?? '',
+      description: row.description ?? '',
+    });
+    setFormError(null);
     setEditing(true);
   };
 
   const saveEdit = () => {
     if (!sel) return;
-    const owner = form.ownerUserId
-      ? (members.find((m) => m.id === form.ownerUserId)?.name ?? null)
-      : null;
+    const missing: string[] = [];
+    if (!form.title.trim()) missing.push('Title');
+    if (!form.ownerUserId) missing.push('Owner');
+    if (!form.status) missing.push('Status');
+    if (!form.light) missing.push('Status light');
+    if (!form.dueDate) missing.push('Due date');
+    if (!form.description.trim()) missing.push('Description');
+    if (missing.length) {
+      setFormError(`Every field is required to save. Still needed: ${missing.join(', ')}.`);
+      return;
+    }
+    setFormError(null);
+    const owner = members.find((m) => m.id === form.ownerUserId)?.name ?? null;
     update.mutate(
       {
         id: sel.id,
-        title: form.title.trim() || sel.title,
-        ownerUserId: form.ownerUserId || null,
+        title: form.title.trim(),
+        ownerUserId: form.ownerUserId,
         owner,
         status: form.status as never,
-        light: (form.light || null) as never,
-        dueDate: form.dueDate || null,
-        description: form.description.trim() || null,
+        light: form.light as never,
+        dueDate: form.dueDate,
+        description: form.description.trim(),
       },
       { onSuccess: () => setEditing(false) },
     );
   };
+
+  const missingField = (empty: boolean) => (formError && empty ? ' border-ls-risk ring-1 ring-ls-risk' : '');
 
   const addChild = () => {
     if (!sel) return;
@@ -133,7 +161,7 @@ export default function Okrs() {
     const siblings = childrenOf(sel.id);
     create.mutate(
       { parentId: sel.id, type: spec.type, title: spec.title, sortOrder: (siblings.length + 1) * 10 },
-      { onSuccess: () => setExpanded((e) => ({ ...e, [sel.id]: true })) },
+      { onSuccess: (row) => { setExpanded((e) => ({ ...e, [sel.id]: true })); openInEdit(row as unknown as OkrRow); } },
     );
   };
 
@@ -165,7 +193,7 @@ export default function Okrs() {
     const active = selected === n.id;
     return (
       <div key={n.id}>
-        <div onClick={() => setSelected(n.id)}
+        <div onClick={() => { setSelected(n.id); setEditing(false); setFormError(null); }}
           className={`flex items-center gap-1.5 py-1.5 pr-3 cursor-pointer rounded-md ${active ? 'bg-ls-blue-50' : 'hover:bg-ls-bg-2'}`}
           style={{ paddingLeft: 12 + depth * 18 }}>
           <button onClick={(e) => { e.stopPropagation(); if (kids.length) toggle(n.id); }}
@@ -202,7 +230,7 @@ export default function Okrs() {
           <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
             <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
               <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Plan</span>
-              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green' })}
+              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green' }, { onSuccess: (row) => openInEdit(row as unknown as OkrRow) })}
                 disabled={create.isPending}
                 className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
             </div>
@@ -217,7 +245,7 @@ export default function Okrs() {
                   <div className="flex items-center justify-between mb-4">
                     <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
                     <div className="flex gap-2">
-                      <button onClick={() => setEditing(false)}
+                      <button onClick={() => { setEditing(false); setFormError(null); }}
                         className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Cancel</button>
                       <button onClick={saveEdit} disabled={update.isPending}
                         className="ls-btn ls-btn-primary text-xs py-1.5 px-3">
@@ -225,15 +253,18 @@ export default function Okrs() {
                     </div>
                   </div>
                   <div className="space-y-4">
+                    {formError && (
+                      <div className="text-[12.5px] text-ls-risk border border-ls-risk rounded-md px-3 py-2" style={{ background: '#FBEAE8' }}>{formError}</div>
+                    )}
                     <div>
-                      <label className={labelCls}>Title</label>
-                      <input className={inputCls} value={form.title}
+                      <label className={labelCls}>Title *</label>
+                      <input className={`${inputCls}${missingField(!form.title.trim())}`} value={form.title}
                         onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className={labelCls}>Owner</label>
-                        <select className={inputCls} value={form.ownerUserId}
+                        <label className={labelCls}>Owner *</label>
+                        <select className={`${inputCls}${missingField(!form.ownerUserId)}`} value={form.ownerUserId}
                           onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))}>
                           <option value="">— Unassigned</option>
                           {members.map((m) => (
@@ -243,28 +274,28 @@ export default function Okrs() {
                         <p className="text-[11px] text-ls-ink-3 mt-1">From the Organization directory.</p>
                       </div>
                       <div>
-                        <label className={labelCls}>Status</label>
-                        <select className={inputCls} value={form.status}
+                        <label className={labelCls}>Status *</label>
+                        <select className={`${inputCls}${missingField(!form.status)}`} value={form.status}
                           onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
                           {STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className={labelCls}>Status light</label>
-                        <select className={inputCls} value={form.light}
+                        <label className={labelCls}>Status light *</label>
+                        <select className={`${inputCls}${missingField(!form.light)}`} value={form.light}
                           onChange={(e) => setForm((f) => ({ ...f, light: e.target.value }))}>
                           {LIGHT_OPTS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className={labelCls}>Due date</label>
-                        <input type="date" className={inputCls} value={form.dueDate}
+                        <label className={labelCls}>Due date *</label>
+                        <input type="date" className={`${inputCls}${missingField(!form.dueDate)}`} value={form.dueDate}
                           onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                       </div>
                     </div>
                     <div>
-                      <label className={labelCls}>Description</label>
-                      <textarea className={inputCls} rows={4} value={form.description}
+                      <label className={labelCls}>Description *</label>
+                      <textarea className={`${inputCls}${missingField(!form.description.trim())}`} rows={4} value={form.description}
                         onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
                     </div>
                   </div>
