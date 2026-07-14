@@ -62,7 +62,7 @@ export default function Okrs() {
   const unarchive = trpc.okrs.unarchive.useMutation({ onSuccess: bump });
   const remove = trpc.okrs.remove.useMutation({ onSuccess: bump });
 
-  const [view, setView] = useState<'plan' | 'people' | 'archived'>('plan');
+  const [view, setView] = useState<'plan' | 'people' | 'team' | 'archived'>('plan');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
@@ -77,6 +77,8 @@ export default function Okrs() {
   const [archivePerson, setArchivePerson] = useState('');
   const [archiveDate, setArchiveDate] = useState('');
   const [newNodeId, setNewNodeId] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [teamExpanded, setTeamExpanded] = useState<Record<string, boolean>>({});
 
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
@@ -210,6 +212,23 @@ export default function Okrs() {
   });
   const initials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2);
 
+  // ── By Team: goals grouped by each OKR owner's department (org-linked) ──
+  const descendantsOf = (id: string): OkrRow[] => {
+    const out: OkrRow[] = [];
+    const stack = [...childrenOf(id)];
+    while (stack.length) { const n = stack.pop()!; out.push(n); stack.push(...childrenOf(n.id)); }
+    return out;
+  };
+  const teams = Array.from(
+    new Set(members.map((m) => m.departmentName).filter((d): d is string => !!d)),
+  ).sort();
+  const teamMemberIds = new Set(members.filter((m) => m.departmentName === selectedTeam).map((m) => m.id));
+  const onTeam = (n: OkrRow) => !!n.ownerUserId && teamMemberIds.has(n.ownerUserId);
+  const teamObjectives = selectedTeam
+    ? rows.filter((n) => n.type === 'objective' && (onTeam(n) || descendantsOf(n.id).some(onTeam)))
+    : [];
+  const toggleTeam = (id: string) => setTeamExpanded((e) => ({ ...e, [id]: !e[id] }));
+
   const renderNode = (n: OkrRow, depth: number): ReactNode => {
     const Icon = TYPE_ICON[n.type] ?? Target;
     const kids = childrenOf(n.id);
@@ -241,7 +260,7 @@ export default function Okrs() {
       <p className="text-sm text-ls-ink-3 mb-5">Objectives down to key results and the tasks teams commit to.</p>
 
       <div className="inline-flex gap-1 p-1 rounded-lg bg-ls-bg-2 mb-5">
-        {([['plan', 'Plan'], ['people', 'By Person'], ['archived', 'Archived']] as const).map(([v, label]) => (
+        {([['plan', 'Plan'], ['people', 'By Person'], ['team', 'By Team'], ['archived', 'Archived']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
             className={`text-sm font-semibold px-3.5 py-1.5 rounded-md ${
               view === v ? 'bg-ls-surface text-ls-blue-deep shadow-sm' : 'text-ls-ink-3 hover:text-ls-ink-2'
@@ -450,6 +469,62 @@ export default function Okrs() {
             </>
           ) : (
             <div className="text-sm text-ls-ink-3">Search for an employee above to see the OKRs they own.</div>
+          )}
+        </div>
+      )}
+
+      {view === 'team' && (
+        <div className="ls-card p-5 min-h-[520px]">
+          <div className="max-w-sm mb-5">
+            <select className={inputCls} value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}>
+              <option value="">Select a team…</option>
+              {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <p className="text-[11px] text-ls-ink-3 mt-1">Teams come from the Organization directory (department). Goals are grouped by each OKR owner's team.</p>
+          </div>
+
+          {!selectedTeam ? (
+            <div className="text-sm text-ls-ink-3">Select a team above to see its goals and how they break down by person.</div>
+          ) : teamObjectives.length === 0 ? (
+            <div className="text-sm text-ls-ink-3">No OKRs owned by anyone on {selectedTeam} yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {teamObjectives.map((o) => {
+                const subGoals = descendantsOf(o.id).filter(onTeam);
+                const isExp = teamExpanded[o.id] ?? true;
+                return (
+                  <div key={o.id} className="border border-ls-line rounded-lg overflow-hidden">
+                    <button onClick={() => toggleTeam(o.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 bg-ls-bg-2 hover:bg-ls-line text-left">
+                      <ChevronRight size={14} className={`shrink-0 text-ls-ink-3 transition-transform ${isExp ? 'rotate-90' : ''}`} />
+                      <Target size={15} className="shrink-0 text-ls-blue-deep" />
+                      <span className="flex-1 font-semibold text-sm truncate">{o.title}</span>
+                      {o.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[o.light as Light] }} />}
+                      <span className="text-[12px] text-ls-ink-3 shrink-0">{subGoals.length} {subGoals.length === 1 ? 'goal' : 'goals'}</span>
+                    </button>
+                    {isExp && (
+                      <div className="px-3 py-2">
+                        {subGoals.length === 0 ? (
+                          <div className="text-[12.5px] text-ls-ink-3 py-1">No individual goals assigned to {selectedTeam} under this objective yet.</div>
+                        ) : subGoals.map((n) => {
+                          const Icon = TYPE_ICON[n.type] ?? KeyRound;
+                          return (
+                            <div key={n.id} className="flex items-start gap-2.5 py-1.5">
+                              <Icon size={14} className="shrink-0 text-ls-blue-deep mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-ls-ink">{n.title}</div>
+                                <div className="text-[12px] text-ls-ink-3">{ownerName(n) ?? 'Unassigned'} · {STATUS_LABEL[n.status] ?? n.status}</div>
+                              </div>
+                              {n.light && <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ background: LIGHT_HEX[n.light as Light] }} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
