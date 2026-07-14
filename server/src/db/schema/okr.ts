@@ -22,6 +22,7 @@ export const okrNodes = pgTable('okr_nodes', {
   status: varchar('status', { length: 24 }).notNull().default('not_started'),
     // 'not_started' | 'in_progress' | 'on_hold' | 'complete'
   light: varchar('light', { length: 8 }),                 // 'green' | 'yellow' | 'red' (outcomes only)
+  startDate: date('start_date'),                          // created/start date (defaults today)
   dueDate: date('due_date'),
   description: text('description'),
   sortOrder: integer('sort_order').notNull().default(0),
