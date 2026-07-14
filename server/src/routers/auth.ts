@@ -149,6 +149,38 @@ export const authRouter = router({
       return user;
     }),
 
+  // Admin: permanently delete an employee (hard delete). The org-tree self-link
+  // (users.managerId) and most child records (reviews, coaching, PIPs, surveys,
+  // OKR ownership) are ON DELETE SET NULL / CASCADE, so removing someone detaches
+  // their reports and clears their own records automatically. A person with
+  // retained activity in restrict-only tables (feedback, telemetry, AI logs,
+  // audit trails) cannot be hard-deleted — Postgres raises a FK violation, which
+  // we surface as a friendly "set them Inactive instead" message so live history
+  // is never silently destroyed.
+  deleteUser: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "You can't delete your own account." });
+      }
+      const target = await ctx.db.query.users.findFirst({ where: eq(users.id, input.id) });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found.' });
+      try {
+        await ctx.db.delete(users).where(eq(users.id, input.id));
+      } catch (err: any) {
+        // Postgres FK violation (restrict FK) — this person has retained activity.
+        if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `${target.name ?? target.email ?? 'This employee'} has activity records that can't be removed. Set them to Inactive instead.`,
+          });
+        }
+        throw err;
+      }
+      return { success: true, id: input.id };
+    }),
+
   // Admin: create a new employee (directory record on the users table). The org
   // tree IS the users table (users.managerId), so "add employee" = insert a user.
   // sub follows register()'s local-identity convention. A temp password is

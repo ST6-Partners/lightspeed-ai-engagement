@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
-import { Search, Info, UserPlus, X } from 'lucide-react';
+import { Search, Info, UserPlus, X, Trash2 } from 'lucide-react';
 
 const ROLE_OPTIONS = ['user', 'manager', 'admin', 'sysadmin'] as const;
 const ROLE_COLORS: Record<string, string> = {
@@ -49,6 +49,14 @@ export default function Employees() {
       tempPassword: form.tempPassword.trim() || undefined,
     } as any);
   };
+
+  // ── Remove Employee (admin hard delete) ──────────────────────
+  const [pendingDelete, setPendingDelete] = useState<any | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteMutation = trpc.auth.deleteUser.useMutation({
+    onSuccess: () => { utils.auth.listUsers.invalidate(); setPendingDelete(null); setDeleteError(null); },
+    onError: (e: any) => setDeleteError(e.message ?? 'Could not remove employee.'),
+  });
 
   const filtered = userList.filter((u: any) => {
     const q = searchQuery.toLowerCase();
@@ -169,7 +177,7 @@ export default function Employees() {
           <table className="w-full divide-y divide-gray-200">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                <th className="px-3 py-3 w-10">Active</th>
+                <th className="px-3 py-3 w-[104px]">Active</th>
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3 w-[170px]">Title</th>
@@ -178,14 +186,19 @@ export default function Employees() {
                 <th className="px-3 py-3 w-[110px]">Role</th>
                 <th className="px-3 py-3 w-[90px]">Badge</th>
                 <th className="px-3 py-3 w-10">Beta</th>
+                <th className="px-3 py-3 w-12">Remove</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((user: any) => (
                 <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${!user.isActive ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-3">
-                    <input type="checkbox" checked={user.isActive} onChange={() => set(user.id, { isActive: !user.isActive })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                    <button type="button" onClick={() => set(user.id, { isActive: !user.isActive })}
+                      title={user.isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${user.isActive ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </button>
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-900 font-medium">{user.name ?? '—'}</td>
                   <td className="px-3 py-3 text-sm text-gray-700">{user.email || '—'}</td>
@@ -243,12 +256,47 @@ export default function Employees() {
                     <input type="checkbox" checked={user.isBeta} onChange={() => set(user.id, { isBeta: !user.isBeta })}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                   </td>
+
+                  {/* Remove — hard delete with confirm */}
+                  <td className="px-3 py-3">
+                    <button type="button" onClick={() => { setDeleteError(null); setPendingDelete(user); }}
+                      title="Remove employee"
+                      className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!deleteMutation.isPending) setPendingDelete(null); }}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 p-2 rounded-full bg-red-100 text-red-600 flex-shrink-0"><Trash2 size={18} /></div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Remove {pendingDelete.name ?? pendingDelete.email ?? 'this employee'}?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  This permanently deletes the directory record and can&apos;t be undone. Anyone reporting to them has their manager cleared, and their own reviews, coaching plans, and survey responses are removed with them. If you only want to hide them, set them to <span className="font-medium">Inactive</span> instead.
+                </p>
+              </div>
+            </div>
+            {deleteError && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">{deleteError}</div>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setPendingDelete(null)} disabled={deleteMutation.isPending}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button onClick={() => deleteMutation.mutate({ id: pendingDelete.id })} disabled={deleteMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+                <Trash2 size={14} />{deleteMutation.isPending ? 'Removing…' : 'Remove employee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
