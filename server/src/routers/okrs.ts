@@ -137,19 +137,17 @@ export const okrsRouter = router({
       return { ok: true, count: ids.length };
     }),
 
-  // Restore an archived node and its subtree back to the active plan.
+  // Restore ONLY the selected archived node (not its subtree/siblings). If its
+  // parent is still archived, the Plan view surfaces it as a top-level orphan
+  // so it stays visible until the parent is restored too.
   unarchive: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const all = await ctx.db.query.okrNodes.findMany({
-        columns: { id: true, parentId: true },
-      });
-      const ids = subtreeIds(all, input.id);
-      if (!ids.length) throw new TRPCError({ code: 'NOT_FOUND' });
-      await ctx.db.update(okrNodes)
+      const [row] = await ctx.db.update(okrNodes)
         .set({ archivedAt: null, updatedAt: new Date() })
-        .where(inArray(okrNodes.id, ids));
-      return { ok: true, count: ids.length };
+        .where(eq(okrNodes.id, input.id)).returning();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      return { ok: true };
     }),
 
   // Hard delete — permanently removes the node; descendants go via FK cascade.

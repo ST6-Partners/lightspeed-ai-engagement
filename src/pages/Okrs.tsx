@@ -74,6 +74,8 @@ export default function Okrs() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
+  const [archivePerson, setArchivePerson] = useState('');
+  const [archiveDate, setArchiveDate] = useState('');
   const [newNodeId, setNewNodeId] = useState<string | null>(null);
 
   const rows = (data ?? []) as OkrRow[];
@@ -81,6 +83,12 @@ export default function Okrs() {
   const members = org?.members ?? [];
   const childrenOf = (pid: string | null) =>
     rows.filter((r) => r.parentId === pid).sort((a, b) => a.sortOrder - b.sortOrder);
+  // Root list = top-level nodes PLUS any active node whose parent is archived
+  // (or gone), so a single-node restore stays visible instead of orphaning.
+  const activeIds = new Set(rows.map((r) => r.id));
+  const rootNodes = rows
+    .filter((r) => !r.parentId || !activeIds.has(r.parentId))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
   const sel = rows.find((r) => r.id === selected) ?? null;
   const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
@@ -192,15 +200,13 @@ export default function Okrs() {
         (!n.ownerUserId && (n.owner ?? '').trim().toLowerCase() === selectedPerson.name.trim().toLowerCase()),
       )
     : [];
+  const archiveOwners = Array.from(new Set(archivedRows.map((n) => ownerName(n) ?? 'Unassigned'))).sort();
   const archiveFiltered = archivedRows.filter((n) => {
     const q = archiveQuery.trim().toLowerCase();
-    if (!q) return true;
-    const hay = [
-      n.title, n.description ?? '', ownerName(n) ?? '',
-      n.startDate ?? '', n.startDate ? fmtDate(n.startDate) : '',
-      n.dueDate ?? '', STATUS_LABEL[n.status] ?? n.status,
-    ].join(' ').toLowerCase();
-    return hay.includes(q);
+    if (q && !`${n.title} ${n.description ?? ''}`.toLowerCase().includes(q)) return false;
+    if (archivePerson && (ownerName(n) ?? 'Unassigned') !== archivePerson) return false;
+    if (archiveDate && n.startDate !== archiveDate) return false;
+    return true;
   });
   const initials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2);
 
@@ -253,7 +259,7 @@ export default function Okrs() {
                 className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
             </div>
             {isLoading && <div className="px-3 py-3 text-sm text-ls-ink-3">Loading…</div>}
-            {!isLoading && childrenOf(null).map((n) => renderNode(n, 0))}
+            {!isLoading && rootNodes.map((n) => renderNode(n, 0))}
           </div>
 
           <div className="flex-1 p-5 min-w-0">
@@ -455,10 +461,23 @@ export default function Okrs() {
             <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Archived OKRs</span>
           </div>
           {archivedRows.length > 0 && (
-            <div className="relative max-w-sm mb-4">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ls-ink-3" />
-              <input className={`${inputCls} pl-9`} placeholder="Search by person, date, or keyword…"
-                value={archiveQuery} onChange={(e) => setArchiveQuery(e.target.value)} />
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ls-ink-3" />
+                <input className={`${inputCls} pl-9`} placeholder="Search keywords…"
+                  value={archiveQuery} onChange={(e) => setArchiveQuery(e.target.value)} />
+              </div>
+              <select className={`${inputCls} w-auto`} value={archivePerson}
+                onChange={(e) => setArchivePerson(e.target.value)} title="Filter by person">
+                <option value="">All people</option>
+                {archiveOwners.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <input type="date" className={`${inputCls} w-auto`} value={archiveDate}
+                onChange={(e) => setArchiveDate(e.target.value)} title="Filter by date" />
+              {(archiveQuery || archivePerson || archiveDate) && (
+                <button onClick={() => { setArchiveQuery(''); setArchivePerson(''); setArchiveDate(''); }}
+                  className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Clear</button>
+              )}
             </div>
           )}
           {archivedQ.isLoading && <div className="text-sm text-ls-ink-3">Loading…</div>}
@@ -466,7 +485,7 @@ export default function Okrs() {
             <div className="text-sm text-ls-ink-3">Nothing archived. Archived OKRs are kept here and can be restored to the plan.</div>
           )}
           {!archivedQ.isLoading && archivedRows.length > 0 && archiveFiltered.length === 0 && (
-            <div className="text-sm text-ls-ink-3">No archived OKRs match your search.</div>
+            <div className="text-sm text-ls-ink-3">No archived OKRs match your filters.</div>
           )}
           {PERSON_GROUPS.map((g) => {
             const items = archiveFiltered.filter((n) => n.type === g.type);
