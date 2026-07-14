@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
-import { Users, User, TrendingUp, ChevronLeft, AlertTriangle, Search, X } from 'lucide-react';
+import { Users, User, TrendingUp, ChevronLeft, ChevronDown, ChevronRight, AlertTriangle, Search, X } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { fmtDate } from '../../lib/date';
 import {
@@ -57,6 +57,54 @@ function DeltaChip({ delta }: { delta: number | null }) {
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${up ? 'text-ls-thrive' : 'text-ls-risk'}`}>
       {up ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}
     </span>
+  );
+}
+
+// Expandable per-check-in answer detail — mirrors the Past Responses tab so
+// the full survey results (scores + written answers) are readable per person.
+function PersonResponses({ rows }: { rows: CheckinResponseLite[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setOpen((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const sorted = [...rows].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  if (sorted.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] uppercase tracking-wide text-ls-ink-3">Responses</div>
+      {sorted.map((r) => {
+        const ans = Array.isArray(r.answers) ? r.answers : [];
+        const scales = ans.filter((a) => a.type === 'scale5' && typeof a.value === 'number');
+        const avg = scales.length ? scales.reduce((sum, a) => sum + (a.value as number), 0) / scales.length : null;
+        const enpsAns = ans.find((a) => a.type === 'enps' && typeof a.value === 'number');
+        const written = ans.filter((a) => a.type === 'text' && a.answerText && a.answerText.trim()).length;
+        const isOpen = open.has(r.id);
+        return (
+          <div key={r.id} className="bg-white border border-ls-line rounded-lg">
+            <button type="button" onClick={() => toggle(r.id)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-ls-bg-2 rounded-lg">
+              {isOpen ? <ChevronDown size={16} className="text-ls-ink-3 shrink-0" /> : <ChevronRight size={16} className="text-ls-ink-3 shrink-0" />}
+              <span className="text-sm font-semibold text-ls-ink shrink-0">Period of {fmtDate(r.weekOf)}</span>
+              <span className="ml-auto flex items-center gap-2 shrink-0">
+                {avg != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-ls-blue-50 text-ls-blue-deep text-xs font-bold">avg {avg.toFixed(1)}</span>}
+                {enpsAns && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-ls-bg-2 text-ls-ink-2 text-xs font-bold">eNPS {enpsAns.value}</span>}
+                {written > 0 && <span className="text-xs text-ls-ink-3">{written} written</span>}
+              </span>
+            </button>
+            {isOpen && (
+              <div className="px-4 pb-4 pt-1 space-y-1.5 text-sm border-t border-ls-line">
+                {ans.map((a, i) => (
+                  <div key={i} className="pt-1.5">
+                    <div className="text-xs text-ls-ink-3">{a.text}</div>
+                    {a.type === 'text'
+                      ? <div className="text-ls-ink">{a.answerText || <span className="text-ls-ink-3">—</span>}</div>
+                      : <div className="font-semibold text-ls-ink">{a.value ?? '–'}{a.type === 'enps' ? ' / 10' : ' / 5'}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -167,6 +215,7 @@ export default function CheckinAnalytics({
   // ---------------------------------------------------------------- Per person
   if (selected) {
     const person = allSeries.find((p) => p.respondentId === selected.id);
+    const personRawRows = rows.filter((r) => r.respondentId === selected.id);
     const chartData = (person?.points ?? []).map((pt) => {
       const row: Record<string, string | number | null> = { label: fmtDate(pt.weekOf), Overall: pt.overall };
       for (const c of categories.length ? categories : Object.keys(pt.byCategory)) row[labelForCategory(c)] = pt.byCategory[c] ?? null;
@@ -231,28 +280,7 @@ export default function CheckinAnalytics({
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="ls-card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-ls-ink-3 border-b border-ls-line">
-                    <th className="px-4 py-2 font-medium">Check-in</th>
-                    <th className="px-3 py-2 font-medium text-right">Overall</th>
-                    {cats.map((c) => <th key={c} className="px-3 py-2 font-medium text-right">{labelForCategory(c)}</th>)}
-                    <th className="px-3 py-2 font-medium text-right">eNPS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...person.points].reverse().map((pt) => (
-                    <tr key={pt.responseId} className="border-b border-ls-line last:border-0">
-                      <td className="px-4 py-2 text-ls-ink-2">{fmtDate(pt.weekOf)}</td>
-                      <td className={`px-3 py-2 text-right ${bandCls(pt.overall)}`}>{fmtScore(pt.overall)}</td>
-                      {cats.map((c) => <td key={c} className={`px-3 py-2 text-right ${bandCls(pt.byCategory[c])}`}>{fmtScore(pt.byCategory[c])}</td>)}
-                      <td className="px-3 py-2 text-right text-ls-ink-2">{pt.enps == null ? '—' : pt.enps.toFixed(0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PersonResponses rows={personRawRows} />
           </>
         )}
       </div>
@@ -290,12 +318,9 @@ export default function CheckinAnalytics({
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-4 gap-3">
+      <div className="grid sm:grid-cols-3 gap-3">
         <StatCard label={`Team score${summary.latestPeriod ? ` · ${fmtDate(summary.latestPeriod)}` : ''}`}
           value={fmtScore(summary.teamOverallLatest)} sub="avg of latest check-ins (1–5)" />
-        <StatCard label="Participation"
-          value={teamSize > 0 ? `${Math.round((summary.respondentsLatest / teamSize) * 100)}%` : '—'}
-          sub={`${summary.respondentsLatest}${teamSize > 0 ? ` of ${teamSize}` : ''} this period`} />
         <StatCard label={`eNPS${enps.weekOf ? ` · ${fmtDate(enps.weekOf)}` : ''}`}
           value={enps.score == null ? '—' : String(enps.score)}
           sub={enps.n > 0 ? `${enps.promoters} prom · ${enps.detractors} detr (n=${enps.n})` : 'no eNPS asked yet'} />
