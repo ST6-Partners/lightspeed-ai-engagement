@@ -290,7 +290,6 @@ export default function CheckinAnalytics({
   // --------------------------------------------------------------------- Team
   const riskCount = teamRows.filter((r) => r.flag.level === 'risk').length;
   const watchCount = teamRows.filter((r) => r.flag.level === 'watch').length;
-  const enps = summary.enps;
   const teamSize = teamMemberIds ? teamMemberIds.size : members.length;
 
   return (
@@ -318,12 +317,9 @@ export default function CheckinAnalytics({
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <StatCard label={`Team score${summary.latestPeriod ? ` · ${fmtDate(summary.latestPeriod)}` : ''}`}
           value={fmtScore(summary.teamOverallLatest)} sub="avg of latest check-ins (1–5)" />
-        <StatCard label={`eNPS${enps.weekOf ? ` · ${fmtDate(enps.weekOf)}` : ''}`}
-          value={enps.score == null ? '—' : String(enps.score)}
-          sub={enps.n > 0 ? `${enps.promoters} prom · ${enps.detractors} detr (n=${enps.n})` : 'no eNPS asked yet'} />
         <StatCard label="Needs attention" value={String(riskCount + watchCount)}
           sub={`${riskCount} at risk · ${watchCount} watch`} />
       </div>
