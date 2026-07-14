@@ -3,6 +3,7 @@
 import { desc } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { users } from '../db/schema/core.js';
+import { jobTitles } from '../db/schema/jobTitles.js';
 import { weeklyCheckins } from '../db/schema/weeklyPlan.js';
 
 type Status = 'thrive' | 'watch' | 'risk' | 'none';
@@ -25,6 +26,11 @@ export const organizationRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     const people = await ctx.db.query.users.findMany();
     const active = people.filter((u) => u.isActive);
+    // Title comes from the managed Job Titles lookup (the same source the
+    // Employees section edits via jobTitleId), so the Organization tab stays
+    // consistent with Core Data. Falls back to the free-text title, then role.
+    const titleRows = await ctx.db.query.jobTitles.findMany();
+    const titleById = new Map(titleRows.map((t) => [t.id, t.title]));
     const checkins = await ctx.db.query.weeklyCheckins.findMany({
       orderBy: [desc(weeklyCheckins.weekStart)],
     });
@@ -47,7 +53,7 @@ export const organizationRouter = router({
       return {
         id: u.id,
         name: u.name ?? u.email,
-        role: u.title ?? u.role,
+        role: (u.jobTitleId ? titleById.get(u.jobTitleId) : null) ?? u.title ?? u.role,
         status,
         trend,
         spark,
