@@ -1,6 +1,7 @@
 // AssessmentsTab — CCAT + EPP + Insights (spec §8.1). Reuses the Badge/Bar
-// atoms. CCAT is scored /50 (fill is scaled but the raw score is displayed,
-// and CCAT bars are always neutral-blue — never color-toned on a 0-100 scale).
+// atoms. CCAT: the Overall badge is the raw score (out of 50); the sub-category
+// breakdown bars are 0–100 percentiles (e.g. Spatial/Verbal/Math), always
+// rendered neutral-blue — never color-toned (a raw score must never pick a band).
 import { trpc } from '../../lib/trpc';
 import { Badge, Bar, TabState, Empty, errKind } from './atoms';
 import PersonaInsightChart from './PersonaInsightChart';
@@ -12,8 +13,6 @@ function codeColor(code: string | null | undefined): string | null {
   const map: Record<string, string> = { green: '#22c55e', yellow: '#f59e0b', red: '#ef4444', blue: '#378ADD' };
   return map[code] ?? null;
 }
-
-const CCAT_MAX = 50;
 
 export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
   const { data, isLoading, error } = trpc.orgScreen.assessmentsByUser.useQuery({ userId: employeeId });
@@ -28,7 +27,7 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
 
   return (
     <div>
-      {/* 1) CCAT (badge = Overall; breakdown bars are neutral-blue; /50) */}
+      {/* 1) CCAT (badge = Overall raw score; breakdown bars are 0–100 percentiles, neutral-blue) */}
       {ccat.sections.length > 0 && (
         <div>
           <div className="flex items-center gap-3 mb-3">
@@ -37,8 +36,8 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
           </div>
           {breakdown.map((s, i) => (
             <Bar key={i} label={s.label}
-              value={((s.score ?? 0) / CCAT_MAX) * 100}
-              display={`${s.score ?? 0}/${CCAT_MAX}`} color="#378ADD" />
+              value={s.score ?? 0}
+              display={`${s.score ?? 0}`} color="#378ADD" />
           ))}
         </div>
       )}

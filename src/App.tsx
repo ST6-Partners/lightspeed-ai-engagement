@@ -7,7 +7,7 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
-import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions } from './pages/admin';
+import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
@@ -48,6 +48,7 @@ export default function App() {
         <Route path="/core-data/values" element={<CompanyValues />} />
         <Route path="/core-data/performance-criteria" element={<PerformanceCriteria />} />
         <Route path="/core-data/checkin-questions" element={<CheckinQuestions />} />
+        <Route path="/core-data/assessments" element={<Assessments />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}
