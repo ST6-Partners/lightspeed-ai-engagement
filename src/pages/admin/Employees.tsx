@@ -215,7 +215,7 @@ export default function Employees() {
           <table className="w-full divide-y divide-gray-200">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                <th className="px-3 py-3 w-[104px]">Active</th>
+                <th className="px-3 py-3 w-16">Active</th>
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3 w-[170px]">Title</th>
@@ -231,15 +231,9 @@ export default function Employees() {
               {filtered.map((user: any) => (
                 <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${!user.isActive ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-3">
-                    <button type="button" role="switch" aria-checked={user.isActive}
-                      onClick={() => set(user.id, { isActive: !user.isActive })}
-                      title={user.isActive ? 'Active — click to set Inactive' : 'Inactive — click to set Active'}
-                      className="inline-flex items-center gap-2 cursor-pointer">
-                      <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${user.isActive ? 'bg-green-500' : 'bg-gray-300'}`}>
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${user.isActive ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-                      </span>
-                      <span className={`text-xs font-medium ${user.isActive ? 'text-green-700' : 'text-gray-500'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
-                    </button>
+                    <input type="checkbox" checked={user.isActive} onChange={() => set(user.id, { isActive: !user.isActive })}
+                      title={user.isActive ? 'Active — uncheck to set Inactive' : 'Inactive — check to set Active'}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                   </td>
                   <td className="px-3 py-3 text-sm">
                     <button type="button" onClick={() => openEdit(user)}
