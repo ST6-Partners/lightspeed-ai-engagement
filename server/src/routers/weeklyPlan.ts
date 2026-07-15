@@ -55,6 +55,7 @@ export const weeklyPlanRouter = router({
           label: r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (node?.title ?? '(missing item)'),
           assignedByName: mgr ? (mgr.name ?? mgr.email) : null,
           assignedAt: r.assignedAt ?? null,
+          done: r.done ?? false,
         };
       });
 

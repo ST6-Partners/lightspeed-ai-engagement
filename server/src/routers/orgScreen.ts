@@ -138,6 +138,22 @@ export const orgScreenRouter = router({
       return { ok: true };
     }),
 
+  // Toggle completion on a priority. The assignee (owner) OR a manager can do
+  // this — the person completes their own assigned priority from the Weekly Plan.
+  prioritiesToggleDone: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), done: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      const isOwner = row.userId === ctx.user.id;
+      const isManager = hasMinimumRole((ctx.user.role || 'user') as RoleTier, 'manager');
+      if (!isOwner && !isManager) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not allowed.' });
+      const [updated] = await ctx.db.update(priorities)
+        .set({ done: input.done, completedAt: input.done ? new Date() : null })
+        .where(eq(priorities.id, input.id)).returning();
+      return updated;
+    }),
+
   // ---- Engagement tab (read) — headline score + trend + drivers ----
   engagementByUser: protectedProcedure
     .input(z.object({ userId: z.string().uuid() }))

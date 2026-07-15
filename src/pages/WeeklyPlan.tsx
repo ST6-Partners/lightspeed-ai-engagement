@@ -20,6 +20,7 @@ type OkrGroup = {
 export default function WeeklyPlan() {
   const { data, refetch } = trpc.weeklyPlan.getCurrent.useQuery();
   const save = trpc.weeklyPlan.save.useMutation({ onSuccess: () => refetch() });
+  const toggleAssigned = trpc.orgScreen.prioritiesToggleDone.useMutation({ onSuccess: () => refetch() });
   const { data: okrs, refetch: refetchOkrs } = trpc.okrs.list.useQuery();
   const updateOkr = trpc.okrs.update.useMutation({ onSuccess: () => refetchOkrs() });
   const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
@@ -162,7 +163,7 @@ export default function WeeklyPlan() {
               {data?.checkin?.status === 'saved' ? 'Saved' : 'In progress · Not submitted'}
             </span>
           </div>
-          <p className="text-sm text-ls-ink-3 mt-1.5">Optional weekly check-in — no scoring, no lock.{weekStart ? ` Week of ${weekStart}.` : ''}</p>
+          {weekStart && <p className="text-sm text-ls-ink-3 mt-1.5">Week of {weekStart}.</p>}
         </div>
       </div>
 
@@ -198,11 +199,20 @@ export default function WeeklyPlan() {
             {data!.assigned.map((a) => (
               <div key={a.id} className="flex items-center gap-2 rounded-lg px-3 py-2.5"
                 style={{ background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+                <input
+                  type="checkbox"
+                  checked={!!a.done}
+                  onChange={(e) => { toggleAssigned.mutate({ id: a.id, done: e.target.checked }); if (e.target.checked) fireConfetti(); }}
+                  title="Mark this priority done"
+                  className="w-4 h-4 shrink-0 accent-ls-blue-deep cursor-pointer"
+                />
                 <span className="ls-chip inline-flex items-center whitespace-nowrap"
                   style={{ background: '#f3e8ff', color: '#6d28d9', fontWeight: 600 }}>
                   Assigned by {a.assignedByName ?? 'your manager'}
                 </span>
-                <span className="flex-1 text-sm" style={{ color: '#1a1a2e' }}>{a.label}</span>
+                <span className="flex-1 text-sm" style={{ color: '#1a1a2e' }}>
+                  <span className={a.done ? 'line-through text-ls-ink-3' : ''}>{a.label}</span>
+                </span>
                 <span className="text-xs whitespace-nowrap" style={{ color: '#9ca3af' }}
                   title="Set by your manager in the Organization screen - managed there, not editable here">
                   manager-assigned

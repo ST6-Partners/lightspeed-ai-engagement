@@ -31,6 +31,10 @@ export const priorities = pgTable('priorities', {
   // for the "assigned by your manager" badge in the person's Weekly Plan).
   assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
   assignedAt: timestamp('assigned_at', { withTimezone: true }),
+  // Completion state — the assignee (or a manager) can check a priority done
+  // from their Weekly Plan. Current-state, mirrors the priority itself.
+  done: boolean('done').notNull().default(false),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
 }, (t) => ({
   byEmpWeek: index('idx_priorities_emp_week').on(t.userId, t.weekStart),
 }));
