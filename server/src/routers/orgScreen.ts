@@ -76,11 +76,64 @@ export const orgScreenRouter = router({
           return {
             id: r.id,
             itemType: r.itemType,
+            okrNodeId: r.okrNodeId,
             label: r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (node?.title ?? '(missing item)'),
             sortOrder: r.sortOrder,
           };
         }),
       };
+    }),
+
+  // ---- Priorities tab (write, manager-gated) — pick up to 3 OKR items ----
+  // Current-state only (weekStart NULL); no time-pacing — changing the set
+  // changes current state. Setting/removing a person's priorities is the same
+  // authority as 9 Box rating (requireManager). Priorities are always chosen
+  // from existing OKR nodes (objective | key_result | task).
+  prioritiesAdd: protectedProcedure
+    .use(requireManager)
+    .input(z.object({ userId: z.string().uuid(), okrNodeId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
+      if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
+      const current = await ctx.db.query.priorities.findMany({
+        where: and(eq(priorities.userId, input.userId), isNull(priorities.weekStart)),
+      });
+      // Idempotent: same node already a current priority -> return it unchanged.
+      const dupe = current.find((p) => p.okrNodeId === input.okrNodeId);
+      if (dupe) return dupe;
+      if (current.length >= 3) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Up to 3 priorities. Remove one first.' });
+      }
+      const [row] = await ctx.db.insert(priorities).values({
+        userId: input.userId,
+        itemType: node.type, // 'objective' | 'key_result' | 'task'
+        okrNodeId: node.id,
+        weekStart: null,
+        sortOrder: current.length,
+      }).returning();
+      return row;
+    }),
+
+  prioritiesEdit: protectedProcedure
+    .use(requireManager)
+    .input(z.object({ id: z.string().uuid(), okrNodeId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
+      if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
+      const [row] = await ctx.db.update(priorities)
+        .set({ okrNodeId: node.id, itemType: node.type })
+        .where(and(eq(priorities.id, input.id), isNull(priorities.weekStart)))
+        .returning();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      return row;
+    }),
+
+  prioritiesDelete: protectedProcedure
+    .use(requireManager)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(priorities).where(eq(priorities.id, input.id));
+      return { ok: true };
     }),
 
   // ---- Engagement tab (read) — headline score + trend + drivers ----
