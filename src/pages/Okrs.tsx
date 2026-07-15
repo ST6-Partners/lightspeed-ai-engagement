@@ -117,6 +117,7 @@ export default function Okrs() {
   // weight-weighted average of its children, recursively up the tree.
   const statusPct = (n: OkrRow) => (n.status === 'complete' ? 100 : n.status === 'in_progress' ? 50 : 0);
   const progressOf = (n: OkrRow): number => {
+    if (n.status === 'complete') return 100; // explicit completion overrides rollup
     const kids = childrenOf(n.id);
     if (!kids.length) return statusPct(n);
     const totW = kids.reduce((a, k) => a + (k.weight || 1), 0) || 1;
@@ -408,6 +409,12 @@ export default function Okrs() {
                   <div className="mb-4">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Progress{childrenOf(sel.id).length > 0 ? ' (rolled up)' : ''}</div>
                     <ProgressBar pct={progressOf(sel)} />
+                    <label className="mt-2.5 inline-flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={sel.status === 'complete'}
+                        onChange={(e) => update.mutate({ id: sel.id, status: e.target.checked ? 'complete' : 'not_started' })}
+                        className="w-4 h-4 accent-ls-blue-deep cursor-pointer" />
+                      Mark complete
+                    </label>
                   </div>
                   <dl className="grid grid-cols-2 gap-4 text-sm">
                     <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
