@@ -3,9 +3,10 @@ import { fmtDate } from '../lib/date';
 // Editable (title, owner linked to the Org directory, status, light, due,
 // description); add key results / tasks inline; archive (reversible) vs delete
 // (permanent); By-Person view via employee search; Archived section.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus, Archive, RotateCcw, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { fireConfetti } from '../lib/confetti';
 
 type Light = 'green' | 'yellow' | 'red';
 interface OkrRow {
@@ -83,8 +84,6 @@ export default function Okrs() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [wDraft, setWDraft] = useState<Record<string, string>>({});
   const [wError, setWError] = useState<string | null>(null);
-  const seen100 = useRef<Set<string>>(new Set());
-  const okr100Init = useRef(false);
 
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
@@ -190,7 +189,7 @@ export default function Okrs() {
         description: form.description.trim(),
         weight: Math.max(1, parseInt(form.weight, 10) || 1),
       },
-      { onSuccess: () => { setNewNodeId(null); setEditing(false); } },
+      { onSuccess: () => { setNewNodeId(null); setEditing(false); if (form.status === 'complete' && sel.status !== 'complete') fireConfetti(); } },
     );
   };
 
@@ -211,16 +210,6 @@ export default function Okrs() {
 
   useEffect(() => { setWDraft({}); setWError(null); }, [selected]);
 
-  // Celebrate when a full objective rolls up to 100% (blue + white confetti).
-  useEffect(() => {
-    if (!rows.length) return;
-    const now = new Set(rows.filter((n) => n.type === 'objective' && progressOf(n) >= 100).map((n) => n.id));
-    if (!okr100Init.current) { seen100.current = now; okr100Init.current = true; return; }
-    let fresh = false;
-    now.forEach((id) => { if (!seen100.current.has(id)) fresh = true; });
-    seen100.current = now;
-    if (fresh) fireConfetti();
-  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteNode = (id: string) => {
     if (window.confirm('Permanently delete this OKR and everything under it? This cannot be undone.')) {
@@ -411,7 +400,7 @@ export default function Okrs() {
                     <ProgressBar pct={progressOf(sel)} />
                     <label className="mt-2.5 inline-flex items-center gap-2 text-sm cursor-pointer">
                       <input type="checkbox" checked={sel.status === 'complete'}
-                        onChange={(e) => update.mutate({ id: sel.id, status: e.target.checked ? 'complete' : 'not_started' })}
+                        onChange={(e) => { const done = e.target.checked; update.mutate({ id: sel.id, status: done ? 'complete' : 'not_started' }); if (done) fireConfetti(); }}
                         className="w-4 h-4 accent-ls-blue-deep cursor-pointer" />
                       Mark complete
                     </label>
@@ -743,45 +732,6 @@ export default function Okrs() {
       )}
     </div>
   );
-}
-
-function fireConfetti() {
-  const colors = ['#4FA9D6', '#2E89B8', '#EAF4FA', '#FFFFFF'];
-  const canvas = document.createElement('canvas');
-  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60';
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  document.body.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) { canvas.remove(); return; }
-  const parts = Array.from({ length: 180 }).map(() => ({
-    x: canvas.width / 2 + (Math.random() - 0.5) * canvas.width * 0.7,
-    y: -20 - Math.random() * canvas.height * 0.3,
-    vx: (Math.random() - 0.5) * 7,
-    vy: 2 + Math.random() * 4,
-    w: 6 + Math.random() * 6,
-    h: 8 + Math.random() * 8,
-    rot: Math.random() * Math.PI,
-    vr: (Math.random() - 0.5) * 0.3,
-    color: colors[Math.floor(Math.random() * colors.length)],
-  }));
-  let frame = 0;
-  const tick = () => {
-    frame += 1;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const p of parts) {
-      p.x += p.vx; p.y += p.vy; p.vy += 0.09; p.rot += p.vr;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.restore();
-    }
-    if (frame < 170) requestAnimationFrame(tick);
-    else canvas.remove();
-  };
-  requestAnimationFrame(tick);
 }
 
 function ProgressBar({ pct }: { pct: number }) {

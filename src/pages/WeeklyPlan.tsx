@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Hand, Link2, X, Trash2, Pencil } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
+import { fireConfetti } from '../lib/confetti';
 
 const MOODS = ['😞', '😐', '🙂', '😀', '🤩'];
 const MOOD_LABELS = ['Drained', 'Low', 'Okay', 'Good', 'Energized'];
@@ -218,7 +219,7 @@ export default function WeeklyPlan() {
                 <input
                   type="checkbox"
                   checked={p.okrNodeId ? okrDone(p.okrNodeId) : !!p.done}
-                  onChange={(e) => { const v = e.target.checked; if (p.okrNodeId) toggleLinked(p.okrNodeId, v); else setDone(i, v); }}
+                  onChange={(e) => { const v = e.target.checked; if (p.okrNodeId) toggleLinked(p.okrNodeId, v); else setDone(i, v); if (v) fireConfetti(); }}
                   title={p.okrNodeId ? 'Mark this OKR complete' : 'Mark done'}
                   className="w-4 h-4 shrink-0 accent-ls-blue-deep cursor-pointer"
                 />
