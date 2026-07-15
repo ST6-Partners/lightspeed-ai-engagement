@@ -27,6 +27,10 @@ export const priorities = pgTable('priorities', {
   ktbrLabel: text('ktbr_label'),                          // set when itemType='ktbr'
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Set when a manager assigns this priority from the Org screen (attribution
+  // for the "assigned by your manager" badge in the person's Weekly Plan).
+  assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }),
 }, (t) => ({
   byEmpWeek: index('idx_priorities_emp_week').on(t.userId, t.weekStart),
 }));

@@ -192,6 +192,24 @@ export default function WeeklyPlan() {
 
       <section className="ls-card p-5 mt-5">
         <h2 className="font-bold mb-3">Priorities this week</h2>
+        {(data?.assigned?.length ?? 0) > 0 && (
+          <div className="space-y-2 mb-3">
+            {data!.assigned.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+                style={{ background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+                <span className="ls-chip inline-flex items-center whitespace-nowrap"
+                  style={{ background: '#f3e8ff', color: '#6d28d9', fontWeight: 600 }}>
+                  Assigned by {a.assignedByName ?? 'your manager'}
+                </span>
+                <span className="flex-1 text-sm" style={{ color: '#1a1a2e' }}>{a.label}</span>
+                <span className="text-xs whitespace-nowrap" style={{ color: '#9ca3af' }}
+                  title="Set by your manager in the Organization screen - managed there, not editable here">
+                  manager-assigned
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="space-y-2.5">
           {priorities.map((p, i) => {
             const linked = nodeTitle(p.okrNodeId);

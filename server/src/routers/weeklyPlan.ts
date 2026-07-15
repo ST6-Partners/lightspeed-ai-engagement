@@ -1,8 +1,11 @@
 // Weekly Plan router — per-user weekly check-in: read current + upsert. (DD-002 Planning)
 import { z } from 'zod';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, asc, inArray } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { weeklyCheckins, type WeeklyPriority } from '../db/schema/weeklyPlan.js';
+import { priorities } from '../db/schema/orgScreen.js';
+import { okrNodes } from '../db/schema/okr.js';
+import { users } from '../db/schema/core.js';
 
 // Monday (ISO) of the week containing `d`, as YYYY-MM-DD.
 function mondayOf(d = new Date()): string {
@@ -27,7 +30,35 @@ export const weeklyPlanRouter = router({
           typeof p === 'string' ? { text: p, okrNodeId: null, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false },
         );
       }
-      return { weekStart, checkin: row ?? null };
+      // Manager-assigned priorities (set from the Org screen; current-state,
+      // weekStart NULL) for THIS user — surfaced read-only in the Weekly Plan
+      // priorities box, badged "assigned by your manager".
+      const assignedRows = await ctx.db.query.priorities.findMany({
+        where: and(eq(priorities.userId, ctx.user.id), isNull(priorities.weekStart)),
+        orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
+      });
+      const nodeIds = assignedRows.map((r) => r.okrNodeId).filter((x): x is string => !!x);
+      const mgrIds = assignedRows.map((r) => r.assignedBy).filter((x): x is string => !!x);
+      const [nodes, mgrs] = await Promise.all([
+        nodeIds.length ? ctx.db.query.okrNodes.findMany({ where: inArray(okrNodes.id, nodeIds) }) : Promise.resolve([]),
+        mgrIds.length ? ctx.db.query.users.findMany({ where: inArray(users.id, mgrIds) }) : Promise.resolve([]),
+      ]);
+      const nodeById = new Map(nodes.map((n) => [n.id, n]));
+      const mgrById = new Map(mgrs.map((m) => [m.id, m]));
+      const assigned = assignedRows.map((r) => {
+        const node = r.okrNodeId ? nodeById.get(r.okrNodeId) : null;
+        const mgr = r.assignedBy ? mgrById.get(r.assignedBy) : null;
+        return {
+          id: r.id,
+          itemType: r.itemType,
+          okrNodeId: r.okrNodeId,
+          label: r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (node?.title ?? '(missing item)'),
+          assignedByName: mgr ? (mgr.name ?? mgr.email) : null,
+          assignedAt: r.assignedAt ?? null,
+        };
+      });
+
+      return { weekStart, checkin: row ?? null, assigned };
     }),
 
   save: protectedProcedure

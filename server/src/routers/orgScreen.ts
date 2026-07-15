@@ -110,6 +110,8 @@ export const orgScreenRouter = router({
         okrNodeId: node.id,
         weekStart: null,
         sortOrder: current.length,
+        assignedBy: ctx.user.id,
+        assignedAt: new Date(),
       }).returning();
       return row;
     }),
@@ -121,7 +123,7 @@ export const orgScreenRouter = router({
       const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
       if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
       const [row] = await ctx.db.update(priorities)
-        .set({ okrNodeId: node.id, itemType: node.type })
+        .set({ okrNodeId: node.id, itemType: node.type, assignedBy: ctx.user.id, assignedAt: new Date() })
         .where(and(eq(priorities.id, input.id), isNull(priorities.weekStart)))
         .returning();
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
