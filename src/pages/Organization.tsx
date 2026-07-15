@@ -44,6 +44,11 @@ export default function Organization() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>((ls.get('org.scope') as Scope) || 'individual');
   const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
+  const [periodId, setPeriodId] = useState<string | null>(ls.get('org.engPeriod'));
+  const { data: periodsData } = trpc.engagementAnalytics.periods.useQuery();
+  const engPeriodOptions = periodsData?.periods ?? [];
+  const effectivePeriodId = periodId && engPeriodOptions.some((p) => p.id === periodId) ? periodId : (periodsData?.latestId ?? undefined);
+  const choosePeriod = (id: string) => { setPeriodId(id); ls.set('org.engPeriod', id); };
 
   // Screen-level review-period selector (spec: person-card exec-summary,
   // 2026-07-15). Drives every card's Review tab; defaults to the latest period.
@@ -153,23 +158,35 @@ export default function Organization() {
               </div>
             </div>
             {/* Tab strip */}
-            <div className="flex items-center" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>
-              {TABS.map((t) => (
-                <button key={t.key} onClick={() => chooseTab(t.key)}
-                  className="text-[12px] font-medium"
-                  style={{
-                    padding: '8px 16px', marginBottom: -1,
-                    color: tab === t.key ? TOKENS.activeText : TOKENS.idle,
-                    borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
-                  }}>{t.label}</button>
-              ))}
+            <div className="flex items-center justify-between" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>
+              <div className="flex items-center">
+                {TABS.map((t) => (
+                  <button key={t.key} onClick={() => chooseTab(t.key)}
+                    className="text-[12px] font-medium"
+                    style={{
+                      padding: '8px 16px', marginBottom: -1,
+                      color: tab === t.key ? TOKENS.activeText : TOKENS.idle,
+                      borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
+                    }}>{t.label}</button>
+                ))}
+              </div>
               {tab === 'review' && periodOptions.length > 0 && (
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Review period</span>
                   <select value={reviewPeriod ?? periodOptions[0]} onChange={(e) => chooseReviewPeriod(e.target.value)}
                     className="text-[12px] font-medium rounded-md"
                     style={{ color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '5px 8px' }}>
                     {periodOptions.map((label) => <option key={label} value={label}>{label}</option>)}
+                  </select>
+                </div>
+              )}
+              {tab === 'engagement' && engPeriodOptions.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px]" style={{ color: TOKENS.idle }}>Period</span>
+                  <select value={effectivePeriodId ?? ''} onChange={(e) => choosePeriod(e.target.value)}
+                    className="text-[12px]"
+                    style={{ height: 28, border: `1px solid ${TOKENS.border}`, borderRadius: 6, padding: '0 6px', background: '#fff', color: TOKENS.activeText }}>
+                    {engPeriodOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </div>
               )}
@@ -189,13 +206,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} reviewPeriod={reviewPeriod} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} reviewPeriod={reviewPeriod} />)}
+                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} />)}
                 </div>
               )}
             </div>

@@ -2,13 +2,15 @@
 // aggregates, incl. seeded demo data) and merges the current live period computed
 // from engagement_survey_responses. Returns one payload the results tabs slice:
 // company summary + trend, drivers, questions, and department breakdown.
-// All reads are aggregate — no individual response is ever returned.
+// Results-tab reads are aggregate. The personCard query below adds an
+// admin-gated, current-period-only individual read for the Org person card.
 import { router, protectedProcedure } from '../trpc.js';
 import { surveyPeriods, surveyMetrics } from '../db/schema/engagementAnalytics.js';
 import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { z } from 'zod';
+import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
 
 type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
@@ -291,4 +293,186 @@ export const engagementAnalyticsRouter = router({
       departments: departmentsOut,
     };
   }),
+
+  // ── Period list for the Org-screen engagement selector ───────────────────
+  periods: protectedProcedure.query(async ({ ctx }) => {
+    const periodRows = await ctx.db.query.surveyPeriods.findMany();
+    const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    const historical = periodRows
+      .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
+      .sort((a, b) => a.periodDate.localeCompare(b.periodDate))
+      .map((p) => ({ id: p.id, label: p.label }));
+    const list = responses.length > 0
+      ? [...historical, { id: 'live', label: `${new Date().getFullYear()} (in progress)` }]
+      : historical;
+    return { periods: list, latestId: list.length ? list[list.length - 1].id : null };
+  }),
+
+  // ── Person-card engagement summary (Org screen) ──────────────────────────
+  // Department-context favorability for every viewer; an individual
+  // (confidential) read for admin+ only, and only for the current/live period
+  // (historical periods were imported as aggregates — no per-person answers).
+  personCard: protectedProcedure
+    .input(z.object({ userId: z.string().uuid(), periodId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const SUPPRESS_MIN = 4;
+      const viewerRole = (ctx.user?.role ?? 'user') as RoleTier;
+      const canSeeIndividual = hasMinimumRole(viewerRole, 'admin');
+
+      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const metricRows = await ctx.db.query.surveyMetrics.findMany();
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const allUsers = await ctx.db.query.users.findMany();
+      const allDepts = await ctx.db.query.departments.findMany();
+
+      const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
+      const person = allUsers.find((u) => u.id === input.userId) ?? null;
+      const personDept = person?.departmentId ? deptNameById.get(person.departmentId) ?? null : null;
+
+      const mkey = (periodId: string, scope: string, dept: string, dim: string, key: string) => `${periodId}|${scope}|${dept}|${dim}|${key}`;
+      const metricMap = new Map<string, { mean: number | null; favorablePct: number | null; responseCount: number; eligibleCount: number | null }>();
+      for (const m of metricRows) {
+        metricMap.set(mkey(m.periodId, m.scope, m.department ?? '', m.dimension, m.metricKey ?? ''), {
+          mean: n(m.mean), favorablePct: n(m.favorablePct), responseCount: m.responseCount, eligibleCount: m.eligibleCount,
+        });
+      }
+
+      const liveAgg = new Map<string, Agg>();
+      let hasLive = false;
+      {
+        const deptByUser = new Map(allUsers.map((u) => [u.id, u.departmentId ? deptNameById.get(u.departmentId) ?? null : null]));
+        const buckets = new Map<string, number[]>();
+        const push = (k: string, v: number) => { const a = buckets.get(k) ?? []; a.push(v); buckets.set(k, a); };
+        for (const resp of responses) {
+          hasLive = true;
+          const answers = (resp.answers ?? {}) as Record<string, number>;
+          const dept = (resp.department && resp.department.trim())
+            || (resp.respondentId ? deptByUser.get(resp.respondentId) ?? null : null) || null;
+          for (const [qid, val] of Object.entries(answers)) {
+            if (typeof val !== 'number') continue;
+            const dk = Q_DRIVER[qid];
+            push('company||overall|', val);
+            if (dk) push(`company||driver|${dk}`, val);
+            if (dept) {
+              push(`department|${dept}|overall|`, val);
+              if (dk) push(`department|${dept}|driver|${dk}`, val);
+            }
+          }
+        }
+        for (const [k, vals] of buckets) { const a = aggregate(vals); if (a) liveAgg.set(k, a); }
+      }
+
+      const historical = periodRows
+        .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
+        .sort((a, b) => a.periodDate.localeCompare(b.periodDate));
+      const liveEntry = hasLive ? { id: 'live', label: `${new Date().getFullYear()} (in progress)`, periodDate: new Date().toISOString().slice(0, 10) } : null;
+      const periods = liveEntry ? [...historical, liveEntry] : historical;
+      if (periods.length === 0) {
+        return { hasData: false as const, periods: [] as { id: string; label: string }[], selectedId: null as string | null, canSeeIndividual, department: null, individual: null };
+      }
+
+      const selIdx = input.periodId ? periods.findIndex((p) => p.id === input.periodId) : -1;
+      const selected = selIdx >= 0 ? periods[selIdx] : periods[periods.length - 1];
+      const si = periods.indexOf(selected);
+      const prev = si > 0 ? periods[si - 1] : null;
+      const isLive = selected.id === 'live';
+
+      const favOf = (periodId: string, scope: string, dept: string, dim: string, key: string): number | null => {
+        if (periodId === 'live') return liveAgg.get(`${scope}|${dept}|${dim}|${key}`)?.favorablePct ?? null;
+        return metricMap.get(mkey(periodId, scope, dept, dim, key))?.favorablePct ?? null;
+      };
+      const meanOf = (periodId: string, scope: string, dept: string, dim: string, key: string): number | null => {
+        if (periodId === 'live') return liveAgg.get(`${scope}|${dept}|${dim}|${key}`)?.mean ?? null;
+        return metricMap.get(mkey(periodId, scope, dept, dim, key))?.mean ?? null;
+      };
+
+      const companyFav = favOf(selected.id, 'company', '', 'overall', '');
+      const headcount = personDept ? allUsers.filter((u) => u.isActive && u.departmentId && deptNameById.get(u.departmentId) === personDept).length : 0;
+
+      let department: unknown = null;
+      if (personDept) {
+        let respCount = 0;
+        let eligible: number | null = null;
+        if (isLive) {
+          respCount = liveAgg.get(`department|${personDept}|overall|`)?.count ?? 0;
+          eligible = headcount || null;
+        } else {
+          const row = metricMap.get(mkey(selected.id, 'department', personDept, 'overall', ''));
+          respCount = row?.responseCount ?? 0;
+          eligible = row?.eligibleCount ?? (headcount || null);
+        }
+        const deptFav = favOf(selected.id, 'department', personDept, 'overall', '');
+        if (respCount > 0 && respCount < SUPPRESS_MIN) {
+          department = { name: personDept, headcount, responseCount: respCount, suppressed: true };
+        } else if (deptFav == null) {
+          department = { name: personDept, headcount, responseCount: respCount, suppressed: false, noData: true };
+        } else {
+          const prevFav = prev ? favOf(prev.id, 'department', personDept, 'overall', '') : null;
+          const drv = DRIVER_KEYS
+            .map((key) => ({ key, favorablePct: favOf(selected.id, 'department', personDept, 'driver', key) }))
+            .filter((d): d is { key: DriverKey; favorablePct: number } => d.favorablePct != null);
+          const sortedDesc = [...drv].sort((a, b) => b.favorablePct - a.favorablePct);
+          department = {
+            name: personDept,
+            headcount,
+            responseCount: respCount,
+            suppressed: false,
+            favorablePct: deptFav,
+            mean: meanOf(selected.id, 'department', personDept, 'overall', ''),
+            delta: deptFav != null && prevFav != null ? r1(deptFav - prevFav) : null,
+            vsCompany: deptFav != null && companyFav != null ? r1(deptFav - companyFav) : null,
+            participationPct: eligible ? r1((respCount / eligible) * 100) : null,
+            strongest: sortedDesc.slice(0, 2),
+            needsAttention: sortedDesc.slice(-2).reverse(),
+          };
+        }
+      }
+
+      let individual: unknown = null;
+      if (canSeeIndividual) {
+        if (!isLive) {
+          individual = { available: false, reason: 'historical' };
+        } else {
+          const mine = responses
+            .filter((r) => r.respondentId === input.userId && r.status === 'complete')
+            .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+          const latest = mine[0] ?? null;
+          if (!latest) {
+            individual = { available: false, reason: 'no-responses' };
+          } else {
+            const answers = (latest.answers ?? {}) as Record<string, number>;
+            const all: number[] = [];
+            const byDriver: Record<string, number[]> = {};
+            for (const [qid, val] of Object.entries(answers)) {
+              if (typeof val !== 'number') continue;
+              all.push(val);
+              const dk = Q_DRIVER[qid];
+              if (dk) (byDriver[dk] ??= []).push(val);
+            }
+            const overall = aggregate(all);
+            const drv = DRIVER_KEYS
+              .map((key) => { const a = aggregate(byDriver[key] ?? []); return a ? { key, favorablePct: a.favorablePct } : null; })
+              .filter((d): d is { key: DriverKey; favorablePct: number } => d != null);
+            const sortedDesc = [...drv].sort((a, b) => b.favorablePct - a.favorablePct);
+            individual = {
+              available: true,
+              score: overall ? scoreFromMean(overall.mean) : null,
+              favorablePct: overall ? overall.favorablePct : null,
+              enps: latest.enpsScore ?? null,
+              strongest: sortedDesc.slice(0, 2),
+              needsAttention: sortedDesc.slice(-2).reverse(),
+            };
+          }
+        }
+      }
+
+      return {
+        hasData: true as const,
+        periods: periods.map((p) => ({ id: p.id, label: p.label })),
+        selectedId: selected.id,
+        canSeeIndividual,
+        department,
+        individual,
+      };
+    }),
 });
