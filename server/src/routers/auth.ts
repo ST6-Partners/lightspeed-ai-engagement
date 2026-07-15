@@ -143,6 +143,12 @@ export const authRouter = router({
       isBeta: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Don't let an admin set their own account inactive — the auth layer
+      // treats an inactive account as unauthenticated, so this would lock the
+      // current user out of their own session ("Not authenticated").
+      if (input.id === ctx.user.id && input.isActive === false) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "You can't set your own account to inactive — you'd be locked out of the app." });
+      }
       const { id, ...rest } = input;
       const updates: Record<string, unknown> = { ...rest };
       // Email is unique per exact string — normalize and reject a collision with a different employee.

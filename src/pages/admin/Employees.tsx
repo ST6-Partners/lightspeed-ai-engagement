@@ -231,9 +231,11 @@ export default function Employees() {
               {filtered.map((user: any) => (
                 <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${!user.isActive ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-3">
-                    <input type="checkbox" checked={user.isActive} onChange={() => set(user.id, { isActive: !user.isActive })}
-                      title={user.isActive ? 'Active — uncheck to set Inactive' : 'Inactive — check to set Active'}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                    {/* Display-only status; the editable checkbox lives in the edit popup */}
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${user.isActive ? 'text-green-700' : 'text-gray-400'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </td>
                   <td className="px-3 py-3 text-sm">
                     <button type="button" onClick={() => openEdit(user)}
