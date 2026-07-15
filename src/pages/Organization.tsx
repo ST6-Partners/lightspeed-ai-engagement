@@ -57,6 +57,12 @@ export default function Organization() {
     }
   }, [periods]); // eslint-disable-line react-hooks/exhaustive-deps
   const chooseReviewPeriod = (v: string) => { setReviewPeriod(v); ls.set('org.reviewPeriod', v); };
+  // Show the selector as soon as the Review tab is active: prefer the loaded
+  // period list, else fall back to the persisted current period so it never
+  // waits on the list query. Labels are unique (uniq_review_period_label).
+  const periodOptions: string[] = (periods && periods.length)
+    ? periods.map((p) => p.label)
+    : (reviewPeriod ? [reviewPeriod] : []);
 
   // Restore / default selection once people load.
   useEffect(() => {
@@ -157,13 +163,13 @@ export default function Organization() {
                     borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
                   }}>{t.label}</button>
               ))}
-              {tab === 'review' && (periods?.length ?? 0) > 0 && (
+              {tab === 'review' && periodOptions.length > 0 && (
                 <div className="ml-auto flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Review period</span>
-                  <select value={reviewPeriod ?? ''} onChange={(e) => chooseReviewPeriod(e.target.value)}
+                  <select value={reviewPeriod ?? periodOptions[0]} onChange={(e) => chooseReviewPeriod(e.target.value)}
                     className="text-[12px] font-medium rounded-md"
                     style={{ color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '5px 8px' }}>
-                    {periods!.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
+                    {periodOptions.map((label) => <option key={label} value={label}>{label}</option>)}
                   </select>
                 </div>
               )}
