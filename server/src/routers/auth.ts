@@ -130,6 +130,8 @@ export const authRouter = router({
     .use(requireAdmin)
     .input(z.object({
       id: z.string().uuid(),
+      name: z.string().nullable().optional(),
+      email: z.string().email('Enter a valid email address.').optional(),
       title: z.string().optional(),
       jobTitleId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
@@ -140,7 +142,20 @@ export const authRouter = router({
       isBeta: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, ...updates } = input;
+      const { id, ...rest } = input;
+      const updates: Record<string, unknown> = { ...rest };
+      // Email is unique per exact string — normalize and reject a collision with a different employee.
+      if (typeof updates.email === 'string') {
+        const email = updates.email.toLowerCase().trim();
+        const clash = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
+        if (clash && clash.id !== id) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Another employee already uses that email.' });
+        }
+        updates.email = email;
+      }
+      if (typeof updates.name === 'string') {
+        updates.name = updates.name.trim() || null;
+      }
       const [user] = await ctx.db.update(users)
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(users.id, id))

@@ -58,6 +58,44 @@ export default function Employees() {
     onError: (e: any) => setDeleteError(e.message ?? 'Could not remove employee.'),
   });
 
+  // ── Edit Employee (click a name → full edit modal, one Save) ──
+  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', leaderBadge: '', isActive: true, isBeta: false };
+  const [editUser, setEditUser] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState(EDIT_EMPTY);
+  const [editError, setEditError] = useState<string | null>(null);
+  const ef = (patch: Partial<typeof EDIT_EMPTY>) => setEditForm((prev) => ({ ...prev, ...patch }));
+  const openEdit = (u: any) => {
+    setEditError(null);
+    setEditForm({
+      name: u.name ?? '', email: u.email ?? '', role: u.role ?? 'user',
+      jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
+      managerId: u.managerId ?? '', leaderBadge: u.leaderBadge ?? '',
+      isActive: !!u.isActive, isBeta: !!u.isBeta,
+    });
+    setEditUser(u);
+  };
+  const editMutation = trpc.auth.updateUser.useMutation({
+    onSuccess: () => { utils.auth.listUsers.invalidate(); setEditUser(null); setEditError(null); },
+    onError: (e: any) => setEditError(e.message ?? 'Could not save changes.'),
+  });
+  const submitEdit = () => {
+    if (!editUser) return;
+    setEditError(null);
+    if (!editForm.email.trim()) { setEditError('Email is required.'); return; }
+    editMutation.mutate({
+      id: editUser.id,
+      name: editForm.name.trim() || null,
+      email: editForm.email.trim(),
+      role: editForm.role as any,
+      jobTitleId: editForm.jobTitleId || null,
+      departmentId: editForm.departmentId || null,
+      managerId: editForm.managerId || null,
+      leaderBadge: (editForm.leaderBadge || null) as any,
+      isActive: editForm.isActive,
+      isBeta: editForm.isBeta,
+    } as any);
+  };
+
   const filtered = userList.filter((u: any) => {
     const q = searchQuery.toLowerCase();
     return (u.name ?? '').toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q);
@@ -200,7 +238,13 @@ export default function Employees() {
                       {user.isActive ? 'Active' : 'Inactive'}
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-900 font-medium">{user.name ?? '—'}</td>
+                  <td className="px-3 py-3 text-sm">
+                    <button type="button" onClick={() => openEdit(user)}
+                      title="Edit employee"
+                      className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left">
+                      {user.name ?? '—'}
+                    </button>
+                  </td>
                   <td className="px-3 py-3 text-sm text-gray-700">{user.email || '—'}</td>
 
                   {/* Title — managed job_titles lookup */}
@@ -292,6 +336,81 @@ export default function Employees() {
               <button onClick={() => deleteMutation.mutate({ id: pendingDelete.id })} disabled={deleteMutation.isPending}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
                 <Trash2 size={14} />{deleteMutation.isPending ? 'Removing…' : 'Remove employee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!editMutation.isPending) setEditUser(null); }}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900">Edit {editUser.name ?? editUser.email ?? 'employee'}</h3>
+              <button onClick={() => setEditUser(null)} className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <label className="text-xs text-gray-600">Name
+                <input value={editForm.name} onChange={(e) => ef({ name: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+              </label>
+              <label className="text-xs text-gray-600">Email <span className="text-red-500">*</span>
+                <input type="email" value={editForm.email} onChange={(e) => ef({ email: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="name@company.com" />
+              </label>
+              <label className="text-xs text-gray-600">Role
+                <select value={editForm.role} onChange={(e) => ef({ role: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Title
+                <select value={editForm.jobTitleId} onChange={(e) => ef({ jobTitleId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Department
+                <select value={editForm.departmentId} onChange={(e) => ef({ departmentId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Manager
+                <select value={editForm.managerId} onChange={(e) => ef({ managerId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">— (top of tree)</option>
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Leader badge
+                <select value={editForm.leaderBadge} onChange={(e) => ef({ leaderBadge: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  <option value="ELT">ELT</option>
+                  <option value="SLT">SLT</option>
+                  <option value="ST6">ST6</option>
+                </select>
+              </label>
+              <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
+                <input type="checkbox" checked={editForm.isActive} onChange={(e) => ef({ isActive: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> Active
+              </label>
+              <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
+                <input type="checkbox" checked={editForm.isBeta} onChange={(e) => ef({ isBeta: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> Beta
+              </label>
+            </div>
+            {editError && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">{editError}</div>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditUser(null)} disabled={editMutation.isPending}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button onClick={submitEdit} disabled={editMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                {editMutation.isPending ? 'Saving…' : 'Save changes'}
               </button>
             </div>
           </div>
