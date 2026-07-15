@@ -45,6 +45,19 @@ export default function Organization() {
   const [scope, setScope] = useState<Scope>((ls.get('org.scope') as Scope) || 'individual');
   const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
 
+  // Screen-level review-period selector (spec: person-card exec-summary,
+  // 2026-07-15). Drives every card's Review tab; defaults to the latest period.
+  const { data: periods } = trpc.values.listPeriods.useQuery(undefined, { enabled: tab === 'review' });
+  const [reviewPeriod, setReviewPeriod] = useState<string | null>(ls.get('org.reviewPeriod'));
+  useEffect(() => {
+    if (!periods || periods.length === 0) return;
+    if (!reviewPeriod || !periods.some((p) => p.label === reviewPeriod)) {
+      const latest = periods[0].label; // listPeriods is newest-first
+      setReviewPeriod(latest); ls.set('org.reviewPeriod', latest);
+    }
+  }, [periods]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chooseReviewPeriod = (v: string) => { setReviewPeriod(v); ls.set('org.reviewPeriod', v); };
+
   // Restore / default selection once people load.
   useEffect(() => {
     if (selectedId || people.length === 0) return;
@@ -144,6 +157,16 @@ export default function Organization() {
                     borderBottom: tab === t.key ? `2px solid ${TOKENS.tabUnderline}` : '2px solid transparent',
                   }}>{t.label}</button>
               ))}
+              {tab === 'review' && (periods?.length ?? 0) > 0 && (
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Review period</span>
+                  <select value={reviewPeriod ?? ''} onChange={(e) => chooseReviewPeriod(e.target.value)}
+                    className="text-[12px] font-medium rounded-md"
+                    style={{ color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '5px 8px' }}>
+                    {periods!.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
@@ -160,13 +183,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} reviewPeriod={reviewPeriod} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} />)}
+                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} reviewPeriod={reviewPeriod} />)}
                 </div>
               )}
             </div>

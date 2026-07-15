@@ -13,7 +13,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -25,7 +25,8 @@ import { companyValues } from '../db/schema/values.js';
 import { performanceCriteria } from '../db/schema/performance.js';
 import { pips, pipConcerns, pipGoals, pipSignatures, pipCheckins } from '../db/schema/pip.js';
 import { users } from '../db/schema/core.js';
-import { requireManager } from '../services/permissions.js';
+import { requireManager, hasMinimumRole } from '../services/permissions.js';
+import type { RoleTier } from '../services/permissions.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -276,5 +277,73 @@ export const reviewSessionRouter = router({
     await auditChange(ctx.db, ctx.user.id, pipId, 'pips', 'create');
     trackActivity(ctx.db, ctx.user.id, 'pip_fork_from_review', plan.employeeId).catch(() => {});
     return { pipId };
+  }),
+
+  // Compact executive summary for the Org-screen Review tab person card.
+  // Read-only assembly over the REAL review data (reviews/scores + coaching
+  // plan + PIP) for one employee + period — no duplicate storage. Manager-gated
+  // (this is the performance zone; compensation is not surfaced on the card).
+  cardSummary: protectedProcedure.input(empPeriod).query(async ({ ctx, input }) => {
+    const role = (ctx.user.role || 'user') as RoleTier;
+    if (!hasMinimumRole(role, 'manager')) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to reviews.' });
+    }
+    const period = input.periodLabel ?? null;
+    const { valuesReview, perfReview, rows } = await loadSessionData(ctx.db, input.employeeId, period);
+    const hasData = !!valuesReview || !!perfReview;
+
+    const avg = (t: Instrument): number | null => {
+      const xs = rows.filter((r) => r.itemType === t).map((r) => r.score);
+      return xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null;
+    };
+    const values = avg('value');
+    const performance = avg('criterion');
+    const performanceFinal = perfReview?.status === 'final';
+
+    // The review-session container for this employee + period (for status).
+    const session = (await ctx.db.query.reviewSessions.findMany({ where: eq(reviewSessions.employeeId, input.employeeId) }))
+      .find((s: any) => samePeriod(s.periodLabel, period)) ?? null;
+
+    // Go-forward: the latest coaching plan for this employee + period.
+    const plan = (await ctx.db.query.coachingPlans.findMany({
+      where: eq(coachingPlans.employeeId, input.employeeId),
+      orderBy: [desc(coachingPlans.createdAt)],
+    })).find((p: any) => samePeriod(p.periodLabel, period)) ?? null;
+
+    let focusAreas: { title: string; itemType: string | null }[] = [];
+    if (plan) {
+      const fa = await ctx.db.query.coachingPlanFocusAreas.findMany({
+        where: eq(coachingPlanFocusAreas.planId, plan.id),
+        orderBy: [asc(coachingPlanFocusAreas.sortOrder)],
+      });
+      focusAreas = fa.map((f: any) => ({ title: f.title as string, itemType: (f.itemType as string | null) ?? null }));
+    }
+
+    // The fork: a PIP attached to this review session.
+    let pip: { status: string; reviewBy: string | null } | null = null;
+    if (plan?.sessionId) {
+      const p = await ctx.db.query.pips.findFirst({ where: eq(pips.sourceSessionId, plan.sessionId) });
+      if (p) pip = { status: p.status, reviewBy: (p.finalReviewDate as string | null) ?? null };
+    }
+
+    const statusLabel = session?.status === 'closed' ? 'Closed'
+      : plan ? 'Delivered'
+      : performanceFinal ? 'Scored'
+      : 'Draft';
+
+    return {
+      access: { performance: true },
+      period,
+      hasData,
+      statusLabel,
+      values,
+      performance,
+      performanceFinal,
+      summary: (plan?.summaryNarrative as string | null) ?? null,
+      focusAreas,
+      track: (plan?.track ?? null) as 'coaching' | 'pip' | null,
+      pip,
+      planId: (plan?.id as string | null) ?? null,
+    };
   }),
 });

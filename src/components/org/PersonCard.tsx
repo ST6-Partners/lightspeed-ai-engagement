@@ -5,7 +5,7 @@ import EngagementTab from './EngagementTab';
 import AssessmentsTab from './AssessmentsTab';
 import ReviewTab from './ReviewTab';
 
-export default function PersonCard({ person, tab }: { person: Person; tab: TabKey }) {
+export default function PersonCard({ person, tab, reviewPeriod }: { person: Person; tab: TabKey; reviewPeriod?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
   return (
     <div className="rounded-lg p-3" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
@@ -26,7 +26,7 @@ export default function PersonCard({ person, tab }: { person: Person; tab: TabKe
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} />}
         {tab === 'engagement' && <EngagementTab employeeId={person.id} />}
         {tab === 'assessments' && <AssessmentsTab employeeId={person.id} />}
-        {tab === 'review' && <ReviewTab employeeId={person.id} />}
+        {tab === 'review' && <ReviewTab employeeId={person.id} period={reviewPeriod} />}
       </div>
     </div>
   );
