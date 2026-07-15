@@ -362,10 +362,13 @@ export default function Okrs() {
                           onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
                       </div>
                       <div>
-                        <label className={labelCls}>Weight</label>
-                        <input type="number" min={1} className={inputCls} value={form.weight}
-                          onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))} />
-                        <p className="text-[11px] text-ls-ink-3 mt-1">Relative weight vs. sibling items (drives rollup).</p>
+                        <label className={labelCls}>Weight (% of parent)</label>
+                        <div className="relative">
+                          <input type="number" min={1} max={100} className={inputCls} value={form.weight}
+                            onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))} />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ls-ink-3 text-sm">%</span>
+                        </div>
+                        <p className="text-[11px] text-ls-ink-3 mt-1">Its share of the parent goal — sibling items should total 100%.</p>
                       </div>
                     </div>
                     <div>
@@ -412,12 +415,35 @@ export default function Okrs() {
                     </Field>
                     <Field label="Start date">{sel.startDate ? fmtDate(sel.startDate) : '—'}</Field>
                     <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
-                    <Field label="Weight">{sel.weight ?? 1}</Field>
+                    <Field label="Weight">{sel.weight ?? 1}%</Field>
                   </dl>
                   <div className="mt-4">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
                     <p className="text-sm text-ls-ink-2 whitespace-pre-wrap">{sel.description || '—'}</p>
                   </div>
+                  {childrenOf(sel.id).length > 0 && (() => {
+                    const kids = childrenOf(sel.id);
+                    const total = kids.reduce((a, c) => a + (c.weight ?? 1), 0);
+                    return (
+                      <div className="mt-5">
+                        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">Sub-goal weights (% of this goal)</div>
+                        <div className="space-y-1.5">
+                          {kids.map((c) => (
+                            <div key={c.id} className="flex items-center gap-2">
+                              <span className="flex-1 text-sm text-ls-ink truncate">{c.title}</span>
+                              <input type="number" min={1} max={100} defaultValue={c.weight ?? 1}
+                                onBlur={(e) => { const w = Math.max(1, parseInt(e.target.value, 10) || 1); if (w !== (c.weight ?? 1)) update.mutate({ id: c.id, weight: w }); }}
+                                className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
+                              <span className="text-ls-ink-3 text-sm w-3">%</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className={`mt-2 text-[12px] ${total === 100 ? 'text-ls-thrive' : 'text-ls-watch'}`}>
+                          Total: {total}%{total === 100 ? ' ✓' : ' — adjust so these total 100%'}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               )
             ) : (
