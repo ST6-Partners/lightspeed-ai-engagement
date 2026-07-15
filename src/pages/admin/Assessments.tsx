@@ -5,7 +5,8 @@
 // Assessments person card. (Phase 2 will add API/PDF ingestion.)
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 
@@ -26,7 +27,14 @@ const INSIGHT_COLOR_OPTS = ['blue', 'green', 'yellow', 'red'];
 
 export default function Assessments() {
   const { data: users = [], isLoading: usersLoading } = trpc.auth.listUsers.useQuery();
-  const [userId, setUserId] = useState('');
+  const [searchParams] = useSearchParams();
+  const [userId, setUserId] = useState(searchParams.get('userId') ?? '');
+
+  // Preselect when arriving via a deep link (e.g. "View full profile").
+  useEffect(() => {
+    const q = searchParams.get('userId');
+    if (q) setUserId(q);
+  }, [searchParams]);
 
   const sorted = useMemo(
     () => [...(users as any[])].sort((a, b) => str(a.name || a.email).localeCompare(str(b.name || b.email))),
