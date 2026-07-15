@@ -231,11 +231,14 @@ export default function Employees() {
               {filtered.map((user: any) => (
                 <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${!user.isActive ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-3">
-                    <button type="button" onClick={() => set(user.id, { isActive: !user.isActive })}
-                      title={user.isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
-                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${user.isActive ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
-                      {user.isActive ? 'Active' : 'Inactive'}
+                    <button type="button" role="switch" aria-checked={user.isActive}
+                      onClick={() => set(user.id, { isActive: !user.isActive })}
+                      title={user.isActive ? 'Active — click to set Inactive' : 'Inactive — click to set Active'}
+                      className="inline-flex items-center gap-2 cursor-pointer">
+                      <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${user.isActive ? 'bg-green-500' : 'bg-gray-300'}`}>
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${user.isActive ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                      </span>
+                      <span className={`text-xs font-medium ${user.isActive ? 'text-green-700' : 'text-gray-500'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
                     </button>
                   </td>
                   <td className="px-3 py-3 text-sm">

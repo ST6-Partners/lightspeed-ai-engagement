@@ -14,6 +14,7 @@ import { eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { users } from '../db/schema/core.js';
+import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
 import { env } from '../env.js';
@@ -161,6 +162,14 @@ export const authRouter = router({
         .where(eq(users.id, id))
         .returning();
       if (!user) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Keep the one live denormalized copy of an employee's name in sync — the
+      // OKR owner display label. Everything else (org tree, PIPs, reviews,
+      // coaching, people pickers) resolves the employee live by id, so it
+      // reflects edits automatically. Historical survey submissions keep the
+      // name captured at submission time and are intentionally NOT rewritten.
+      if ('name' in updates) {
+        await ctx.db.update(okrNodes).set({ owner: user.name }).where(eq(okrNodes.ownerUserId, id));
+      }
       return user;
     }),
 
