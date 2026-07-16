@@ -372,6 +372,13 @@
       "when": 1784132517845,
       "tag": "0052_priorities_archived",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1784132577845,
+      "tag": "0053_objectives_full_weight",
+      "breakpoints": true
     }
   ]
 }

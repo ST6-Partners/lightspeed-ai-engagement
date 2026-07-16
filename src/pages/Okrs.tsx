@@ -419,7 +419,16 @@ export default function Okrs() {
                     </Field>
                     <Field label="Start date">{sel.startDate ? fmtDate(sel.startDate) : '—'}</Field>
                     <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
-                    <Field label="Weight">{sel.weight ?? 1}%</Field>
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">{sel.parentId ? 'Weight (% of parent)' : 'Weight (whole goal)'}</div>
+                      <div className="flex items-center gap-1">
+                        <input key={sel.id} type="number" min={1} max={100}
+                          defaultValue={sel.weight ?? (sel.parentId ? 1 : 100)}
+                          onBlur={(e) => { const base = sel.weight ?? (sel.parentId ? 1 : 100); const w = Math.max(1, parseInt(e.target.value, 10) || 1); if (w !== base) update.mutate({ id: sel.id, weight: w }); }}
+                          className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
+                        <span className="text-ls-ink-3 text-sm">%</span>
+                      </div>
+                    </div>
                   </dl>
                   <div className="mt-4">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
@@ -498,7 +507,7 @@ export default function Okrs() {
           <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
             <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
               <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Plan</span>
-              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green' }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
+              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green', weight: 100 }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
                 disabled={create.isPending}
                 className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
             </div>
