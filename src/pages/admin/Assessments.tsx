@@ -40,6 +40,7 @@ export default function Assessments() {
     () => [...(users as any[])].sort((a, b) => str(a.name || a.email).localeCompare(str(b.name || b.email))),
     [users],
   );
+  const person = sorted.find((u) => u.id === userId);
 
   return (
     <div className="max-w-4xl">
@@ -72,8 +73,8 @@ export default function Assessments() {
       ) : (
         <div className="space-y-6">
           <SummaryEditor userId={userId} />
-          <CcatEditor userId={userId} />
-          <EppEditor userId={userId} />
+          <CcatProfile userId={userId} person={person} />
+          <EppProfile userId={userId} />
           <InsightEditor userId={userId} />
         </div>
       )}
@@ -160,102 +161,95 @@ function SummaryEditor({ userId }: { userId: string }) {
   );
 }
 
-// ── CCAT sections ────────────────────────────────────────────
-function CcatEditor({ userId }: { userId: string }) {
-  const { data = [], refetch } = trpc.orgScreen.ccatSectionsList.useQuery({ userId });
-  const update = trpc.orgScreen.ccatSectionUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
-  const remove = trpc.orgScreen.ccatSectionRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
+// ── Band helpers (computed from the percentile — no stored colour) ──
+type Band = { label: string; color: string };
+const BAND = { exceptional: '#2f8f5b', strong: '#4e9d6b', solid: '#5b9bd5', developing: '#d4a53a', weak: '#d9534f', none: '#9ca3af' };
+const numv = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
 
-  const [editId, setEditId] = useState<string | null>(null);
-  const [eLabel, setELabel] = useState(''); const [eScore, setEScore] = useState(''); const [eSort, setESort] = useState('');
+function eppBand(p: number | null): Band {
+  if (p == null) return { label: '—', color: BAND.none };
+  if (p >= 85) return { label: 'Exceptional', color: BAND.exceptional };
+  if (p >= 70) return { label: 'Strong', color: BAND.strong };
+  if (p >= 55) return { label: 'Solid', color: BAND.solid };
+  if (p >= 30) return { label: 'Developing', color: BAND.developing };
+  return { label: 'Weak', color: BAND.weak };
+}
+function ccatBand(p: number | null): Band {
+  if (p == null) return { label: '—', color: BAND.none };
+  if (p >= 85) return { label: 'Exceptional', color: BAND.exceptional };
+  if (p >= 70) return { label: 'Strong', color: BAND.strong };
+  if (p >= 50) return { label: 'Solid', color: BAND.solid };
+  if (p >= 30) return { label: 'Developing', color: BAND.developing };
+  return { label: 'Below range', color: BAND.weak };
+}
 
-  const rows = data as any[];
+function ProfileBar({ pct, color }: { pct: number | null; color: string }) {
+  const w = Math.max(0, Math.min(100, pct ?? 0));
   return (
-    <SectionShell title="CCAT" subtitle="Use label “Overall” for the badge (raw /50). Other rows are 0–100 percentiles (e.g. Spatial, Verbal, Math & Logic).">
-      <table className="w-full text-sm mb-3">
-        <thead>
-          <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-            <th className="py-2 font-medium">Label</th><th className="py-2 font-medium w-24">Score</th><th className="py-2 font-medium w-24">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={4} className="py-3 text-gray-400">No CCAT rows yet.</td></tr>
-          ) : rows.map((r) => {
-            const ed = editId === r.id;
-            return (
-              <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-full`} value={eLabel} onChange={(e) => setELabel(e.target.value)} /> : r.label}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-20`} value={eScore} onChange={(e) => setEScore(e.target.value)} /> : str(r.score)}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={eSort} onChange={(e) => setESort(e.target.value)} /> : r.sortOrder}</td>
-                <td className="py-1.5 text-right whitespace-nowrap">
-                  {ed ? (
-                    <>
-                      <button onClick={() => update.mutate({ id: r.id, label: eLabel.trim(), score: toN(eScore), sortOrder: Number(eSort || 0) })} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
-                      <button onClick={() => setEditId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={15} /></button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => { setEditId(r.id); setELabel(r.label); setEScore(str(r.score)); setESort(String(r.sortOrder)); }} className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={14} /></button>
-                      <button onClick={() => { if (confirm(`Delete “${r.label}”?`)) remove.mutate({ id: r.id }); }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ flex: 1, height: 10, background: '#eef0f2', borderRadius: 5 }}>
+      <div style={{ width: `${w}%`, height: 10, background: color, borderRadius: 5 }} />
+    </div>
+  );
+}
+
+const legendStyle: React.CSSProperties = { marginTop: 14, paddingTop: 10, borderTop: '1px solid #f0f0f0', fontSize: 12, color: '#9ca3af' };
+
+// ── CCAT — read profile (name + overall raw /50 + banded sub-score bars) ──
+function CcatProfile({ userId, person }: { userId: string; person: any }) {
+  const { data = [] } = trpc.orgScreen.ccatSectionsList.useQuery({ userId });
+  const rows = [...(data as any[])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const overall = rows.find((r) => String(r.label).toLowerCase() === 'overall');
+  const subs = rows.filter((r) => String(r.label).toLowerCase() !== 'overall');
+  return (
+    <SectionShell title="CCAT" subtitle="Criteria Cognitive Aptitude Test — overall raw score (/50) and sub-score percentiles.">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{person?.name || '—'}</div>
+          {person?.title && <div style={{ fontSize: 13, color: '#6b7280' }}>{person.title}</div>}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontSize: 28, fontWeight: 700, color: '#1a1a2e' }}>{overall?.score ?? '—'}</span>
+          <span style={{ fontSize: 15, color: '#9ca3af' }}>/50</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {subs.map((s) => {
+          const p = numv(s.score);
+          return (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ width: 120, fontSize: 14, color: '#1a1a2e' }}>{s.label}</span>
+              <ProfileBar pct={p} color={ccatBand(p).color} />
+              <span style={{ width: 36, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{p ?? '—'}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={legendStyle}>Percentiles vs. Criteria&rsquo;s applicant norm group. Bands: 85+ exceptional &middot; 70&ndash;84 strong &middot; 50&ndash;69 solid &middot; 30&ndash;49 developing &middot; &lt;30 below range.</div>
     </SectionShell>
   );
 }
 
-// ── EPP attributes ───────────────────────────────────────────
-function EppEditor({ userId }: { userId: string }) {
-  const { data = [], refetch } = trpc.orgScreen.eppAttributesList.useQuery({ userId });
-  const update = trpc.orgScreen.eppAttributeUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
-  const remove = trpc.orgScreen.eppAttributeRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
-
-  const [editId, setEditId] = useState<string | null>(null);
-  const [e, setE] = useState({ name: '', pct: '', sort: '' });
-
-  const rows = data as any[];
+// ── EPP — read profile (12 traits, banded bar + percentile + band label) ──
+function EppProfile({ userId }: { userId: string }) {
+  const { data = [] } = trpc.orgScreen.eppAttributesList.useQuery({ userId });
+  const rows = [...(data as any[])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   return (
-    <SectionShell title="EPP attributes" subtitle="The bars under EPP. Percentile = the trait’s percentile ranking (0–100), which is also the bar length. EPP has no “high/low”, so bars use a single neutral colour.">
-      <table className="w-full text-sm mb-3">
-        <thead>
-          <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-            <th className="py-2 font-medium">Attribute</th><th className="py-2 font-medium w-24">Percentile</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={4} className="py-3 text-gray-400">No EPP attributes yet.</td></tr>
-          ) : rows.map((r) => {
-            const ed = editId === r.id;
-            return (
-              <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-full`} value={e.name} onChange={(ev) => setE({ ...e, name: ev.target.value })} /> : r.name}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={e.pct} onChange={(ev) => setE({ ...e, pct: ev.target.value })} /> : str(r.st6Score)}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-14`} value={e.sort} onChange={(ev) => setE({ ...e, sort: ev.target.value })} /> : r.sortOrder}</td>
-                <td className="py-1.5 text-right whitespace-nowrap">
-                  {ed ? (
-                    <>
-                      <button onClick={() => update.mutate({ id: r.id, name: e.name.trim(), st6Score: toN(e.pct), sortOrder: Number(e.sort || 0) })} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
-                      <button onClick={() => setEditId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={15} /></button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => { setEditId(r.id); setE({ name: r.name, pct: str(r.st6Score), sort: String(r.sortOrder) }); }} className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={14} /></button>
-                      <button onClick={() => { if (confirm(`Delete “${r.name}”?`)) remove.mutate({ id: r.id }); }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <SectionShell title="EPP Profiles" subtitle="Criteria Employee Personality Profile — 12 traits, percentile vs. global norm.">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {rows.length === 0 ? <div className="text-sm text-gray-400">No EPP data.</div> : rows.map((r) => {
+          const p = numv(r.st6Score);
+          const b = eppBand(p);
+          return (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ width: 150, fontSize: 14, color: '#1a1a2e' }}>{r.name}</span>
+              <ProfileBar pct={p} color={b.color} />
+              <span style={{ width: 34, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{p ?? '—'}</span>
+              <span style={{ width: 92, textAlign: 'right', fontSize: 13, fontWeight: 500, color: b.color }}>{b.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={legendStyle}>Percentile rankings vs. Criteria&rsquo;s global norm group. Bands: 85+ exceptional &middot; 70&ndash;84 strong &middot; 55&ndash;69 solid &middot; 30&ndash;54 developing &middot; &lt;30 weak.</div>
     </SectionShell>
   );
 }
