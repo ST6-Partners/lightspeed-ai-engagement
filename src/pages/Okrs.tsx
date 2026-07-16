@@ -83,7 +83,7 @@ export default function Okrs() {
   const [teamExpanded, setTeamExpanded] = useState<Record<string, boolean>>({});
   const [detailOpen, setDetailOpen] = useState(false);
   const [wDraft, setWDraft] = useState<Record<string, string>>({});
-  const [wError, setWError] = useState<string | null>(null);
+  const [wExpand, setWExpand] = useState<Record<string, boolean>>({});
 
   const rows = (data ?? []) as OkrRow[];
   const archivedRows = (archivedQ.data ?? []) as OkrRow[];
@@ -173,6 +173,17 @@ export default function Okrs() {
       setFormError(`Every field is required to save. Still needed: ${missing.join(', ')}.`);
       return;
     }
+    // Each sibling weight group (the goal's sub-goals, and each sub-goal's tasks)
+    // must total exactly 100%.
+    const wOf = (n: OkrRow) => parseInt(wDraft[n.id] ?? String(n.weight ?? 1), 10) || 0;
+    const direct = childrenOf(sel.id);
+    const groups: { label: string; nodes: OkrRow[] }[] = [];
+    if (direct.length) groups.push({ label: 'the sub-goals', nodes: direct });
+    direct.forEach((c) => { const gk = childrenOf(c.id); if (gk.length) groups.push({ label: `the tasks under “${c.title}”`, nodes: gk }); });
+    for (const g of groups) {
+      const t = g.nodes.reduce((acc, n) => acc + wOf(n), 0);
+      if (t !== 100) { setFormError(`Weights for ${g.label} must total 100% — currently ${t}%.`); return; }
+    }
     setFormError(null);
     const owner = members.find((m) => m.id === form.ownerUserId)?.name ?? null;
     update.mutate(
@@ -191,6 +202,12 @@ export default function Okrs() {
       },
       { onSuccess: () => { setNewNodeId(null); setEditing(false); if (form.status === 'complete' && sel.status !== 'complete') fireConfetti(); } },
     );
+    // Persist any changed sub-goal / task weights entered in the nested editor.
+    [...direct, ...direct.flatMap((c) => childrenOf(c.id))].forEach((n) => {
+      const w = Math.max(1, wOf(n) || 1);
+      if (w !== (n.weight ?? 1)) update.mutate({ id: n.id, weight: w });
+    });
+    setWDraft({});
   };
 
   const missingField = (empty: boolean) => (formError && empty ? ' border-ls-risk ring-1 ring-ls-risk' : '');
@@ -208,7 +225,7 @@ export default function Okrs() {
 
   const openDetail = (id: string) => { setSelected(id); setEditing(false); setFormError(null); setDetailOpen(true); };
 
-  useEffect(() => { setWDraft({}); setWError(null); }, [selected]);
+  useEffect(() => { setWDraft({}); setWExpand({}); }, [selected]);
 
 
   const deleteNode = (id: string) => {
@@ -300,184 +317,210 @@ export default function Okrs() {
 
   const childSpec = sel ? CHILD_TYPE[sel.type] : undefined;
 
+  // Nested weight editor (Edit mode only): the goal's sub-goals, each with an
+  // expandable dropdown for its tasks. Values live in wDraft; saved by Save.
+  const renderWeightEditor = (parent: OkrRow) => {
+    const kids = childrenOf(parent.id);
+    if (!kids.length) return null;
+    const wStr = (n: OkrRow) => wDraft[n.id] ?? String(n.weight ?? 1);
+    const total = kids.reduce((acc, c) => acc + (parseInt(wStr(c), 10) || 0), 0);
+    const noun = parent.type === 'objective' ? 'objective' : 'key result';
+    return (
+      <div>
+        <label className={labelCls}>Sub-goal weights (% of this {noun})</label>
+        <div className="border border-ls-line rounded-md p-2 space-y-1.5">
+          {kids.map((c) => {
+            const gk = childrenOf(c.id);
+            const isExp = wExpand[c.id] ?? false;
+            const gTotal = gk.reduce((acc, g) => acc + (parseInt(wDraft[g.id] ?? String(g.weight ?? 1), 10) || 0), 0);
+            return (
+              <div key={c.id}>
+                <div className="flex items-center gap-1.5">
+                  {gk.length > 0 ? (
+                    <button type="button" onClick={() => setWExpand((e) => ({ ...e, [c.id]: !isExp }))}
+                      className={`w-4 shrink-0 text-ls-ink-3 transition-transform ${isExp ? 'rotate-90' : ''}`}><ChevronRight size={13} /></button>
+                  ) : <span className="w-4 shrink-0" />}
+                  <span className="flex-1 text-sm truncate">{c.title}</span>
+                  <input type="number" min={1} max={100} value={wStr(c)}
+                    onChange={(e) => setWDraft((d) => ({ ...d, [c.id]: e.target.value }))}
+                    className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
+                  <span className="text-ls-ink-3 text-sm w-3">%</span>
+                </div>
+                {isExp && gk.length > 0 && (
+                  <div className="ml-6 mt-1 space-y-1.5">
+                    {gk.map((g) => (
+                      <div key={g.id} className="flex items-center gap-1.5">
+                        <span className="flex-1 text-[13px] text-ls-ink-2 truncate">{g.title}</span>
+                        <input type="number" min={1} max={100} value={wDraft[g.id] ?? String(g.weight ?? 1)}
+                          onChange={(e) => setWDraft((d) => ({ ...d, [g.id]: e.target.value }))}
+                          className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
+                        <span className="text-ls-ink-3 text-sm w-3">%</span>
+                      </div>
+                    ))}
+                    <div className={`text-[12px] ${gTotal === 100 ? 'text-ls-thrive' : 'text-ls-watch'}`}>Tasks total: {gTotal}%{gTotal === 100 ? ' ✓' : ' — should be 100%'}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className={`mt-1.5 text-[12px] ${total === 100 ? 'text-ls-thrive' : 'text-ls-watch'}`}>Total: {total}%{total === 100 ? ' ✓' : ' — should be 100%'}</div>
+      </div>
+    );
+  };
+
   const renderDetail = () => (
     sel ? (
-              editing ? (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
-                    <div className="flex gap-2">
-                      <button onClick={() => { const nid = newNodeId; setEditing(false); setFormError(null); if (nid) { remove.mutate({ id: nid }); setNewNodeId(null); setSelected(null); } }}
-                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Cancel</button>
-                      <button onClick={saveEdit} disabled={update.isPending}
-                        className="ls-btn ls-btn-primary text-xs py-1.5 px-3">
-                        {update.isPending ? 'Saving…' : 'Save'}</button>
+      editing ? (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
+            <div className="flex gap-2">
+              <button onClick={() => { const nid = newNodeId; setEditing(false); setFormError(null); if (nid) { remove.mutate({ id: nid }); setNewNodeId(null); setSelected(null); } }}
+                className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Cancel</button>
+              <button onClick={saveEdit} disabled={update.isPending}
+                className="ls-btn ls-btn-primary text-xs py-1.5 px-3">{update.isPending ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {formError && (
+              <div className="text-[12.5px] text-ls-risk border border-ls-risk rounded-md px-3 py-2" style={{ background: '#FBEAE8' }}>{formError}</div>
+            )}
+            <div>
+              <label className={labelCls}>Title *</label>
+              <input className={`${inputCls}${missingField(!form.title.trim())}`} value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Owner *</label>
+                <select className={`${inputCls}${missingField(!form.ownerUserId)}`} value={form.ownerUserId}
+                  onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))}>
+                  <option value="">— Unassigned</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}{m.role ? ` · ${m.role}` : ''}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-ls-ink-3 mt-1">From the Organization directory.</p>
+              </div>
+              <div>
+                <label className={labelCls}>Team</label>
+                <select className={inputCls} value={form.departmentId}
+                  onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}>
+                  <option value="">— No team</option>
+                  {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <p className="text-[11px] text-ls-ink-3 mt-1">Tag this OKR to a team (optional).</p>
+              </div>
+              <div>
+                <label className={labelCls}>Status *</label>
+                <select className={`${inputCls}${missingField(!form.status)}`} value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
+                  {STATUS_OPTS.map((s2) => <option key={s2.value} value={s2.value}>{s2.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Status light *</label>
+                <select className={`${inputCls}${missingField(!form.light)}`} value={form.light}
+                  onChange={(e) => setForm((f) => ({ ...f, light: e.target.value }))}>
+                  {LIGHT_OPTS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Start date *</label>
+                <input type="date" className={`${inputCls}${missingField(!form.startDate)}`} value={form.startDate}
+                  onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelCls}>Due date *</label>
+                <input type="date" className={`${inputCls}${missingField(!form.dueDate)}`} value={form.dueDate}
+                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Description *</label>
+              <textarea className={`${inputCls}${missingField(!form.description.trim())}`} rows={4} value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+            </div>
+            {childrenOf(sel.id).length > 0 && renderWeightEditor(sel)}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
+            <div className="flex gap-2">
+              {childSpec && (
+                <button onClick={addChild} disabled={create.isPending}
+                  className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep">
+                  <Plus size={13} /> {childSpec.label}</button>
+              )}
+              <button onClick={startEdit}
+                className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Pencil size={13} /> Edit</button>
+              <button onClick={() => archive.mutate({ id: sel.id })} disabled={archive.isPending}
+                className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Archive size={13} /> Archive</button>
+              <button onClick={() => deleteNode(sel.id)} disabled={remove.isPending}
+                className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
+            </div>
+          </div>
+          <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
+          <div className="mb-4">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Progress{childrenOf(sel.id).length > 0 ? ' (rolled up)' : ''}</div>
+            <ProgressBar pct={progressOf(sel)} />
+            <label className="mt-2.5 inline-flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={sel.status === 'complete'}
+                onChange={(e) => { const done = e.target.checked; update.mutate({ id: sel.id, status: done ? 'complete' : 'not_started' }); if (done) fireConfetti(); }}
+                className="w-4 h-4 accent-ls-blue-deep cursor-pointer" />
+              Mark complete
+            </label>
+          </div>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
+            <Field label="Team">{deptList.find((d) => d.id === sel.departmentId)?.name ?? '—'}</Field>
+            <Field label="Status">{STATUS_LABEL[sel.status] ?? sel.status.replace('_', ' ')}</Field>
+            <Field label="Status light">
+              {sel.light ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: LIGHT_HEX[sel.light as Light] }} />
+                  <span className="capitalize">{sel.light}</span>
+                </span>
+              ) : '—'}
+            </Field>
+            <Field label="Start date">{sel.startDate ? fmtDate(sel.startDate) : '—'}</Field>
+            <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
+            <Field label={sel.parentId ? 'Weight (% of parent)' : 'Weight (whole goal)'}>{sel.weight ?? (sel.parentId ? 1 : 100)}%</Field>
+          </dl>
+          <div className="mt-4">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
+            <p className="text-sm text-ls-ink-2 whitespace-pre-wrap">{sel.description || '—'}</p>
+          </div>
+          {childrenOf(sel.id).length > 0 && (
+            <div className="mt-5">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">Sub-goal weights (% of this goal)</div>
+              <div className="space-y-1">
+                {childrenOf(sel.id).map((c) => (
+                  <div key={c.id}>
+                    <div className="flex items-center justify-between text-sm py-0.5">
+                      <span className="truncate">{c.title}</span>
+                      <span className="text-ls-ink-3 tabular-nums">{c.weight ?? 1}%</span>
                     </div>
+                    {childrenOf(c.id).map((g) => (
+                      <div key={g.id} className="flex items-center justify-between text-[13px] text-ls-ink-3 pl-4 py-0.5">
+                        <span className="truncate">↳ {g.title}</span>
+                        <span className="tabular-nums">{g.weight ?? 1}%</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-4">
-                    {formError && (
-                      <div className="text-[12.5px] text-ls-risk border border-ls-risk rounded-md px-3 py-2" style={{ background: '#FBEAE8' }}>{formError}</div>
-                    )}
-                    <div>
-                      <label className={labelCls}>Title *</label>
-                      <input className={`${inputCls}${missingField(!form.title.trim())}`} value={form.title}
-                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelCls}>Owner *</label>
-                        <select className={`${inputCls}${missingField(!form.ownerUserId)}`} value={form.ownerUserId}
-                          onChange={(e) => setForm((f) => ({ ...f, ownerUserId: e.target.value }))}>
-                          <option value="">— Unassigned</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}{m.role ? ` · ${m.role}` : ''}</option>
-                          ))}
-                        </select>
-                        <p className="text-[11px] text-ls-ink-3 mt-1">From the Organization directory.</p>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Team</label>
-                        <select className={inputCls} value={form.departmentId}
-                          onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}>
-                          <option value="">— No team</option>
-                          {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                        <p className="text-[11px] text-ls-ink-3 mt-1">Tag this OKR to a team (optional).</p>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Status *</label>
-                        <select className={`${inputCls}${missingField(!form.status)}`} value={form.status}
-                          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
-                          {STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Status light *</label>
-                        <select className={`${inputCls}${missingField(!form.light)}`} value={form.light}
-                          onChange={(e) => setForm((f) => ({ ...f, light: e.target.value }))}>
-                          {LIGHT_OPTS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Start date *</label>
-                        <input type="date" className={`${inputCls}${missingField(!form.startDate)}`} value={form.startDate}
-                          onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Due date *</label>
-                        <input type="date" className={`${inputCls}${missingField(!form.dueDate)}`} value={form.dueDate}
-                          onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Description *</label>
-                      <textarea className={`${inputCls}${missingField(!form.description.trim())}`} rows={4} value={form.description}
-                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
-                    <div className="flex gap-2">
-                      {childSpec && (
-                        <button onClick={addChild} disabled={create.isPending}
-                          className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep">
-                          <Plus size={13} /> {childSpec.label}</button>
-                      )}
-                      <button onClick={startEdit}
-                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Pencil size={13} /> Edit</button>
-                      <button onClick={() => archive.mutate({ id: sel.id })} disabled={archive.isPending}
-                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5"><Archive size={13} /> Archive</button>
-                      <button onClick={() => deleteNode(sel.id)} disabled={remove.isPending}
-                        className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
-                    </div>
-                  </div>
-                  <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
-                  <div className="mb-4">
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Progress{childrenOf(sel.id).length > 0 ? ' (rolled up)' : ''}</div>
-                    <ProgressBar pct={progressOf(sel)} />
-                    <label className="mt-2.5 inline-flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={sel.status === 'complete'}
-                        onChange={(e) => { const done = e.target.checked; update.mutate({ id: sel.id, status: done ? 'complete' : 'not_started' }); if (done) fireConfetti(); }}
-                        className="w-4 h-4 accent-ls-blue-deep cursor-pointer" />
-                      Mark complete
-                    </label>
-                  </div>
-                  <dl className="grid grid-cols-2 gap-4 text-sm">
-                    <Field label="Owner">{ownerName(sel) ?? 'Unassigned'}</Field>
-                    <Field label="Team">{deptList.find((d) => d.id === sel.departmentId)?.name ?? '—'}</Field>
-                    <Field label="Status">{STATUS_LABEL[sel.status] ?? sel.status.replace('_', ' ')}</Field>
-                    <Field label="Status light">
-                      {sel.light ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: LIGHT_HEX[sel.light as Light] }} />
-                          <span className="capitalize">{sel.light}</span>
-                        </span>
-                      ) : '—'}
-                    </Field>
-                    <Field label="Start date">{sel.startDate ? fmtDate(sel.startDate) : '—'}</Field>
-                    <Field label="Due date">{sel.dueDate ? fmtDate(sel.dueDate) : '—'}</Field>
-                    <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">{sel.parentId ? 'Weight (% of parent)' : 'Weight (whole goal)'}</div>
-                      <div className="flex items-center gap-1">
-                        <input key={sel.id} type="number" min={1} max={100}
-                          defaultValue={sel.weight ?? (sel.parentId ? 1 : 100)}
-                          onBlur={(e) => { const base = sel.weight ?? (sel.parentId ? 1 : 100); const w = Math.max(1, parseInt(e.target.value, 10) || 1); if (w !== base) update.mutate({ id: sel.id, weight: w }); }}
-                          className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
-                        <span className="text-ls-ink-3 text-sm">%</span>
-                      </div>
-                    </div>
-                  </dl>
-                  <div className="mt-4">
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Description</div>
-                    <p className="text-sm text-ls-ink-2 whitespace-pre-wrap">{sel.description || '—'}</p>
-                  </div>
-                  {childrenOf(sel.id).length > 0 && (() => {
-                    const kids = childrenOf(sel.id);
-                    const draftFor = (c: OkrRow) => wDraft[c.id] ?? String(c.weight ?? 1);
-                    const total = kids.reduce((a, c) => a + (parseInt(draftFor(c), 10) || 0), 0);
-                    const dirty = kids.some((c) => (parseInt(draftFor(c), 10) || 0) !== (c.weight ?? 1));
-                    const saveWeights = () => {
-                      if (total !== 100) { setWError(`Weights must total 100% — they currently add up to ${total}%. Adjust the sub-goals so they sum to exactly 100%.`); return; }
-                      setWError(null);
-                      kids.forEach((c) => {
-                        const w = Math.max(1, parseInt(draftFor(c), 10) || 1);
-                        if (w !== (c.weight ?? 1)) update.mutate({ id: c.id, weight: w });
-                      });
-                      setWDraft({});
-                    };
-                    return (
-                      <div className="mt-5">
-                        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">Sub-goal weights (% of this goal)</div>
-                        <div className="space-y-1.5">
-                          {kids.map((c) => (
-                            <div key={c.id} className="flex items-center gap-2">
-                              <span className="flex-1 text-sm text-ls-ink truncate">{c.title}</span>
-                              <input type="number" min={1} max={100} value={draftFor(c)}
-                                onChange={(e) => { setWDraft((d) => ({ ...d, [c.id]: e.target.value })); setWError(null); }}
-                                className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-ls-active" />
-                              <span className="text-ls-ink-3 text-sm w-3">%</span>
-                            </div>
-                          ))}
-                        </div>
-                        {wError && (
-                          <div className="mt-2 text-[12.5px] text-ls-risk border border-ls-risk rounded-md px-3 py-2" style={{ background: '#FBEAE8' }}>{wError}</div>
-                        )}
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className={`text-[12px] ${total === 100 ? 'text-ls-thrive' : 'text-ls-watch'}`}>Total: {total}%{total === 100 ? ' ✓' : ''}</span>
-                          <button onClick={saveWeights} disabled={update.isPending || !dirty}
-                            className="ls-btn ls-btn-primary text-xs py-1.5 px-3 disabled:opacity-50">Save weights</button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </>
-              )
-            ) : (
-              <div className="h-full flex items-center justify-center text-sm text-ls-ink-3">Select an item to see its details.</div>
-            )
+                ))}
+              </div>
+              <p className="text-[11px] text-ls-ink-3 mt-1.5">Use Edit to change weights.</p>
+            </div>
+          )}
+        </>
+      )
+    ) : (
+      <div className="h-full flex items-center justify-center text-sm text-ls-ink-3">Select an item to see its details.</div>
+    )
   );
 
   return (
