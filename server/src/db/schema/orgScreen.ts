@@ -86,6 +86,13 @@ export const assessmentSummaries = pgTable('assessment_summaries', {
   eppColor: varchar('epp_color', { length: 16 }),
   eppProfile: text('epp_profile'),                    // profile name under EPP badge
   eppScore: numeric('epp_score'),                     // displayScore
+  // Insights (Colour Dynamics) header meta — from the uploaded Insights profile.
+  insightsType: text('insights_type'),                // e.g. 'Reforming Director'
+  insightsConsciousWheel: text('insights_conscious_wheel'),
+  insightsLessWheel: text('insights_less_wheel'),
+  insightsPreferenceFlow: numeric('insights_preference_flow'),
+  insightsCompletedAt: date('insights_completed_at'),
+  insightsSource: varchar('insights_source', { length: 16 }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

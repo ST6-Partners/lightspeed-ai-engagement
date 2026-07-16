@@ -75,7 +75,7 @@ export default function Assessments() {
           <SummaryEditor userId={userId} />
           <CcatProfile userId={userId} person={person} />
           <EppProfile userId={userId} />
-          <InsightEditor userId={userId} />
+          <InsightProfile userId={userId} person={person} />
         </div>
       )}
     </div>
@@ -254,56 +254,105 @@ function EppProfile({ userId }: { userId: string }) {
   );
 }
 
-// ── Insight profiles ─────────────────────────────────────────
-function InsightEditor({ userId }: { userId: string }) {
-  const { data = [], refetch } = trpc.orgScreen.insightProfilesList.useQuery({ userId });
-  const update = trpc.orgScreen.insightProfileUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
-  const remove = trpc.orgScreen.insightProfileRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
+// ── Insights (Colour Dynamics) — read profile ──
+const ENERGY: Record<string, string> = { blue: '#4285f4', green: '#34a853', yellow: '#ffd400', red: '#ea4335' };
+const ENERGY_ORDER = ['blue', 'green', 'yellow', 'red'];
+const cap = (c: string) => (c ? c.charAt(0).toUpperCase() + c.slice(1) : c);
+function fmtDate(d: unknown): string {
+  if (!d) return '';
+  const dt = new Date(String(d));
+  if (isNaN(dt.getTime())) return String(d);
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
-  const [editId, setEditId] = useState<string | null>(null);
-  const [e, setE] = useState({ color: 'blue', con: '', less: '', primary: false, sort: '' });
-
-  const rows = data as any[];
+function EnergyRow({ color, value }: { color: string; value: number | null }) {
+  const w = Math.max(0, Math.min(100, value ?? 0));
   return (
-    <SectionShell title="Insights (Colour Dynamics)" subtitle="One row per colour (blue, green, yellow, red). Conscious + Less-conscious are 0–100. Mark the dominant colour primary.">
-      <table className="w-full text-sm mb-3">
-        <thead>
-          <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-            <th className="py-2 font-medium w-28">Colour</th><th className="py-2 font-medium w-24">Conscious</th><th className="py-2 font-medium w-28">Less consc.</th><th className="py-2 font-medium w-20">Primary</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={6} className="py-3 text-gray-400">No insight rows yet.</td></tr>
-          ) : rows.map((r) => {
-            const ed = editId === r.id;
-            return (
-              <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                <td className="py-1.5 pr-2">{ed ? (
-                  <select className={`${inputCls} w-24`} value={e.color} onChange={(ev) => setE({ ...e, color: ev.target.value })}>{INSIGHT_COLOR_OPTS.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-                ) : r.color}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={e.con} onChange={(ev) => setE({ ...e, con: ev.target.value })} /> : str(r.consciousScore)}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={e.less} onChange={(ev) => setE({ ...e, less: ev.target.value })} /> : str(r.lessConsciousScore)}</td>
-                <td className="py-1.5 pr-2">{ed ? <input type="checkbox" checked={e.primary} onChange={(ev) => setE({ ...e, primary: ev.target.checked })} /> : (r.isPrimary ? 'Yes' : '—')}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-14`} value={e.sort} onChange={(ev) => setE({ ...e, sort: ev.target.value })} /> : r.sortOrder}</td>
-                <td className="py-1.5 text-right whitespace-nowrap">
-                  {ed ? (
-                    <>
-                      <button onClick={() => update.mutate({ id: r.id, color: e.color, consciousScore: toN(e.con), lessConsciousScore: toN(e.less), isPrimary: e.primary, sortOrder: Number(e.sort || 0) })} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
-                      <button onClick={() => setEditId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={15} /></button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => { setEditId(r.id); setE({ color: r.color || 'blue', con: str(r.consciousScore), less: str(r.lessConsciousScore), primary: !!r.isPrimary, sort: String(r.sortOrder) }); }} className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={14} /></button>
-                      <button onClick={() => { if (confirm(`Delete ${r.color}?`)) remove.mutate({ id: r.id }); }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      <span style={{ width: 56, fontSize: 13, color: '#374151' }}>{cap(color)}</span>
+      <div style={{ flex: 1, height: 8, background: '#eef0f2', borderRadius: 4 }}>
+        <div style={{ width: `${w}%`, height: 8, background: ENERGY[color] ?? '#9ca3af', borderRadius: 4 }} />
+      </div>
+      <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{value == null ? '—' : `${Math.round(value)}%`}</span>
+    </div>
+  );
+}
+
+function InsightProfile({ userId, person }: { userId: string; person: any }) {
+  const { data: profiles = [] } = trpc.orgScreen.insightProfilesList.useQuery({ userId });
+  const { data: sums = [] } = trpc.orgScreen.assessmentSummaryList.useQuery({ userId });
+  const meta = (sums as any[])[0];
+  const byColor = new Map((profiles as any[]).map((p) => [p.color, p]));
+  const rows = ENERGY_ORDER.map((c) => byColor.get(c)).filter(Boolean) as any[];
+
+  // Lead / support = top two by conscious score.
+  const ranked = [...(profiles as any[])].sort((a, b) => numv(b.consciousScore)! - numv(a.consciousScore)!);
+  const lead = ranked[0]?.color as string | undefined;
+  const support = ranked[1]?.color as string | undefined;
+  const flow = numv(meta?.insightsPreferenceFlow);
+
+  const lbl: React.CSSProperties = { fontSize: 12, color: '#9ca3af', marginBottom: 2 };
+
+  return (
+    <SectionShell title="Insights" subtitle="Insights Discovery — Colour Dynamics (conscious vs. less-conscious energies).">
+      {/* header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{person?.name || '—'}</span>
+            {meta?.insightsSource === 'uploaded' && (
+              <span style={{ fontSize: 11, fontWeight: 500, color: '#15803d', background: '#dcfce7', borderRadius: 999, padding: '2px 8px' }}>Real profile (uploaded)</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+            {meta?.insightsSource === 'uploaded' ? 'Uploaded profile' : (person?.title || 'Profile')}
+            {meta?.insightsCompletedAt ? ` · completed ${fmtDate(meta.insightsCompletedAt)}` : ''}
+          </div>
+        </div>
+        {(meta?.insightsType || lead) && (
+          <div style={{ textAlign: 'right' }}>
+            {meta?.insightsType && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#1a1a2e', border: '1px solid #e5e7eb', borderRadius: 999, padding: '4px 10px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: ENERGY[lead ?? ''] ?? '#9ca3af', display: 'inline-block' }} />
+                {meta.insightsType}
+              </span>
+            )}
+            {lead && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Lead: {cap(lead)}{support ? ` · Support: ${cap(support)}` : ''}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* wheel positions */}
+      {(meta?.insightsConsciousWheel || meta?.insightsLessWheel) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, borderTop: '1px solid #f0f0f0', paddingTop: 12, marginBottom: 14 }}>
+          <div>
+            <div style={lbl}>Conscious wheel position</div>
+            <div style={{ fontSize: 14, color: '#1a1a2e' }}>{meta?.insightsConsciousWheel || '—'}</div>
+          </div>
+          <div>
+            <div style={lbl}>Less conscious wheel position</div>
+            <div style={{ fontSize: 14, color: '#1a1a2e' }}>{meta?.insightsLessWheel || '—'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* colour dynamics */}
+      <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1a1a2e' }}>Colour dynamics</span>
+          {flow != null && <span style={{ fontSize: 12, color: '#9ca3af' }}>Preference flow {flow}%</span>}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Persona (Conscious)</div>
+            {rows.map((r) => <EnergyRow key={r.id} color={r.color} value={numv(r.consciousScore)} />)}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 10 }}>Persona (Less Conscious)</div>
+            {rows.map((r) => <EnergyRow key={r.id} color={r.color} value={numv(r.lessConsciousScore)} />)}
+          </div>
+        </div>
+      </div>
     </SectionShell>
   );
 }
