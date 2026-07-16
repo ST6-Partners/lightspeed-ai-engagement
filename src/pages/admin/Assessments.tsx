@@ -49,7 +49,7 @@ export default function Assessments() {
           Enter a person’s CCAT, EPP, and Insights data. It renders on the Organization →
           Assessments person card. CCAT: <span className="font-medium">Overall</span> is the raw score
           (badge, /50); other CCAT rows are 0–100 percentiles. EPP score is the badge number; each
-          attribute bar uses <span className="font-medium">ST6</span>. Insights: one row per colour with
+          attribute bar uses <span className="font-medium">Score</span>. Insights: one row per colour with
           conscious + less-conscious values.
         </p>
       </div>
@@ -231,11 +231,11 @@ function EppEditor({ userId }: { userId: string }) {
 
   const rows = data as any[];
   return (
-    <SectionShell title="EPP attributes" subtitle="The bars under EPP. ST6 = the bar value (0–100). Colour is a hex (e.g. #639922 green, #EF9F27 amber, #E24B4A red).">
+    <SectionShell title="EPP attributes" subtitle="The bars under EPP. Score = the bar value (0–100). Colour is the bar’s band colour on the card — green (#639922) = high, amber (#EF9F27) = mid, red (#E24B4A) = low.">
       <table className="w-full text-sm mb-3">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-            <th className="py-2 font-medium">Attribute</th><th className="py-2 font-medium w-20">ST6</th><th className="py-2 font-medium w-28">Colour</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
+            <th className="py-2 font-medium">Attribute</th><th className="py-2 font-medium w-20">Score</th><th className="py-2 font-medium w-28">Colour</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -276,7 +276,7 @@ function EppEditor({ userId }: { userId: string }) {
       </table>
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-[160px]"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Attribute</label><input className={`${inputCls} w-full`} value={n.name} onChange={(ev) => setN({ ...n, name: ev.target.value })} placeholder="Achievement…" /></div>
-        <div className="w-20"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">ST6</label><input className={`${inputCls} w-full`} value={n.st6} onChange={(ev) => setN({ ...n, st6: ev.target.value })} /></div>
+        <div className="w-20"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Score</label><input className={`${inputCls} w-full`} value={n.st6} onChange={(ev) => setN({ ...n, st6: ev.target.value })} /></div>
         <div className="w-28"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Colour hex</label><input className={`${inputCls} w-full`} value={n.color} onChange={(ev) => setN({ ...n, color: ev.target.value })} placeholder="#639922" /></div>
         <div className="w-16"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Sort</label><input className={`${inputCls} w-full`} value={n.sort} onChange={(ev) => setN({ ...n, sort: ev.target.value })} placeholder="0" /></div>
         <button onClick={() => n.name.trim() && create.mutate({ userId, name: n.name.trim(), st6Score: toN(n.st6), colorHex: n.color.trim() || null, sortOrder: Number(n.sort || 0) })} disabled={!n.name.trim() || create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>

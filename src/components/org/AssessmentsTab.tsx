@@ -34,7 +34,7 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
   const breakdown = ccat.sections.filter((s) => s.label.toLowerCase() !== 'overall');
   const divider: React.CSSProperties = { borderTop: '.5px solid #e5e7eb', paddingTop: 14, marginTop: 16 };
 
-  // Priority attributes = the top few by ST6 score (keeps the card readable).
+  // Priority attributes = the top few by Score (keeps the card readable).
   const allAttrs = epp.priorityAttributes as EppAttr[];
   const priority = [...allAttrs]
     .sort((a, b) => (b.st6Score ?? 0) - (a.st6Score ?? 0))
@@ -67,7 +67,7 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
         </div>
         <div style={{ fontSize: 12, color: '#6b7280', margin: '10px 0 6px' }}>Priority attributes</div>
         {priority.map((a, i) => (
-          <div key={i} title={`${a.name} · EPP ${a.eppScore ?? '—'} · ST6 ${a.st6Score ?? '—'} · ${a.weightage ?? 0}% · final ${a.finalScore ?? '—'}`}>
+          <div key={i} title={`${a.name} · Score ${a.st6Score ?? '—'}`}>
             <Bar label={a.name} value={a.st6Score ?? 0} display={`${a.st6Score ?? 0}%`} color={a.colorHex ?? '#378ADD'} />
           </div>
         ))}
