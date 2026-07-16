@@ -27,7 +27,9 @@ export const weeklyPlanRouter = router({
         // Legacy rows may hold plain strings; normalize so the client always gets objects.
         const raw = row.priorities as unknown as Array<string | WeeklyPriority>;
         row.priorities = raw.map((p) =>
-          typeof p === 'string' ? { text: p, okrNodeId: null, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false },
+          typeof p === 'string'
+            ? { text: p, okrNodeId: null, done: false, archived: false }
+            : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false, archived: p.archived ?? false },
         );
       }
       // Manager-assigned priorities (set from the Org screen; current-state,
@@ -45,21 +47,57 @@ export const weeklyPlanRouter = router({
       ]);
       const nodeById = new Map(nodes.map((n) => [n.id, n]));
       const mgrById = new Map(mgrs.map((m) => [m.id, m]));
-      const assigned = assignedRows.map((r) => {
+      const labelOf = (r: typeof assignedRows[number]) => {
         const node = r.okrNodeId ? nodeById.get(r.okrNodeId) : null;
+        return r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (node?.title ?? '(missing item)');
+      };
+      const mgrNameOf = (r: typeof assignedRows[number]) => {
         const mgr = r.assignedBy ? mgrById.get(r.assignedBy) : null;
-        return {
-          id: r.id,
-          itemType: r.itemType,
-          okrNodeId: r.okrNodeId,
-          label: r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (node?.title ?? '(missing item)'),
-          assignedByName: mgr ? (mgr.name ?? mgr.email) : null,
-          assignedAt: r.assignedAt ?? null,
-          done: r.done ?? false,
-        };
-      });
+        return mgr ? (mgr.name ?? mgr.email) : null;
+      };
+      const weekOfDate = (d: Date | string | null) => (d ? mondayOf(new Date(d)) : weekStart);
 
-      return { weekStart, checkin: row ?? null, assigned };
+      // Split assigned priorities into ACTIVE (shown in the box) vs FILED (Completed
+      // section). Filed = archived, OR completed in a week other than the current one
+      // (end-of-week auto-file). Completed-this-week (not archived) stays in the box.
+      type FiledItem = { id: string; label: string; okrNodeId: string | null; done: boolean; archived: boolean; source: 'own' | 'assigned'; assignedByName: string | null };
+      const assignedActive: Array<{ id: string; itemType: string; okrNodeId: string | null; label: string; assignedByName: string | null; done: boolean; archived: boolean }> = [];
+      const filed: { weekStart: string; item: FiledItem }[] = [];
+      for (const r of assignedRows) {
+        const cWeek = weekOfDate(r.archived ? r.archivedAt : r.completedAt);
+        const isFiled = r.archived || ((r.done ?? false) && cWeek !== weekStart);
+        if (isFiled) {
+          filed.push({ weekStart: cWeek, item: { id: r.id, label: labelOf(r), okrNodeId: r.okrNodeId, done: r.done ?? false, archived: r.archived ?? false, source: 'assigned', assignedByName: mgrNameOf(r) } });
+        } else {
+          assignedActive.push({ id: r.id, itemType: r.itemType, okrNodeId: r.okrNodeId, label: labelOf(r), assignedByName: mgrNameOf(r), done: r.done ?? false, archived: r.archived ?? false });
+        }
+      }
+      assignedActive.sort((a, b) => Number(a.done) - Number(b.done)); // completed to the bottom
+
+      // Own-priority completed history across all of this user's weeks.
+      const allWeeks = await ctx.db.query.weeklyCheckins.findMany({ where: eq(weeklyCheckins.userId, ctx.user.id) });
+      const normOwn = (arr: unknown) =>
+        (arr as Array<string | { text: string; okrNodeId?: string | null; done?: boolean; archived?: boolean }>).map((p) =>
+          typeof p === 'string'
+            ? { text: p, okrNodeId: null as string | null, done: false, archived: false }
+            : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false, archived: p.archived ?? false });
+      for (const wc of allWeeks) {
+        normOwn(wc.priorities).forEach((p, idx) => {
+          if (!p.done) return;
+          // current week: only archived items file (done-not-archived stay in the box);
+          // prior weeks: every completed item files under its week.
+          if (wc.weekStart === weekStart && !p.archived) return;
+          filed.push({ weekStart: wc.weekStart, item: { id: `own-${wc.weekStart}-${idx}`, label: p.text, okrNodeId: p.okrNodeId, done: true, archived: p.archived, source: 'own', assignedByName: null } });
+        });
+      }
+
+      const byWeek = new Map<string, FiledItem[]>();
+      for (const f of filed) { const a = byWeek.get(f.weekStart) ?? []; a.push(f.item); byWeek.set(f.weekStart, a); }
+      const completedByWeek = [...byWeek.entries()]
+        .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+        .map(([w, items]) => ({ weekStart: w, items }));
+
+      return { weekStart, checkin: row ?? null, assigned: assignedActive, completedByWeek };
     }),
 
   save: protectedProcedure
@@ -67,8 +105,8 @@ export const weeklyPlanRouter = router({
       weekStart: z.string(),
       priorities: z.array(z.union([
         z.string(),
-        z.object({ text: z.string(), okrNodeId: z.string().uuid().nullable().optional(), done: z.boolean().optional() }),
-      ])).default([]).transform((arr) => arr.map((p) => (typeof p === 'string' ? { text: p, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false }))),
+        z.object({ text: z.string(), okrNodeId: z.string().uuid().nullable().optional(), done: z.boolean().optional(), archived: z.boolean().optional() }),
+      ])).default([]).transform((arr) => arr.map((p) => (typeof p === 'string' ? { text: p, done: false, archived: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false, archived: p.archived ?? false }))),
       wins: z.string().optional(),
       blockers: z.string().optional(),
       mood: z.number().int().min(1).max(5).nullable().optional(),

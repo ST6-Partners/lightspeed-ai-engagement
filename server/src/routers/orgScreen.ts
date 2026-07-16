@@ -154,6 +154,29 @@ export const orgScreenRouter = router({
       return updated;
     }),
 
+  // Archive / unarchive a priority — declutter a completed item off the active
+  // Weekly-Plan list. Owner or manager. Archiving a not-done item also marks it
+  // done (you only archive things you're finished with).
+  prioritiesSetArchived: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), archived: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      const isOwner = row.userId === ctx.user.id;
+      const isManager = hasMinimumRole((ctx.user.role || 'user') as RoleTier, 'manager');
+      if (!isOwner && !isManager) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not allowed.' });
+      const now = new Date();
+      const [updated] = await ctx.db.update(priorities)
+        .set({
+          archived: input.archived,
+          archivedAt: input.archived ? now : null,
+          done: input.archived ? true : row.done,
+          completedAt: input.archived && !row.completedAt ? now : row.completedAt,
+        })
+        .where(eq(priorities.id, input.id)).returning();
+      return updated;
+    }),
+
   // ---- Engagement tab (read) — headline score + trend + drivers ----
   engagementByUser: protectedProcedure
     .input(z.object({ userId: z.string().uuid() }))

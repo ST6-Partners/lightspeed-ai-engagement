@@ -35,6 +35,10 @@ export const priorities = pgTable('priorities', {
   // from their Weekly Plan. Current-state, mirrors the priority itself.
   done: boolean('done').notNull().default(false),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  // Archived — the assignee decluttered a completed priority off their active
+  // Weekly-Plan list before week-end. Filed into that week's Completed section.
+  archived: boolean('archived').notNull().default(false),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
 }, (t) => ({
   byEmpWeek: index('idx_priorities_emp_week').on(t.userId, t.weekStart),
 }));

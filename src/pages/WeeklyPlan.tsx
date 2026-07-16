@@ -1,6 +1,6 @@
 // Weekly Plan — live, per-user weekly check-in (DD-002 Planning). No scoring, no lock.
 import { useEffect, useRef, useState } from 'react';
-import { Hand, Link2, X, Trash2, Pencil } from 'lucide-react';
+import { Hand, Link2, X, Trash2, Pencil, Archive } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
 import { fireConfetti } from '../lib/confetti';
@@ -9,7 +9,7 @@ const MOODS = ['😞', '😐', '🙂', '😀', '🤩'];
 const MOOD_LABELS = ['Drained', 'Low', 'Okay', 'Good', 'Energized'];
 const PULSE = ['Disagree', 'Neutral', 'Agree'];
 
-type Priority = { text: string; okrNodeId: string | null; done?: boolean };
+type Priority = { text: string; okrNodeId: string | null; done?: boolean; archived?: boolean };
 
 // One objective with its key-result children, for the grouped OKR picker.
 type OkrGroup = {
@@ -21,6 +21,7 @@ export default function WeeklyPlan() {
   const { data, refetch } = trpc.weeklyPlan.getCurrent.useQuery();
   const save = trpc.weeklyPlan.save.useMutation({ onSuccess: () => refetch() });
   const toggleAssigned = trpc.orgScreen.prioritiesToggleDone.useMutation({ onSuccess: () => refetch() });
+  const archiveAssigned = trpc.orgScreen.prioritiesSetArchived.useMutation({ onSuccess: () => refetch() });
   const { data: okrs, refetch: refetchOkrs } = trpc.okrs.list.useQuery();
   const updateOkr = trpc.okrs.update.useMutation({ onSuccess: () => refetchOkrs() });
   const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
@@ -31,6 +32,7 @@ export default function WeeklyPlan() {
   const [mood, setMood] = useState<number | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
   const [addedCi, setAddedCi] = useState<Set<number>>(new Set());
+  const [showCompleted, setShowCompleted] = useState(false);
 
   // Which picker is open: 'add' for the Add-priority button, or a row index for a row's link control.
   const [picker, setPicker] = useState<'add' | number | null>(null);
@@ -41,8 +43,8 @@ export default function WeeklyPlan() {
     if (!data) return;
     const c = data.checkin;
     const raw = c?.priorities ?? [];
-    const norm: Priority[] = raw.map((p: string | { text: string; okrNodeId?: string | null; done?: boolean }) =>
-      typeof p === 'string' ? { text: p, okrNodeId: null, done: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false },
+    const norm: Priority[] = raw.map((p: string | { text: string; okrNodeId?: string | null; done?: boolean; archived?: boolean }) =>
+      typeof p === 'string' ? { text: p, okrNodeId: null, done: false, archived: false } : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false, archived: (p as { archived?: boolean }).archived ?? false },
     );
     setPriorities(norm.length ? norm : [{ text: '', okrNodeId: null }]);
     setWins(c?.wins ?? '');
@@ -104,9 +106,27 @@ export default function WeeklyPlan() {
       weekStart,
       priorities: priorities
         .filter((p) => p.text.trim() || p.okrNodeId)
-        .map((p) => ({ text: p.text, okrNodeId: p.okrNodeId, done: p.done ?? false })),
+        .map((p) => ({ text: p.text, okrNodeId: p.okrNodeId, done: p.done ?? false, archived: p.archived ?? false })),
       wins, blockers, mood, pulseAnswer: pulse, status: 'saved',
     });
+
+  // Persist an explicit priorities array (archive must survive the refetch).
+  const persist = (next: Priority[], status: 'draft' | 'saved') =>
+    save.mutate({
+      weekStart,
+      priorities: next.filter((p) => p.text.trim() || p.okrNodeId).map((p) => ({ text: p.text, okrNodeId: p.okrNodeId, done: p.done ?? false, archived: p.archived ?? false })),
+      wins, blockers, mood, pulseAnswer: pulse, status,
+    });
+  const ownDone = (p: Priority) => (p.okrNodeId ? okrDone(p.okrNodeId) : !!p.done);
+  const curStatus = (): 'draft' | 'saved' => (data?.checkin?.status === 'saved' ? 'saved' : 'draft');
+  const archiveOwn = (i: number) => { const next = priorities.map((x, j) => (j === i ? { ...x, done: true, archived: true } : x)); setPriorities(next); persist(next, curStatus()); };
+  const unarchiveOwnById = (id: string) => {
+    const pre = `own-${weekStart}-`;
+    if (!id.startsWith(pre)) return;
+    const i = Number(id.slice(pre.length));
+    const next = priorities.map((x, j) => (j === i ? { ...x, archived: false } : x));
+    setPriorities(next); persist(next, curStatus());
+  };
 
   // Shared grouped OKR menu. `onPick` receives the chosen node id + title.
   // `withWriteOwn` adds the "Write my own…" item (used by the Add-priority dropdown).
@@ -151,6 +171,13 @@ export default function WeeklyPlan() {
       )}
     </div>
   );
+
+  // Active own priorities: hide archived, completed sink to the bottom. Handlers
+  // keep the real array index so inline editing stays stable.
+  const ownView = priorities
+    .map((p, idx) => ({ p, idx }))
+    .filter((x) => !x.p.archived)
+    .sort((a, b) => Number(ownDone(a.p)) - Number(ownDone(b.p)));
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -217,12 +244,18 @@ export default function WeeklyPlan() {
                   title="Set by your manager in the Organization screen - managed there, not editable here">
                   manager-assigned
                 </span>
+                {a.done && (
+                  <button onClick={() => archiveAssigned.mutate({ id: a.id, archived: true })}
+                    title="Archive this completed priority" className="text-ls-ink-3 hover:text-ls-blue-deep shrink-0">
+                    <Archive size={15} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
         <div className="space-y-2.5">
-          {priorities.map((p, i) => {
+          {ownView.map(({ p, idx: i }) => {
             const linked = nodeTitle(p.okrNodeId);
             return (
               <div key={i} className="flex items-center gap-2">
@@ -257,6 +290,11 @@ export default function WeeklyPlan() {
                     {picker === i && okrMenu((id) => setLink(i, id), false)}
                   </div>
                 )}
+                {ownDone(p) && (
+                  <button onClick={() => archiveOwn(i)} title="Archive this completed priority" className="text-ls-ink-3 hover:text-ls-blue-deep">
+                    <Archive size={15} />
+                  </button>
+                )}
                 <button onClick={() => removeRow(i)} aria-label="Remove priority" className="text-ls-ink-3 hover:text-ls-watch">
                   <Trash2 size={15} />
                 </button>
@@ -274,6 +312,49 @@ export default function WeeklyPlan() {
           {picker === 'add' && okrMenu((id, title) => addFromNode(id, title), true)}
         </div>
       </section>
+
+      {(data?.completedByWeek?.length ?? 0) > 0 && (
+        <section className="ls-card p-5 mt-4">
+          <button onClick={() => setShowCompleted((v) => !v)} className="w-full flex items-center justify-between">
+            <h2 className="font-bold">Completed priorities</h2>
+            <span className="text-ls-ink-3 text-sm">{showCompleted ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showCompleted && (
+            <div className="mt-3 space-y-4">
+              {data!.completedByWeek.map((wk) => (
+                <div key={wk.weekStart}>
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">
+                    {wk.weekStart === weekStart ? 'This week' : `Week of ${wk.weekStart}`}
+                  </div>
+                  <ul className="space-y-1">
+                    {wk.items.map((it) => (
+                      <li key={it.id} className="flex items-center gap-2 text-sm">
+                        <span className="text-ls-thrive shrink-0">✓</span>
+                        <span className="flex-1 line-through text-ls-ink-3">{it.label}</span>
+                        {it.source === 'assigned' && (
+                          <span className="text-[11px] shrink-0" style={{ color: '#9ca3af' }}>
+                            assigned{it.assignedByName ? ` · ${it.assignedByName}` : ''}
+                          </span>
+                        )}
+                        {it.archived && wk.weekStart === weekStart && (
+                          <button
+                            onClick={() => (it.source === 'assigned'
+                              ? archiveAssigned.mutate({ id: it.id, archived: false })
+                              : unarchiveOwnById(it.id))}
+                            title="Restore to active list"
+                            className="text-xs text-ls-blue-deep hover:underline shrink-0">
+                            Restore
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4 mt-4">
         <section className="ls-card p-5">
