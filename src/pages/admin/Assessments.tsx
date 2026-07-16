@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../../lib/trpc';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Pencil, Trash2, Check, X } from 'lucide-react';
 
 const inputCls =
   'px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -163,11 +163,9 @@ function SummaryEditor({ userId }: { userId: string }) {
 // ── CCAT sections ────────────────────────────────────────────
 function CcatEditor({ userId }: { userId: string }) {
   const { data = [], refetch } = trpc.orgScreen.ccatSectionsList.useQuery({ userId });
-  const create = trpc.orgScreen.ccatSectionCreate.useMutation({ onSuccess: () => { setNLabel(''); setNScore(''); setNSort(''); refetch(); } });
   const update = trpc.orgScreen.ccatSectionUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
   const remove = trpc.orgScreen.ccatSectionRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
 
-  const [nLabel, setNLabel] = useState(''); const [nScore, setNScore] = useState(''); const [nSort, setNSort] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [eLabel, setELabel] = useState(''); const [eScore, setEScore] = useState(''); const [eSort, setESort] = useState('');
 
@@ -208,12 +206,6 @@ function CcatEditor({ userId }: { userId: string }) {
           })}
         </tbody>
       </table>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[160px]"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Label</label><input className={`${inputCls} w-full`} value={nLabel} onChange={(e) => setNLabel(e.target.value)} placeholder="Overall / Spatial…" /></div>
-        <div className="w-24"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Score</label><input className={`${inputCls} w-full`} value={nScore} onChange={(e) => setNScore(e.target.value)} /></div>
-        <div className="w-20"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Sort</label><input className={`${inputCls} w-full`} value={nSort} onChange={(e) => setNSort(e.target.value)} placeholder="0" /></div>
-        <button onClick={() => nLabel.trim() && create.mutate({ userId, label: nLabel.trim(), score: toN(nScore), sortOrder: Number(nSort || 0) })} disabled={!nLabel.trim() || create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>
-      </div>
     </SectionShell>
   );
 }
@@ -221,11 +213,9 @@ function CcatEditor({ userId }: { userId: string }) {
 // ── EPP attributes ───────────────────────────────────────────
 function EppEditor({ userId }: { userId: string }) {
   const { data = [], refetch } = trpc.orgScreen.eppAttributesList.useQuery({ userId });
-  const create = trpc.orgScreen.eppAttributeCreate.useMutation({ onSuccess: () => { setN({ name: '', pct: '', sort: '' }); refetch(); } });
   const update = trpc.orgScreen.eppAttributeUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
   const remove = trpc.orgScreen.eppAttributeRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
 
-  const [n, setN] = useState({ name: '', pct: '', sort: '' });
   const [editId, setEditId] = useState<string | null>(null);
   const [e, setE] = useState({ name: '', pct: '', sort: '' });
 
@@ -266,12 +256,6 @@ function EppEditor({ userId }: { userId: string }) {
           })}
         </tbody>
       </table>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[160px]"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Attribute</label><input className={`${inputCls} w-full`} value={n.name} onChange={(ev) => setN({ ...n, name: ev.target.value })} placeholder="Achievement…" /></div>
-        <div className="w-24"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Percentile</label><input className={`${inputCls} w-full`} value={n.pct} onChange={(ev) => setN({ ...n, pct: ev.target.value })} /></div>
-        <div className="w-16"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Sort</label><input className={`${inputCls} w-full`} value={n.sort} onChange={(ev) => setN({ ...n, sort: ev.target.value })} placeholder="0" /></div>
-        <button onClick={() => n.name.trim() && create.mutate({ userId, name: n.name.trim(), st6Score: toN(n.pct), sortOrder: Number(n.sort || 0) })} disabled={!n.name.trim() || create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>
-      </div>
     </SectionShell>
   );
 }
@@ -279,11 +263,9 @@ function EppEditor({ userId }: { userId: string }) {
 // ── Insight profiles ─────────────────────────────────────────
 function InsightEditor({ userId }: { userId: string }) {
   const { data = [], refetch } = trpc.orgScreen.insightProfilesList.useQuery({ userId });
-  const create = trpc.orgScreen.insightProfileCreate.useMutation({ onSuccess: () => { setN({ color: 'blue', con: '', less: '', primary: false, sort: '' }); refetch(); } });
   const update = trpc.orgScreen.insightProfileUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
   const remove = trpc.orgScreen.insightProfileRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
 
-  const [n, setN] = useState({ color: 'blue', con: '', less: '', primary: false, sort: '' });
   const [editId, setEditId] = useState<string | null>(null);
   const [e, setE] = useState({ color: 'blue', con: '', less: '', primary: false, sort: '' });
 
@@ -328,14 +310,6 @@ function InsightEditor({ userId }: { userId: string }) {
           })}
         </tbody>
       </table>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="w-28"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Colour</label><select className={`${inputCls} w-full`} value={n.color} onChange={(ev) => setN({ ...n, color: ev.target.value })}>{INSIGHT_COLOR_OPTS.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div className="w-24"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Conscious</label><input className={`${inputCls} w-full`} value={n.con} onChange={(ev) => setN({ ...n, con: ev.target.value })} /></div>
-        <div className="w-28"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Less consc.</label><input className={`${inputCls} w-full`} value={n.less} onChange={(ev) => setN({ ...n, less: ev.target.value })} /></div>
-        <label className="flex items-center gap-1 text-xs text-gray-600 pb-2"><input type="checkbox" checked={n.primary} onChange={(ev) => setN({ ...n, primary: ev.target.checked })} /> Primary</label>
-        <div className="w-16"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Sort</label><input className={`${inputCls} w-full`} value={n.sort} onChange={(ev) => setN({ ...n, sort: ev.target.value })} placeholder="0" /></div>
-        <button onClick={() => create.mutate({ userId, color: n.color, consciousScore: toN(n.con), lessConsciousScore: toN(n.less), isPrimary: n.primary, sortOrder: Number(n.sort || 0) })} disabled={create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>
-      </div>
     </SectionShell>
   );
 }
