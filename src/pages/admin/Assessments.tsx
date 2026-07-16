@@ -49,7 +49,7 @@ export default function Assessments() {
           Enter a person’s CCAT, EPP, and Insights data. It renders on the Organization →
           Assessments person card. CCAT: <span className="font-medium">Overall</span> is the raw score
           (badge, /50); other CCAT rows are 0–100 percentiles. EPP score is the badge number; each
-          attribute bar uses <span className="font-medium">Score</span>. Insights: one row per colour with
+          attribute bar uses <span className="font-medium">Percentile</span>. Insights: one row per colour with
           conscious + less-conscious values.
         </p>
       </div>
@@ -221,50 +221,42 @@ function CcatEditor({ userId }: { userId: string }) {
 // ── EPP attributes ───────────────────────────────────────────
 function EppEditor({ userId }: { userId: string }) {
   const { data = [], refetch } = trpc.orgScreen.eppAttributesList.useQuery({ userId });
-  const create = trpc.orgScreen.eppAttributeCreate.useMutation({ onSuccess: () => { setN({ name: '', st6: '', color: '', sort: '' }); refetch(); } });
+  const create = trpc.orgScreen.eppAttributeCreate.useMutation({ onSuccess: () => { setN({ name: '', pct: '', sort: '' }); refetch(); } });
   const update = trpc.orgScreen.eppAttributeUpdate.useMutation({ onSuccess: () => { setEditId(null); refetch(); } });
   const remove = trpc.orgScreen.eppAttributeRemove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
 
-  const [n, setN] = useState({ name: '', st6: '', color: '', sort: '' });
+  const [n, setN] = useState({ name: '', pct: '', sort: '' });
   const [editId, setEditId] = useState<string | null>(null);
-  const [e, setE] = useState({ name: '', st6: '', color: '', sort: '' });
+  const [e, setE] = useState({ name: '', pct: '', sort: '' });
 
   const rows = data as any[];
   return (
-    <SectionShell title="EPP attributes" subtitle="The bars under EPP. Score = the bar value (0–100). Colour is the bar’s band colour on the card — green (#639922) = high, amber (#EF9F27) = mid, red (#E24B4A) = low.">
+    <SectionShell title="EPP attributes" subtitle="The bars under EPP. Percentile = the trait’s percentile ranking (0–100), which is also the bar length. EPP has no “high/low”, so bars use a single neutral colour.">
       <table className="w-full text-sm mb-3">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-            <th className="py-2 font-medium">Attribute</th><th className="py-2 font-medium w-20">Score</th><th className="py-2 font-medium w-28">Colour</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
+            <th className="py-2 font-medium">Attribute</th><th className="py-2 font-medium w-24">Percentile</th><th className="py-2 font-medium w-16">Sort</th><th className="py-2 font-medium text-right w-24">Actions</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={5} className="py-3 text-gray-400">No EPP attributes yet.</td></tr>
+            <tr><td colSpan={4} className="py-3 text-gray-400">No EPP attributes yet.</td></tr>
           ) : rows.map((r) => {
             const ed = editId === r.id;
             return (
               <tr key={r.id} className="border-b border-gray-100 last:border-0">
                 <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-full`} value={e.name} onChange={(ev) => setE({ ...e, name: ev.target.value })} /> : r.name}</td>
-                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={e.st6} onChange={(ev) => setE({ ...e, st6: ev.target.value })} /> : str(r.st6Score)}</td>
-                <td className="py-1.5 pr-2">
-                  {ed ? <input className={`${inputCls} w-24`} value={e.color} onChange={(ev) => setE({ ...e, color: ev.target.value })} /> : (
-                    <span className="inline-flex items-center gap-1">
-                      <span style={{ width: 12, height: 12, borderRadius: 2, background: r.colorHex || '#378ADD', display: 'inline-block' }} />
-                      <span className="text-gray-600">{r.colorHex || '—'}</span>
-                    </span>
-                  )}
-                </td>
+                <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-16`} value={e.pct} onChange={(ev) => setE({ ...e, pct: ev.target.value })} /> : str(r.st6Score)}</td>
                 <td className="py-1.5 pr-2">{ed ? <input className={`${inputCls} w-14`} value={e.sort} onChange={(ev) => setE({ ...e, sort: ev.target.value })} /> : r.sortOrder}</td>
                 <td className="py-1.5 text-right whitespace-nowrap">
                   {ed ? (
                     <>
-                      <button onClick={() => update.mutate({ id: r.id, name: e.name.trim(), st6Score: toN(e.st6), colorHex: e.color.trim() || null, sortOrder: Number(e.sort || 0) })} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
+                      <button onClick={() => update.mutate({ id: r.id, name: e.name.trim(), st6Score: toN(e.pct), sortOrder: Number(e.sort || 0) })} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
                       <button onClick={() => setEditId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={15} /></button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => { setEditId(r.id); setE({ name: r.name, st6: str(r.st6Score), color: r.colorHex || '', sort: String(r.sortOrder) }); }} className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={14} /></button>
+                      <button onClick={() => { setEditId(r.id); setE({ name: r.name, pct: str(r.st6Score), sort: String(r.sortOrder) }); }} className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={14} /></button>
                       <button onClick={() => { if (confirm(`Delete “${r.name}”?`)) remove.mutate({ id: r.id }); }} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
                     </>
                   )}
@@ -276,10 +268,9 @@ function EppEditor({ userId }: { userId: string }) {
       </table>
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-[160px]"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Attribute</label><input className={`${inputCls} w-full`} value={n.name} onChange={(ev) => setN({ ...n, name: ev.target.value })} placeholder="Achievement…" /></div>
-        <div className="w-20"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Score</label><input className={`${inputCls} w-full`} value={n.st6} onChange={(ev) => setN({ ...n, st6: ev.target.value })} /></div>
-        <div className="w-28"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Colour hex</label><input className={`${inputCls} w-full`} value={n.color} onChange={(ev) => setN({ ...n, color: ev.target.value })} placeholder="#639922" /></div>
+        <div className="w-24"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Percentile</label><input className={`${inputCls} w-full`} value={n.pct} onChange={(ev) => setN({ ...n, pct: ev.target.value })} /></div>
         <div className="w-16"><label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Sort</label><input className={`${inputCls} w-full`} value={n.sort} onChange={(ev) => setN({ ...n, sort: ev.target.value })} placeholder="0" /></div>
-        <button onClick={() => n.name.trim() && create.mutate({ userId, name: n.name.trim(), st6Score: toN(n.st6), colorHex: n.color.trim() || null, sortOrder: Number(n.sort || 0) })} disabled={!n.name.trim() || create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>
+        <button onClick={() => n.name.trim() && create.mutate({ userId, name: n.name.trim(), st6Score: toN(n.pct), sortOrder: Number(n.sort || 0) })} disabled={!n.name.trim() || create.isLoading} className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"><Plus size={15} /> Add</button>
       </div>
     </SectionShell>
   );

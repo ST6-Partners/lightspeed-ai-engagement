@@ -67,8 +67,8 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
         </div>
         <div style={{ fontSize: 12, color: '#6b7280', margin: '10px 0 6px' }}>Priority attributes</div>
         {priority.map((a, i) => (
-          <div key={i} title={`${a.name} · Score ${a.st6Score ?? '—'}`}>
-            <Bar label={a.name} value={a.st6Score ?? 0} display={`${a.st6Score ?? 0}%`} color={a.colorHex ?? '#378ADD'} />
+          <div key={i} title={`${a.name} · ${a.st6Score ?? '—'}th percentile`}>
+            <Bar label={a.name} value={a.st6Score ?? 0} display={`${a.st6Score ?? 0}`} color="#378ADD" />
           </div>
         ))}
       </div>
