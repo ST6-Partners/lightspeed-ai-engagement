@@ -173,7 +173,6 @@ export default function Employees() {
                 <option value="">—</option>
                 <option value="ELT">ELT</option>
                 <option value="SLT">SLT</option>
-                <option value="ST6">ST6</option>
               </select>
             </label>
             <label className="text-xs text-gray-600">Temp password <span className="text-gray-400">(optional)</span>
@@ -283,14 +282,13 @@ export default function Employees() {
                     </select>
                   </td>
 
-                  {/* Leader badge — Org tree tier (ELT/SLT/ST6) */}
+                  {/* Leader badge — Org tree tier (ELT/SLT) */}
                   <td className="px-3 py-3 text-sm">
                     <select value={user.leaderBadge ?? ''} onChange={(e) => set(user.id, { leaderBadge: e.target.value || null })}
                       className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
                       <option value="">—</option>
                       <option value="ELT">ELT</option>
                       <option value="SLT">SLT</option>
-                      <option value="ST6">ST6</option>
                     </select>
                   </td>
 
@@ -391,7 +389,6 @@ export default function Employees() {
                   <option value="">—</option>
                   <option value="ELT">ELT</option>
                   <option value="SLT">SLT</option>
-                  <option value="ST6">ST6</option>
                 </select>
               </label>
               <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
