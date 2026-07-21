@@ -87,6 +87,15 @@ export default function NineBox({ people, scope }: { people: Person[]; scope?: '
         </div>
       </div>
 
+      {/* Top performers / Needs attention — next to the chart. 9 Box only; hidden for a single person. */}
+      {showRail && (
+        <div style={{ minWidth: 220 }}>
+          <RailList title={`Top performers (${topPerformers.length})`} color="#15803d" items={topPerformers} />
+          <div style={{ height: 12 }} />
+          <RailList title={`Needs attention (${needsAttention.length})`} color="#b91c1c" items={needsAttention} />
+        </div>
+      )}
+
       {/* Unrated list — everyone in scope without a rating */}
       <div style={{ minWidth: 180 }}>
         <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: TOKENS.idle }}>Unrated ({unrated.length})</div>
@@ -104,14 +113,6 @@ export default function NineBox({ people, scope }: { people: Person[]; scope?: '
         </div>
       </div>
 
-      {/* Top performers / Needs attention — 9 Box only; hidden for a single person. */}
-      {showRail && (
-        <div style={{ minWidth: 220 }}>
-          <RailList title={`Top performers (${topPerformers.length})`} color="#15803d" items={topPerformers} />
-          <div style={{ height: 12 }} />
-          <RailList title={`Needs attention (${needsAttention.length})`} color="#b91c1c" items={needsAttention} />
-        </div>
-      )}
 
       {/* Reposition / place modal */}
       {editing && (
