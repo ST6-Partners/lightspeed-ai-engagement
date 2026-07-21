@@ -116,15 +116,17 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={`${navCollapsed ? 'w-16' : 'w-60'} bg-ls-slate text-[#B9C3CB] flex flex-col transition-all duration-200`}>
         <div className={`px-3 py-4 flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'}`}>
-          <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(79,169,214,.45)] shrink-0">
-            <svg width="16" height="16" viewBox="0 0 40 40" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round">
-              <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
-              <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(0,175,215,.45)] shrink-0">
+            <svg width="18" height="18" viewBox="0 0 48 48" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round">
+              <line x1="5" y1="15" x2="12" y2="15" />
+              <line x1="5" y1="33" x2="12" y2="33" />
+              <path d="M16 9 a9 9 0 0 1 9 9 v3 a9 9 0 0 0 9 9" />
+              <path d="M34 9 a9 9 0 0 0 -9 9 v3 a9 9 0 0 1 -9 9" />
             </svg>
           </span>
           {!navCollapsed && (
             <div className="leading-tight flex-1 min-w-0">
-              <div className="text-white font-bold text-[15px]">Lightspeed</div>
+              <div className="text-white font-bold text-[15px]">Lightspeed Systems</div>
               <div className="text-[11px] text-[#7E8B94]">AI Engagement</div>
             </div>
           )}

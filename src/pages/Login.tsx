@@ -48,11 +48,13 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-ls-bg flex items-center justify-center">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <h1 className="text-xl font-bold text-gray-900">Template App</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <img src="/lightspeed-mark.svg" alt="Lightspeed Systems" className="h-12 w-12 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-ls-ink">Lightspeed Systems</h1>
+          <p className="text-[13px] font-semibold tracking-wide text-ls-blue-deep">AI Engagement</p>
+          <p className="text-sm text-gray-500 mt-2">
             {mode === 'login' ? 'Sign in to continue' : 'Create your account'}
           </p>
         </div>
@@ -62,14 +64,14 @@ export default function Login() {
           <button
             type="button"
             onClick={() => { setMode('login'); setError(null); }}
-            className={`flex-1 py-2 font-medium ${mode === 'login' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            className={`flex-1 py-2 font-medium ${mode === 'login' ? 'bg-ls-ink text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
           >
             Sign in
           </button>
           <button
             type="button"
             onClick={() => { setMode('register'); setError(null); }}
-            className={`flex-1 py-2 font-medium ${mode === 'register' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            className={`flex-1 py-2 font-medium ${mode === 'register' ? 'bg-ls-ink text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
           >
             Create account
           </button>

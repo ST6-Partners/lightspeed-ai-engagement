@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Background: indigo rounded square -->
-  <rect width="64" height="64" rx="12" fill="#4f46e5"/>
-  <!-- Stacked blocks evoking a scaffold / building template -->
-  <rect x="14" y="14" width="36" height="8" rx="2" fill="#ffffff" fill-opacity="0.95"/>
-  <rect x="18" y="28" width="28" height="8" rx="2" fill="#ffffff" fill-opacity="0.75"/>
-  <rect x="22" y="42" width="20" height="8" rx="2" fill="#ffffff" fill-opacity="0.55"/>
+  <rect width="64" height="64" rx="14" fill="#00AFD7"/>
+  <g fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round">
+    <line x1="13" y1="22" x2="23" y2="22"/>
+    <line x1="13" y1="46" x2="23" y2="46"/>
+    <path d="M22 16 a12 12 0 0 1 12 12 v4 a12 12 0 0 0 12 12"/>
+    <path d="M46 16 a12 12 0 0 0 -12 12 v4 a12 12 0 0 1 -12 12"/>
+  </g>
 </svg>

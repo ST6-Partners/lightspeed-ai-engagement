@@ -15,9 +15,9 @@ export default function Home() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Template App</h1>
+        <h1 className="text-2xl font-bold text-ls-ink">AI Engagement</h1>
         <p className="text-gray-500 mt-1">
-          SP-002 starter scaffold for Type 2 applications. Clone, rename, and build.
+          Continuous, signal-based reading of thriving and flight-risk across the organization.
         </p>
       </div>
 
