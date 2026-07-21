@@ -119,9 +119,9 @@ export default function Metrics() {
                 <h2 className="font-semibold text-ls-ink">Your team</h2>
                 <span className="text-xs text-ls-ink-3">({teamQ.data!.profiles.length})</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-ls-line">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
                 {teamQ.data!.profiles.map((p) => (
-                  <div key={p.id} className="bg-white p-4">
+                  <div key={p.id} className="rounded-ls border border-ls-line p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-ls-blue-50 text-ls-blue-deeper grid place-items-center text-sm font-bold shrink-0">{initials(p.name)}</div>
