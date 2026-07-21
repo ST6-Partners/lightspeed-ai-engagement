@@ -42,6 +42,7 @@ import { checkinsRouter } from './routers/checkins.js';
 import { checkinQuestionsRouter } from './routers/checkinQuestions.js';
 import { checkinSettingsRouter } from './routers/checkinSettings.js';
 import { oneOnOneRouter } from './routers/oneOnOne.js';
+import { metricsRouter } from './routers/metrics.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -67,6 +68,7 @@ export const appRouter = router({
   orgScreen: orgScreenRouter,
   weeklyPlan: weeklyPlanRouter,
   oneOnOne: oneOnOneRouter,
+  metrics: metricsRouter,
   exitSurvey: exitSurveyRouter,
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,

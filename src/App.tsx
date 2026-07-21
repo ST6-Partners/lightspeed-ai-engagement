@@ -17,6 +17,7 @@ import ManagerSurvey from './pages/ManagerSurvey';
 import PeerReview from './pages/PeerReview';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
+import Metrics from './pages/Metrics';
 import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import CoachingPlanDetail from './pages/CoachingPlanDetail';
@@ -61,6 +62,8 @@ export default function App() {
             <Route path="assessments" element={<Assessments />} />
           </Route>
         </Route>
+        {/* Metrics (manager+) */}
+        <Route path="/metrics" element={<Metrics />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}

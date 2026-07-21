@@ -9,13 +9,14 @@ import {
   Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
-  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake} from 'lucide-react';
+  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
-type NavItem = { path: string; label: string; icon: typeof Home };
+type RoleTier = 'user' | 'manager' | 'admin' | 'sysadmin';
+type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier };
 type NavGroup = { label: string | null; items: NavItem[] };
 
 // Information architecture per DD-002
@@ -59,6 +60,12 @@ const navGroups: NavGroup[] = [
       { path: '/documents/overview', label: 'Overview', icon: FileText },
     ],
   },
+  {
+    label: 'Insights',
+    items: [
+      { path: '/metrics', label: 'Metrics', icon: BarChart3, minRole: 'manager' },
+    ],
+  },
   { label: 'System', items: [{ path: '/admin/settings', label: 'Admin', icon: Settings }] },
 ];
 
@@ -99,6 +106,12 @@ export default function Layout() {
       if (tz) timezoneMutation.mutate({ timezone: tz });
     }
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ROLE_ORDER: Record<string, number> = { user: 1, manager: 2, admin: 3, sysadmin: 4 };
+  const meetsRole = (min: RoleTier) => (ROLE_ORDER[user?.role ?? 'user'] ?? 0) >= (ROLE_ORDER[min] ?? 0);
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => !it.minRole || meetsRole(it.minRole)) }))
+    .filter((g) => g.items.length > 0);
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
@@ -142,7 +155,7 @@ export default function Layout() {
         )}
 
         <nav className="flex-1 px-2 py-2 overflow-y-auto no-scrollbar">
-          {navGroups.map((group, gi) => (
+          {visibleGroups.map((group, gi) => (
             <div key={gi} className="mb-1">
               {group.label && !navCollapsed && (
                 <div className="px-2.5 pt-3 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] uppercase text-[#677480]">
