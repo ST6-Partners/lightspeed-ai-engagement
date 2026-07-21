@@ -117,12 +117,7 @@ export default function Layout() {
       <aside className={`${navCollapsed ? 'w-16' : 'w-60'} bg-ls-slate text-[#B9C3CB] flex flex-col transition-all duration-200`}>
         <div className={`px-3 py-4 flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'}`}>
           <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(0,175,215,.45)] shrink-0">
-            <svg width="18" height="18" viewBox="0 0 48 48" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round">
-              <line x1="5" y1="15" x2="12" y2="15" />
-              <line x1="5" y1="33" x2="12" y2="33" />
-              <path d="M16 9 a9 9 0 0 1 9 9 v3 a9 9 0 0 0 9 9" />
-              <path d="M34 9 a9 9 0 0 0 -9 9 v3 a9 9 0 0 1 -9 9" />
-            </svg>
+            <img src="/lightspeed-mark-white.svg" alt="Lightspeed Systems" className="w-[18px] h-[18px]" />
           </span>
           {!navCollapsed && (
             <div className="leading-tight flex-1 min-w-0">
