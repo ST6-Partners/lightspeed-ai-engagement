@@ -222,7 +222,6 @@ export default function Employees() {
                 <th className="px-3 py-3 w-[170px]">Manager</th>
                 <th className="px-3 py-3 w-[110px]">Role</th>
                 <th className="px-3 py-3 w-[90px]">Badge</th>
-                <th className="px-3 py-3 w-10">Beta</th>
                 <th className="px-3 py-3 w-12">Remove</th>
               </tr>
             </thead>
@@ -290,12 +289,6 @@ export default function Employees() {
                       <option value="ELT">ELT</option>
                       <option value="SLT">SLT</option>
                     </select>
-                  </td>
-
-                  {/* Beta */}
-                  <td className="px-3 py-3">
-                    <input type="checkbox" checked={user.isBeta} onChange={() => set(user.id, { isBeta: !user.isBeta })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                   </td>
 
                   {/* Remove — hard delete with confirm */}
@@ -394,10 +387,6 @@ export default function Employees() {
               <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
                 <input type="checkbox" checked={editForm.isActive} onChange={(e) => ef({ isActive: e.target.checked })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> Active
-              </label>
-              <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
-                <input type="checkbox" checked={editForm.isBeta} onChange={(e) => ef({ isBeta: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> Beta
               </label>
             </div>
             {editError && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">{editError}</div>}
