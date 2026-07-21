@@ -9,14 +9,17 @@
 // becomes sysadmin so the app can be bootstrapped with no seed step.
 // ============================================================
 
+import crypto from 'node:crypto';
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { users } from '../db/schema/core.js';
+import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
+import { sendEmail } from '../services/email.js';
 import { env } from '../env.js';
 
 export const authRouter = router({
@@ -97,6 +100,79 @@ export const authRouter = router({
       if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl || null;
       if (Object.keys(updates).length === 0) return { success: true };
       await ctx.db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, ctx.user.id));
+      return { success: true };
+    }),
+
+  // ── Forgot password: request a reset email ────────────────
+  // Public. Always returns success — never reveals whether an email is
+  // registered (prevents account enumeration). If the account exists, is
+  // active, and has a password set, a single-use 1-hour token is emailed.
+  requestPasswordReset: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+      const u = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
+      if (u && u.isActive && u.passwordHash) {
+        // Raw token goes only in the email link; we store its SHA-256 hash.
+        const rawToken = crypto.randomBytes(32).toString('base64url');
+        const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        // Invalidate any earlier unused tokens for this user.
+        await ctx.db.update(passwordResetTokens)
+          .set({ usedAt: new Date() })
+          .where(and(eq(passwordResetTokens.userId, u.id), isNull(passwordResetTokens.usedAt)));
+        await ctx.db.insert(passwordResetTokens).values({ userId: u.id, tokenHash, expiresAt });
+
+        // Build an absolute link from the incoming request's origin so it
+        // works on any deployment (dev / prod) without an env var.
+        const h = ctx.req.headers;
+        const origin = (h.origin as string)
+          || (h.referer ? new URL(h.referer as string).origin : `https://${h.host}`);
+        const link = `${origin}/reset-password?token=${rawToken}`;
+
+        await sendEmail({
+          to: u.email,
+          subject: 'Reset your AI Engagement password',
+          templateId: 'password_reset',
+          html: `<p>Hi ${u.name ?? 'there'},</p>
+<p>We received a request to reset your AI Engagement password. Click the button below to choose a new one. This link expires in <strong>1 hour</strong> and can be used once.</p>
+<p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#2E89B8;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset your password</a></p>
+<p style="color:#667;font-size:13px;">Or paste this link into your browser:<br>${link}</p>
+<p style="color:#667;font-size:13px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>`,
+        });
+      }
+      // Uniform response regardless of whether the account exists.
+      return { success: true };
+    }),
+
+  // ── Forgot password: complete the reset with a token ──────
+  // Public. Validates the token (hash match, unused, unexpired), sets the
+  // new password, and burns the token.
+  resetPassword: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const tokenHash = crypto.createHash('sha256').update(input.token).digest('hex');
+      const invalid = () => new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'This reset link is invalid or has expired. Please request a new one.',
+      });
+      const row = await ctx.db.query.passwordResetTokens.findFirst({
+        where: and(eq(passwordResetTokens.tokenHash, tokenHash), isNull(passwordResetTokens.usedAt)),
+      });
+      if (!row) throw invalid();
+      if (row.expiresAt.getTime() < Date.now()) throw invalid();
+
+      await ctx.db.update(users)
+        .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: new Date() })
+        .where(eq(users.id, row.userId));
+      await ctx.db.update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(passwordResetTokens.id, row.id));
+
       return { success: true };
     }),
 

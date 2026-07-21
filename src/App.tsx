@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Entities from './pages/Entities';
 import Chat from './pages/Chat';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         {/* Planning */}
