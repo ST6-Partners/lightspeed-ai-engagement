@@ -235,7 +235,7 @@ export default function CheckIns() {
   return (
     <div className="max-w-4xl">
       <div className="ls-eyebrow mb-1">Engagement</div>
-      <h1 className="text-2xl font-bold tracking-tight">Check-ins</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Pulses</h1>
       <p className="text-sm text-ls-ink-3 mb-5">
         A quick pulse on how you're doing, what you're focused on, and what you need — so your manager stays in the loop between reviews.
       </p>

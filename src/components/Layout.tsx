@@ -39,7 +39,7 @@ const navGroups: NavGroup[] = [
     label: 'Engagement',
     // Order mirrors the Documents → Overview chart's Engagement row.
     items: [
-      { path: '/check-ins', label: 'Check-ins', icon: MessageCircle },
+      { path: '/check-ins', label: 'Pulses', icon: MessageCircle },
       { path: '/reviews', label: 'Reviews', icon: Star },
       { path: '/coaching-plans', label: 'Coaching Plans', icon: HeartHandshake },
       { path: '/pips', label: 'PIP', icon: ClipboardList },
