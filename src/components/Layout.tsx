@@ -126,7 +126,7 @@ export default function Layout() {
       <aside className={`${navCollapsed ? 'w-16' : 'w-60'} bg-ls-slate text-[#B9C3CB] flex flex-col transition-all duration-200`}>
         <div className={`px-3 py-4 flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'}`}>
           <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-ls-active shadow-[0_4px_14px_rgba(0,175,215,.45)] shrink-0">
-            <img src="/lightspeed-mark-white.svg" alt="Lightspeed Systems" className="w-[18px] h-[18px]" />
+            <img src="/lightspeed-logo-white.png" alt="Lightspeed Systems" className="w-6 h-6 object-contain" />
           </span>
           {!navCollapsed && (
             <div className="leading-tight flex-1 min-w-0">

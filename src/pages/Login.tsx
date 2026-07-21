@@ -51,7 +51,7 @@ export default function Login() {
     <div className="min-h-screen bg-ls-bg flex items-center justify-center">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <img src="/lightspeed-mark.svg" alt="Lightspeed Systems" className="h-12 w-12 mx-auto mb-3" />
+          <img src="/lightspeed-logo.png" alt="Lightspeed Systems" className="h-14 w-auto mx-auto mb-3" />
           <h1 className="text-xl font-bold text-ls-ink">Lightspeed Systems</h1>
           <p className="text-[13px] font-semibold tracking-wide text-ls-blue-deep">AI Engagement</p>
           <p className="text-sm text-gray-500 mt-2">
