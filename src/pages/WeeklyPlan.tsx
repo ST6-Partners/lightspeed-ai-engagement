@@ -25,6 +25,8 @@ export default function WeeklyPlan() {
   const { data: okrs, refetch: refetchOkrs } = trpc.okrs.list.useQuery();
   const updateOkr = trpc.okrs.update.useMutation({ onSuccess: () => refetchOkrs() });
   const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
+  const planActionItems = trpc.oneOnOne.myWeeklyPlanActionItems.useQuery();
+  const planToggle = trpc.oneOnOne.actionItemsToggleDone.useMutation({ onSuccess: () => planActionItems.refetch() });
 
   const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
   const [wins, setWins] = useState('');
@@ -357,6 +359,26 @@ export default function WeeklyPlan() {
       )}
 
       <div className="grid md:grid-cols-2 gap-4 mt-4">
+        <section className="ls-card p-5 mt-4">
+          <h2 className="font-bold mb-1">Action Items</h2>
+          <p className="text-xs text-ls-ink-3 mb-3">Pulled in from your 1:1s with your manager (Reviews → Action Items).</p>
+          {(planActionItems.data ?? []).length === 0 ? (
+            <div className="text-sm text-ls-ink-3">Nothing pulled in yet. In Reviews, use the &ldquo;&rarr; Weekly Plan&rdquo; button on an action item.</div>
+          ) : (
+            <ul>
+              {(planActionItems.data ?? []).map((it: any) => (
+                <li key={it.id} className="flex items-start gap-3 px-1 py-1.5">
+                  <input type="checkbox" checked={it.done} onChange={() => planToggle.mutate({ id: it.id, done: !it.done })}
+                    className="mt-1 w-4 h-4 accent-blue-600 shrink-0" />
+                  <span className={`text-sm flex-1 ${it.done ? 'line-through text-ls-ink-3' : 'text-ls-ink'}`}>
+                    {it.text}{it.dueDate ? <span className="text-ls-ink-3"> · due {it.dueDate}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         <section className="ls-card p-5">
           <h2 className="font-bold mb-3">Wins this week 🎉</h2>
           <textarea value={wins} onChange={(e) => setWins(e.target.value)}

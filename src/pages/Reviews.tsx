@@ -18,7 +18,7 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck, ChevronRight, ChevronDown, Archive, RotateCcw, Lock } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 const band = (n: number | null) =>
@@ -26,7 +26,7 @@ const band = (n: number | null) =>
 
 type Tab = 'values' | 'performance';
 
-export default function Reviews() {
+function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: string; hidePicker?: boolean }) {
   const { data: me } = trpc.auth.me.useQuery();
   const canEdit = !!me && (RANK[(me.role as keyof typeof RANK)] ?? 0) >= RANK.manager;
 
@@ -35,7 +35,8 @@ export default function Reviews() {
   const periodsQuery = trpc.values.listPeriods.useQuery();
 
   const [periodLabel, setPeriodLabel] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  const [employeeId, setEmployeeId] = useState(lockedEmployeeId ?? '');
+  useEffect(() => { if (lockedEmployeeId) setEmployeeId(lockedEmployeeId); }, [lockedEmployeeId]);
   const [tab, setTab] = useState<Tab>('values');
 
   // Each tab manages its own list/edit state so an in-progress edit never
@@ -71,10 +72,12 @@ export default function Reviews() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className={hidePicker ? '' : 'max-w-4xl mx-auto'}>
+      {!hidePicker && (<>
       <div className="ls-eyebrow mb-1">Engagement</div>
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
       <p className="text-sm text-ls-ink-3 mb-5">Choose a review period and an employee, then score them against the company values or performance criteria.</p>
+      </>)}
 
       {/* Period + employee pickers — SHARED across tabs (hidden while editing a review) */}
       {mode === 'list' && (
@@ -95,6 +98,7 @@ export default function Reviews() {
               )}
             </div>
           </div>
+          {!hidePicker && (
           <div className="flex-1 min-w-[200px]">
             <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Employee</label>
             <select
@@ -107,6 +111,7 @@ export default function Reviews() {
               ))}
             </select>
           </div>
+          )}
           {canEdit && (
             <button
               onClick={startNew}
@@ -635,5 +640,284 @@ function PerformanceEvaluationForm({ employeeId, editingId, newPeriodLabel, crit
         </button>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// 1:1 HUB — the Reviews page is now a manager<->employee 1:1 space:
+// a click-into Review card on top, then Talking Points, Action Items,
+// Shared notes, and Private notes. All pair-scoped via the oneOnOne router
+// and persistent (no weekly reset). Employees see their own space (no picker);
+// managers get a direct-reports switcher. 2026-07-21 (bf).
+// ============================================================
+
+function ppInitials(name?: string) {
+  return (name ?? '').split(' ').map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+}
+
+export default function Reviews() {
+  const { data: me } = trpc.auth.me.useQuery();
+  const role = (me?.role as keyof typeof RANK) ?? 'user';
+  const isManager = (RANK[role] ?? 0) >= RANK.manager;
+
+  const reportsQ = trpc.oneOnOne.myReports.useQuery(undefined, { enabled: isManager });
+  const reports = reportsQ.data ?? [];
+
+  const [selectedId, setSelectedId] = useState('');
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isManager && me?.id) setSelectedId(me.id);
+    else if (isManager && !selectedId && reports.length) setSelectedId(reports[0].id);
+  }, [isManager, me?.id, reports, selectedId]);
+
+  if (!me) {
+    return <div className="max-w-4xl mx-auto"><div className="ls-card p-10 text-center text-sm text-ls-ink-3">Loading…</div></div>;
+  }
+
+  const selectedName = isManager ? (reports.find((r) => r.id === selectedId)?.name ?? '') : (me.name ?? '');
+  const otherFirst = isManager ? (selectedName.split(' ')[0] || 'your report') : 'your manager';
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="ls-eyebrow mb-1">Engagement</div>
+      <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
+      <p className="text-sm text-ls-ink-3 mb-4">
+        {isManager
+          ? '1:1 space with your direct reports — reviews, talking points, action items, and notes.'
+          : 'Your 1:1 space with your manager — your reviews, talking points, action items, and notes.'}
+      </p>
+
+      {isManager && (
+        reports.length === 0 ? (
+          <div className="ls-card p-4 text-sm text-ls-ink-3 mb-4">
+            No direct reports are assigned to you yet. Set a person's manager in Core Data → Employees.
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-xs font-semibold text-ls-ink-2 mr-1">Your team:</span>
+            {reports.map((r) => (
+              <button key={r.id} onClick={() => { setSelectedId(r.id); setReviewOpen(false); }}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  selectedId === r.id ? 'border-ls-blue bg-ls-blue-50 text-ls-blue-deeper' : 'border-gray-200 bg-white text-ls-ink-2 hover:bg-gray-50'}`}>
+                <span className="grid place-items-center w-6 h-6 rounded-full bg-ls-blue-50 text-ls-blue-deeper text-[11px] font-bold">{ppInitials(r.name)}</span>
+                {r.name}
+              </button>
+            ))}
+          </div>
+        )
+      )}
+
+      {!selectedId ? (
+        <div className="ls-card p-10 text-center text-sm text-ls-ink-3">
+          {isManager ? 'Select a teammate to open their 1:1 space.' : 'Loading your 1:1 space…'}
+        </div>
+      ) : (
+        <>
+          {/* Review — click-into card */}
+          <section className="ls-card p-0 overflow-hidden mb-4">
+            <button onClick={() => setReviewOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50">
+              <div className="flex items-center gap-2">
+                {reviewOpen ? <ChevronDown size={18} className="text-ls-blue-deep" /> : <ChevronRight size={18} className="text-ls-blue-deep" />}
+                <div>
+                  <div className="font-bold">{isManager ? `Review — ${selectedName}` : 'Your Review'}</div>
+                  <div className="text-xs text-ls-ink-3">
+                    {isManager ? `Open ${selectedName || 'this report'}'s review workbench` : 'The reviews your manager has delivered to you'}
+                  </div>
+                </div>
+              </div>
+              <span className="text-ls-blue-deep font-semibold text-sm shrink-0">{reviewOpen ? 'Close' : 'Open review →'}</span>
+            </button>
+            {reviewOpen && (
+              <div className="border-t border-gray-100 p-5">
+                <ReviewWorkbench lockedEmployeeId={selectedId} hidePicker />
+              </div>
+            )}
+          </section>
+
+          <TalkingPointsSection employeeId={selectedId} meId={me.id} />
+          <ActionItemsSection employeeId={selectedId} meId={me.id} canPull={!isManager} />
+          <SharedNotesSection employeeId={selectedId} otherFirst={otherFirst} />
+          <PrivateNotesSection employeeId={selectedId} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Shared checklist row (talking points + action items) ----
+function ChecklistRow({ item, meId, onToggle, onArchive, extra }: {
+  item: any; meId: string; onToggle: (id: string, done: boolean) => void; onArchive: (id: string, archived: boolean) => void; extra?: any;
+}) {
+  return (
+    <li className="flex items-start gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 group">
+      <button onClick={() => onToggle(item.id, !item.done)} className="mt-0.5 shrink-0" title={item.done ? 'Mark not done' : 'Mark done'}>
+        {item.done ? <CheckCircle2 size={19} className="text-ls-blue-deep" /> : <Circle size={19} className="text-gray-300 hover:text-gray-400" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm ${item.done ? 'line-through text-ls-ink-3' : 'text-ls-ink'}`}>{item.text}</div>
+        <div className="text-[11px] text-ls-ink-3 mt-0.5">
+          {item.createdBy === meId ? 'Added by you' : (item.createdByName ? `Added by ${item.createdByName}` : 'Added')}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {extra}
+        <button onClick={() => onArchive(item.id, true)} title="Archive"
+          className="p-1.5 rounded-md text-ls-ink-3 hover:bg-gray-100 hover:text-ls-ink-2"><Archive size={15} /></button>
+      </div>
+    </li>
+  );
+}
+
+function PastBox({ label, rows, onRestore }: { label: string; rows: any[]; onRestore: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!rows.length) return null;
+  return (
+    <div className="mt-3 border-t border-gray-100 pt-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 text-xs font-semibold text-ls-ink-2 hover:text-ls-ink">
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {label} ({rows.length})
+      </button>
+      {open && (
+        <ul className="mt-1">
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 px-2 py-1.5 text-sm">
+              <CheckCircle2 size={16} className="text-gray-300 shrink-0" />
+              <span className="flex-1 line-through text-ls-ink-3 min-w-0">{r.text}</span>
+              <button onClick={() => onRestore(r.id)} className="text-ls-blue-deep text-xs font-semibold hover:underline shrink-0 inline-flex items-center gap-1">
+                <RotateCcw size={12} /> Restore
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function sortActive(rows: any[]) {
+  return [...rows].sort((a, b) => Number(a.done) - Number(b.done));
+}
+
+function TalkingPointsSection({ employeeId, meId }: { employeeId: string; meId: string }) {
+  const q = trpc.oneOnOne.talkingPointsList.useQuery({ employeeId }, { enabled: !!employeeId });
+  const [text, setText] = useState('');
+  const add = trpc.oneOnOne.talkingPointsAdd.useMutation({ onSuccess: () => { setText(''); q.refetch(); }, onError: (e) => alert(e.message) });
+  const toggle = trpc.oneOnOne.talkingPointsToggleDone.useMutation({ onSuccess: () => q.refetch() });
+  const arch = trpc.oneOnOne.talkingPointsSetArchived.useMutation({ onSuccess: () => q.refetch() });
+  const active = sortActive(q.data?.active ?? []);
+  const submit = () => { if (text.trim()) add.mutate({ employeeId, text: text.trim() }); };
+  return (
+    <section className="ls-card p-5 mb-4">
+      <h2 className="font-bold">Talking Points</h2>
+      <p className="text-xs text-ls-ink-3 mt-0.5 mb-3">Things to raise in your next 1:1 — either of you can add. These stay until archived; they don't clear weekly.</p>
+      <div className="flex gap-2 mb-3">
+        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder="Add a talking point…" className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm" />
+        <button onClick={submit} disabled={!text.trim() || add.isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
+      </div>
+      {active.length === 0 ? <div className="text-sm text-ls-ink-3 px-2 py-2">No talking points yet.</div> : (
+        <ul>{active.map((it) => (
+          <ChecklistRow key={it.id} item={it} meId={meId}
+            onToggle={(id, done) => toggle.mutate({ id, done })} onArchive={(id, archived) => arch.mutate({ id, archived })} />
+        ))}</ul>
+      )}
+      <PastBox label="Past talking points" rows={q.data?.archived ?? []} onRestore={(id) => arch.mutate({ id, archived: false })} />
+    </section>
+  );
+}
+
+function ActionItemsSection({ employeeId, meId, canPull }: { employeeId: string; meId: string; canPull: boolean }) {
+  const q = trpc.oneOnOne.actionItemsList.useQuery({ employeeId }, { enabled: !!employeeId });
+  const [text, setText] = useState('');
+  const add = trpc.oneOnOne.actionItemsAdd.useMutation({ onSuccess: () => { setText(''); q.refetch(); }, onError: (e) => alert(e.message) });
+  const toggle = trpc.oneOnOne.actionItemsToggleDone.useMutation({ onSuccess: () => q.refetch() });
+  const arch = trpc.oneOnOne.actionItemsSetArchived.useMutation({ onSuccess: () => q.refetch() });
+  const pull = trpc.oneOnOne.actionItemsSetInWeeklyPlan.useMutation({ onSuccess: () => q.refetch() });
+  const active = sortActive(q.data?.active ?? []);
+  const submit = () => { if (text.trim()) add.mutate({ employeeId, text: text.trim() }); };
+  return (
+    <section className="ls-card p-5 mb-4">
+      <h2 className="font-bold">Action Items</h2>
+      <p className="text-xs text-ls-ink-3 mt-0.5 mb-3">
+        Commitments from your 1:1s. They persist until archived — no weekly reset.
+        {canPull ? ' Pull any into your Weekly Plan with the → Weekly Plan button.' : ''}
+      </p>
+      <div className="flex gap-2 mb-3">
+        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder="Add an action item…" className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm" />
+        <button onClick={submit} disabled={!text.trim() || add.isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Add</button>
+      </div>
+      {active.length === 0 ? <div className="text-sm text-ls-ink-3 px-2 py-2">No action items yet.</div> : (
+        <ul>{active.map((it) => (
+          <ChecklistRow key={it.id} item={it} meId={meId}
+            onToggle={(id, done) => toggle.mutate({ id, done })} onArchive={(id, archived) => arch.mutate({ id, archived })}
+            extra={canPull ? (
+              <button onClick={() => pull.mutate({ id: it.id, inWeeklyPlan: !it.inWeeklyPlan })}
+                title="Add to / remove from your Weekly Plan"
+                className={`px-2 py-1 rounded-md text-xs font-semibold ${it.inWeeklyPlan ? 'text-ls-blue-deep bg-ls-blue-50' : 'text-ls-ink-3 hover:bg-gray-100'}`}>
+                → Weekly Plan
+              </button>
+            ) : undefined} />
+        ))}</ul>
+      )}
+      <div className="mt-4 rounded-lg bg-ls-bg border border-gray-100 p-3">
+        <PastBox label="Past Action Items" rows={q.data?.archived ?? []} onRestore={(id) => arch.mutate({ id, archived: false })} />
+        {(q.data?.archived ?? []).length === 0 && <div className="text-xs text-ls-ink-3">No archived action items yet.</div>}
+      </div>
+    </section>
+  );
+}
+
+function SharedNotesSection({ employeeId, otherFirst }: { employeeId: string; otherFirst: string }) {
+  const q = trpc.oneOnOne.notesGet.useQuery({ employeeId }, { enabled: !!employeeId });
+  const save = trpc.oneOnOne.notesSave.useMutation({ onSuccess: () => q.refetch() });
+  const [draft, setDraft] = useState<string | null>(null);
+  const mine = (q.data?.shared ?? []).find((n: any) => n.isMine);
+  const others = (q.data?.shared ?? []).filter((n: any) => !n.isMine);
+  const value = draft ?? mine?.body ?? '';
+  return (
+    <section className="ls-card p-5 mb-4">
+      <h2 className="font-bold">Shared notes</h2>
+      <p className="text-xs text-ls-ink-3 mt-0.5 mb-3">Notes added here are shared with {otherFirst}. Refresh to see notes they add.</p>
+      <div className="mb-4">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Your notes</div>
+        <textarea value={value} onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { if (draft != null && draft !== (mine?.body ?? '')) save.mutate({ employeeId, scope: 'shared', body: draft }); }}
+          placeholder="Add your notes…" rows={3}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" />
+        {save.isLoading && <div className="text-[11px] text-ls-ink-3 mt-1">Saving…</div>}
+      </div>
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">{otherFirst}'s notes</div>
+        {others.length === 0 ? (
+          <div className="rounded-lg bg-ls-bg-2 border border-gray-100 px-3 py-2.5 text-sm text-ls-ink-3 italic">{otherFirst} hasn't taken any notes yet.</div>
+        ) : others.map((n: any) => (
+          <div key={n.authorId} className="rounded-lg bg-ls-bg-2 border border-gray-100 px-3 py-2.5 text-sm text-ls-ink-2 whitespace-pre-wrap mb-2">
+            {n.body || <span className="italic text-ls-ink-3">No notes yet.</span>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PrivateNotesSection({ employeeId }: { employeeId: string }) {
+  const q = trpc.oneOnOne.notesGet.useQuery({ employeeId }, { enabled: !!employeeId });
+  const save = trpc.oneOnOne.notesSave.useMutation({ onSuccess: () => q.refetch() });
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? q.data?.myPrivateBody ?? '';
+  return (
+    <section className="ls-card p-5 mb-4">
+      <h2 className="font-bold flex items-center gap-2"><Lock size={15} className="text-ls-ink-3" /> My private notes</h2>
+      <p className="text-xs text-ls-ink-3 mt-0.5 mb-3">A space to organize your thoughts. Only visible to you.</p>
+      <textarea value={value} onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { if (draft != null && draft !== (q.data?.myPrivateBody ?? '')) save.mutate({ employeeId, scope: 'private', body: draft }); }}
+        placeholder="My private thoughts about this 1-on-1…" rows={3}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" />
+      {save.isLoading && <div className="text-[11px] text-ls-ink-3 mt-1">Saving…</div>}
+    </section>
   );
 }
