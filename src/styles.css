@@ -22,3 +22,7 @@ body {
   .ls-chip { @apply inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full; }
   .ls-eyebrow { @apply text-xs font-bold tracking-widest uppercase text-ls-blue; }
 }
+
+/* Hide scrollbar visual while keeping scroll (sidebar nav) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
