@@ -379,7 +379,7 @@ function getScreenHelp(screen: string, tab?: string | null): string {
     feedback: 'Feedback triage lets admins review, prioritize, and resolve user-submitted feedback items.',
     chatlogs: 'Chat Logs shows initial prompts from each chat session with screen context.',
     satisfaction: 'Satisfaction tracks both explicit reactions (thumbs up/down) and passive sentiment signals from chat messages.',
-    users: 'User Management handles the four-tier role model, account creation, password resets, and active/beta toggles.',
+    users: 'User Management handles the four-tier role model, account creation, password resets, and active-status toggles.',
     prompts: 'Prompt Management lets sysadmins version and edit AI prompt templates used by the chat system.',
   };
 
@@ -406,7 +406,7 @@ function generateGeneralResponse(message: string): string {
 
   if (lower.includes('user') || lower.includes('role') || lower.includes('permission')) {
     return 'This app uses a four-tier role model: User, Manager, Admin, and Sysadmin. Each tier unlocks additional admin panels. ' +
-      'Admins manage users from Settings > Users, including role assignment, password resets, and active/beta status toggles.';
+      'Admins manage users from Settings > Users, including role assignment, password resets, and active-status toggles.';
   }
 
   if (lower.includes('telemetry') || lower.includes('analytics') || lower.includes('metric')) {

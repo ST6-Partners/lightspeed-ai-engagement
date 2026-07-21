@@ -51,10 +51,6 @@ export default function UserManagement() {
     updateMutation.mutate({ id: userId, role: role as any });
   };
 
-  const handleBetaToggle = (userId: string, current: boolean) => {
-    updateMutation.mutate({ id: userId, isBeta: !current });
-  };
-
   return (
     <div className="space-y-4">
       {/* Info banner */}
@@ -107,7 +103,6 @@ export default function UserManagement() {
                 <th className="px-3 py-3">Email</th>
                 <th className="px-3 py-3 w-[120px]">Connection</th>
                 <th className="px-3 py-3 w-[120px]">Role</th>
-                <th className="px-3 py-3 w-10">Beta</th>
                 <th className="px-3 py-3">Timezone</th>
               </tr>
             </thead>
@@ -165,16 +160,6 @@ export default function UserManagement() {
                         <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
                       ))}
                     </select>
-                  </td>
-
-                  {/* Beta */}
-                  <td className="px-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={user.isBeta}
-                      onChange={() => handleBetaToggle(user.id, user.isBeta)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
                   </td>
 
                   {/* Timezone */}
