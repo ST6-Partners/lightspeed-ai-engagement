@@ -7,13 +7,14 @@ import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
-import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments } from './pages/admin';
+import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments, PeerReviewQuestions } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
 import ManagerSurvey from './pages/ManagerSurvey';
+import PeerReview from './pages/PeerReview';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import Reviews from './pages/Reviews';
@@ -40,11 +41,13 @@ export default function App() {
         <Route path="/exit-survey" element={<ExitSurvey />} />
         <Route path="/engagement-survey" element={<EngagementSurvey />} />
         <Route path="/manager-survey" element={<ManagerSurvey />} />
+        <Route path="/peer-review" element={<PeerReview />} />
         {/* Core Data */}
         <Route path="/core-data/employees" element={<Employees />} />
         <Route path="/core-data/job-titles" element={<JobTitles />} />
         <Route path="/core-data/departments" element={<Departments />} />
         <Route path="/core-data/survey-questions" element={<ManagerSurveyQuestions />} />
+        <Route path="/core-data/peer-review-questions" element={<PeerReviewQuestions />} />
         <Route path="/core-data/rating-scale" element={<ManagerRatingScale />} />
         <Route path="/core-data/org-data" element={<OrgData />} />
         <Route path="/core-data/values" element={<CompanyValues />} />

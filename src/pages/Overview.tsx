@@ -29,8 +29,8 @@ const engagement: Stage[] = [
   { n: 2, title: 'Reviews', points: [], note: 'Placeholder — to be defined', tbd: true },
   { n: 3, title: 'Coaching Plans', points: ['Growth areas for strong performers', "PIPs for employees who aren't doing well"] },
   { n: 4, title: 'Feedback', points: ['A manager delivering the coaching plan to the employee as feedback'] },
-  { n: 5, title: 'Engagement Surveys', points: ['Historic Lightspeed engagement surveys', 'New: manager survey — employees give specific feedback on how their manager is doing'] },
-  { n: 6, title: 'Manager Survey', points: ['Indicator of how their manager affects their work'] },
+  { n: 5, title: 'Engagement Surveys', points: ['Historic Lightspeed engagement surveys', 'New: manager review — employees give specific feedback on how their manager is doing'] },
+  { n: 6, title: 'Manager Review', points: ['Indicator of how their manager affects their work'] },
   { n: 7, title: 'Exit Interviews', points: ['The ultimate truth serum on employee sentiment and engagement', 'Structured exit conversation', 'Content per defined coverage'] },
 ];
 

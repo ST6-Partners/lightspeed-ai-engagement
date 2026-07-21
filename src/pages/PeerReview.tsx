@@ -1,7 +1,7 @@
 import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
-// MANAGER SURVEY — upward feedback filled out AFTER a 1:1 with your manager.
-// An employee rates their manager 1..5 across the active Survey Questions.
+// PEER REVIEW — lateral feedback on a peer you work with.
+// An employee rates a peer 1..5 across the active Peer Review Questions.
 // Two sub-tabs:
 //   • After a 1:1  — the rating form (respondent + manager + date + ratings).
 //   • Past Responses — the recorded history of submitted reviews.
@@ -27,27 +27,27 @@ const avgOf = (r: Record<string, number>) => {
 
 type View = 'form' | 'history';
 
-export default function ManagerSurvey() {
+export default function PeerReview() {
   const [view, setView] = useState<View>('form');
 
   const { data: people } = trpc.pip.listUsers.useQuery();
-  const { data: questions, isLoading: qLoading } = trpc.managerSurveyQuestions.list.useQuery();
+  const { data: questions, isLoading: qLoading } = trpc.peerReviewQuestions.list.useQuery();
   const { data: scale } = trpc.managerRatingScale.list.useQuery();
   const utils = trpc.useContext();
-  const { data: history, isLoading: hLoading } = trpc.managerSurvey.list.useQuery(undefined, {
+  const { data: history, isLoading: hLoading } = trpc.peerReview.list.useQuery(undefined, {
     enabled: view === 'history',
   });
 
   const [respondentId, setRespondentId] = useState('');
-  const [managerId, setManagerId] = useState('');
+  const [peerId, setPeerId] = useState('');
   const [reviewDate, setReviewDate] = useState(todayISO());
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const submit = trpc.managerSurvey.submit.useMutation({
+  const submit = trpc.peerReview.submit.useMutation({
     onSuccess: () => {
       setSubmitted(true);
-      utils.managerSurvey.list.invalidate();
+      utils.peerReview.list.invalidate();
     },
     onError: (e) => alert(e.message),
   });
@@ -62,18 +62,18 @@ export default function ManagerSurvey() {
   const answeredCount = Object.keys(ratings).length;
   const allAnswered = activeQuestions.length > 0 && answeredCount === activeQuestions.length;
   const canSubmit =
-    !!respondentId && !!managerId && !!reviewDate && allAnswered && respondentId !== managerId;
+    !!respondentId && !!peerId && !!reviewDate && allAnswered && respondentId !== peerId;
 
   const setRating = (qid: string, v: number) => setRatings((r) => ({ ...r, [qid]: v }));
 
   const resetForm = () => {
-    setRespondentId(''); setManagerId(''); setReviewDate(todayISO()); setRatings({}); setSubmitted(false);
+    setRespondentId(''); setPeerId(''); setReviewDate(todayISO()); setRatings({}); setSubmitted(false);
   };
 
   const TabBar = () => (
     <div className="flex gap-1 mb-4 border-b border-gray-200">
       {([
-        { key: 'form' as const, label: 'After a 1:1', icon: ClipboardList },
+        { key: 'form' as const, label: 'Review a peer', icon: ClipboardList },
         { key: 'history' as const, label: 'Past Responses', icon: History },
       ]).map(({ key, label, icon: Icon }) => {
         const on = view === key;
@@ -99,7 +99,7 @@ export default function ManagerSurvey() {
       return (
         <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
           <History className="mx-auto text-gray-300 mb-2" size={32} />
-          <p className="text-sm text-gray-500">No manager feedback has been recorded yet.</p>
+          <p className="text-sm text-gray-500">No peer feedback has been recorded yet.</p>
         </div>
       );
     }
@@ -113,7 +113,7 @@ export default function ManagerSurvey() {
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-gray-900">
-                    Manager: {r.managerName ?? '—'}
+                    Peer: {r.peerName ?? '—'}
                   </div>
                   <div className="text-xs text-gray-500">
                     by {r.respondentName ?? '—'} · {fmtDate(r.reviewDate)}
@@ -143,7 +143,7 @@ export default function ManagerSurvey() {
     <div className="max-w-xl mx-auto mt-10 text-center">
       <CheckCircle2 className="mx-auto text-green-600 mb-3" size={44} />
       <h2 className="text-xl font-bold text-gray-900">Feedback submitted</h2>
-      <p className="text-sm text-gray-500 mt-1">Thanks — your manager feedback has been recorded.</p>
+      <p className="text-sm text-gray-500 mt-1">Thanks — your peer feedback has been recorded.</p>
       <div className="mt-5 flex items-center justify-center gap-2">
         <button onClick={resetForm}
           className="inline-flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">
@@ -170,18 +170,18 @@ export default function ManagerSurvey() {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Manager (being rated)</label>
-          <select className={`${inputCls} w-full`} value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-            <option value="">Select manager…</option>
+          <label className={labelCls}>Peer (being reviewed)</label>
+          <select className={`${inputCls} w-full`} value={peerId} onChange={(e) => setPeerId(e.target.value)}>
+            <option value="">Select a peer…</option>
             {(people ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelCls}>1:1 date</label>
+          <label className={labelCls}>Review date</label>
           <input type="date" className={`${inputCls} w-full`} value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} />
         </div>
-        {respondentId && managerId && respondentId === managerId && (
-          <div className="sm:col-span-3 text-xs text-red-600">Employee and manager must be different people.</div>
+        {respondentId && peerId && respondentId === peerId && (
+          <div className="sm:col-span-3 text-xs text-red-600">Reviewer and peer must be different people.</div>
         )}
       </div>
 
@@ -192,7 +192,7 @@ export default function ManagerSurvey() {
             <div className="bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-400">Loading questions…</div>
           ) : activeQuestions.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-500">
-              No active questions. Add them in Core Data → Survey Questions.
+              No active questions. Add them in Core Data → Peer Review Questions.
             </div>
           ) : (
             activeQuestions.map((q, i) => (
@@ -227,7 +227,7 @@ export default function ManagerSurvey() {
 
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-gray-500">{answeredCount} of {activeQuestions.length} answered</span>
-            <button onClick={() => submit.mutate({ respondentId, managerId, reviewDate, ratings })}
+            <button onClick={() => submit.mutate({ respondentId, peerId, reviewDate, ratings })}
               disabled={!canSubmit || submit.isLoading}
               className="inline-flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {submit.isLoading ? 'Submitting…' : 'Submit feedback'}
@@ -266,7 +266,7 @@ export default function ManagerSurvey() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Manager Review</h1>
           <p className="text-sm text-gray-500">
-            Fill this out after your 1:1 with your manager. Rate each behavior from 1 to 5 using the scale on the right.
+            Fill this out after working with a peer. Rate each behavior from 1 to 5 using the scale on the right.
           </p>
         </div>
       </div>

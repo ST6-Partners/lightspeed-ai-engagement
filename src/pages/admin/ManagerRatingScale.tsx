@@ -35,7 +35,7 @@ export default function ManagerRatingScale() {
       <div className="mb-2">
         <h2 className="text-lg font-bold text-gray-900">Rating Scale</h2>
         <p className="text-sm text-gray-500">
-          The 1–5 rating legend shown on the Manager Survey. Edit each level’s name and definition,
+          The 1–5 rating legend shown on the Manager Review. Edit each level’s name and definition,
           or add / retire levels. Deactivate to hide a level without affecting past responses.
         </p>
       </div>

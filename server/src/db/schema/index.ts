@@ -79,3 +79,6 @@ export { coachingPlans, coachingPlanFocusAreas } from './coaching.js';
 
 // 1:1 Hub (Reviews rework, 2026-07-21) — pair-scoped talking points, action items, notes
 export { talkingPoints, actionItems, oneOnOneNotes } from './oneOnOne.js';
+
+// Peer Review (2026-07-21) — lateral peer feedback; reuses manager_rating_scale
+export { peerReviewQuestions, peerReviewResponses } from './peerReview.js';

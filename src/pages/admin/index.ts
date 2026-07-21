@@ -19,6 +19,7 @@ export { default as Departments } from './Departments';
 export { default as Employees } from './Employees';
 export { default as EmailTestPanel } from './EmailTestPanel';
 export { default as ManagerSurveyQuestions } from './ManagerSurveyQuestions';
+export { default as PeerReviewQuestions } from './PeerReviewQuestions';
 export { default as ManagerRatingScale } from './ManagerRatingScale';
 export { default as OrgData } from './OrgData';
 export { default as CompanyValues } from './CompanyValues';

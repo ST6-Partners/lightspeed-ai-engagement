@@ -32,6 +32,8 @@ import { engagementAnalyticsRouter } from './routers/engagementAnalytics.js';
 import { managerSurveyQuestionsRouter } from './routers/managerSurveyQuestions.js';
 import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
 import { managerSurveyRouter } from './routers/managerSurvey.js';
+import { peerReviewQuestionsRouter } from './routers/peerReviewQuestions.js';
+import { peerReviewRouter } from './routers/peerReview.js';
 import { valuesRouter } from './routers/values.js';
 import { performanceRouter } from './routers/performance.js';
 import { coachingRouter } from './routers/coaching.js';
@@ -72,6 +74,8 @@ export const appRouter = router({
   managerSurveyQuestions: managerSurveyQuestionsRouter,
   managerRatingScale: managerRatingScaleRouter,
   managerSurvey: managerSurveyRouter,
+  peerReviewQuestions: peerReviewQuestionsRouter,
+  peerReview: peerReviewRouter,
   values: valuesRouter,
   performance: performanceRouter,
   coaching: coachingRouter,

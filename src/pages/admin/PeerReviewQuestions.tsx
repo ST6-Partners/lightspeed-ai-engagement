@@ -1,6 +1,6 @@
 // ============================================================
 // CORE DATA · SURVEY QUESTIONS — the managed list of Manager Survey
-// statements employees rate. Feeds the Manager Review form.
+// statements employees rate about a peer. Feeds the Peer Review form.
 // ============================================================
 
 import { useState } from 'react';
@@ -12,11 +12,11 @@ const inputCls =
 
 interface Row { id: string; text: string; description: string | null; isActive: boolean; sortOrder: number; }
 
-export default function ManagerSurveyQuestions() {
-  const { data: rows, refetch, isLoading } = trpc.managerSurveyQuestions.list.useQuery({ includeInactive: true });
-  const create = trpc.managerSurveyQuestions.create.useMutation({ onSuccess: () => { resetNew(); refetch(); }, onError: (e) => alert(e.message) });
-  const update = trpc.managerSurveyQuestions.update.useMutation({ onSuccess: () => { setEditing(null); refetch(); }, onError: (e) => alert(e.message) });
-  const remove = trpc.managerSurveyQuestions.remove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
+export default function PeerReviewQuestions() {
+  const { data: rows, refetch, isLoading } = trpc.peerReviewQuestions.list.useQuery({ includeInactive: true });
+  const create = trpc.peerReviewQuestions.create.useMutation({ onSuccess: () => { resetNew(); refetch(); }, onError: (e) => alert(e.message) });
+  const update = trpc.peerReviewQuestions.update.useMutation({ onSuccess: () => { setEditing(null); refetch(); }, onError: (e) => alert(e.message) });
+  const remove = trpc.peerReviewQuestions.remove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
 
   const [nText, setNText] = useState('');
   const [nDesc, setNDesc] = useState('');
@@ -33,9 +33,9 @@ export default function ManagerSurveyQuestions() {
   return (
     <div className="max-w-4xl">
       <div className="mb-2">
-        <h2 className="text-lg font-bold text-gray-900">Survey Questions</h2>
+        <h2 className="text-lg font-bold text-gray-900">Peer Review Questions</h2>
         <p className="text-sm text-gray-500">
-          The statements employees rate about their manager on the Manager Review. Order by the
+          The statements employees rate about a peer on the Peer Review. Order by the
           Sort field. Deactivate to remove a question from the form without affecting past responses.
         </p>
       </div>
@@ -44,7 +44,7 @@ export default function ManagerSurveyQuestions() {
       <div className="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-[260px]">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Question</label>
-          <input className={`${inputCls} w-full`} value={nText} onChange={(e) => setNText(e.target.value)} placeholder="e.g. My manager sets clear expectations" />
+          <input className={`${inputCls} w-full`} value={nText} onChange={(e) => setNText(e.target.value)} placeholder="e.g. This peer collaborates effectively across the team" />
         </div>
         <div className="w-40">
           <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Description</label>
