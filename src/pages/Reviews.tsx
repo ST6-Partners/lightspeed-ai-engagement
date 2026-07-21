@@ -18,6 +18,8 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import ManagerSurvey from './ManagerSurvey';
+import PeerReview from './PeerReview';
 import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck, ChevronRight, ChevronDown, Archive, RotateCcw, Lock } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
@@ -655,7 +657,7 @@ function ppInitials(name?: string) {
   return (name ?? '').split(' ').map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
 }
 
-export default function Reviews() {
+function ReviewsHub() {
   const { data: me } = trpc.auth.me.useQuery();
   const role = (me?.role as keyof typeof RANK) ?? 'user';
   const isManager = (RANK[role] ?? 0) >= RANK.manager;
@@ -679,9 +681,7 @@ export default function Reviews() {
   const otherFirst = isManager ? (selectedName.split(' ')[0] || 'your report') : 'your manager';
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="ls-eyebrow mb-1">Engagement</div>
-      <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
+    <div>
       <p className="text-sm text-ls-ink-3 mb-4">
         {isManager
           ? '1:1 space with your direct reports — reviews, talking points, action items, and notes.'
@@ -919,5 +919,37 @@ function PrivateNotesSection({ employeeId }: { employeeId: string }) {
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" />
       {save.isLoading && <div className="text-[11px] text-ls-ink-3 mt-1">Saving…</div>}
     </section>
+  );
+}
+
+
+// ============================================================
+// REVIEWS SECTION — one page, three sub-tabs: the 1:1 hub (Reviews),
+// Manager Review (upward survey), and Peer Review (lateral survey).
+// Consolidates the three former Engagement nav items. 2026-07-21 (bf).
+// ============================================================
+export default function Reviews() {
+  const [tab, setTab] = useState<'reviews' | 'manager' | 'peer'>('reviews');
+  const tabs: Array<['reviews' | 'manager' | 'peer', string]> = [
+    ['reviews', 'Reviews'], ['manager', 'Manager Review'], ['peer', 'Peer Review'],
+  ];
+  return (
+    <div className="max-w-6xl mx-auto">
+      <div className="ls-eyebrow mb-1">Engagement</div>
+      <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
+      <p className="text-sm text-ls-ink-3 mb-4">Your 1:1 reviews, upward manager reviews, and peer reviews — all in one place.</p>
+      <div className="flex gap-6 border-b border-gray-200 mb-5">
+        {tabs.map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setTab(key)}
+            className={`pb-2.5 -mb-px text-[15px] font-semibold border-b-2 transition-colors ${
+              tab === key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'reviews' && <ReviewsHub />}
+      {tab === 'manager' && <ManagerSurvey />}
+      {tab === 'peer' && <PeerReview />}
+    </div>
   );
 }
