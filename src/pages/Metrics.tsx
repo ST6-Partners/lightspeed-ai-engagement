@@ -9,6 +9,10 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Trophy, Users, Smile, ClipboardList, ShieldAlert, MessageCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+function initials(name: string) {
+  return name.split(' ').map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+}
+
 function StatCard({ icon: Icon, label, value, sub }: { icon: typeof Users; label: string; value: string; sub?: string }) {
   return (
     <div className="ls-card p-4 flex items-start gap-3">
@@ -27,6 +31,7 @@ function StatCard({ icon: Icon, label, value, sub }: { icon: typeof Users; label
 export default function Metrics() {
   const { data, isLoading, error } = trpc.metrics.weekly.useQuery();
   const alertsQ = trpc.oneOnOne.talkingPointAlerts.useQuery();
+  const teamQ = trpc.metrics.teamProfiles.useQuery();
 
   if (isLoading) {
     return <div className="text-sm text-ls-ink-3">Loading metrics…</div>;
@@ -105,6 +110,40 @@ export default function Metrics() {
             <StatCard icon={AlertTriangle} label="Open concerns" value={String(recap.openConcerns)} sub="people to check on" />
             <StatCard icon={ClipboardList} label="Priorities done" value={recap.completionPct != null ? `${recap.completionPct}%` : '—'} sub={`${recap.donePrio}/${recap.totalPrio} completed`} />
           </div>
+
+          {/* Your team — summary profiles */}
+          {(teamQ.data?.profiles.length ?? 0) > 0 && (
+            <section className="ls-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-ls-line flex items-center gap-2">
+                <Users className="w-[18px] h-[18px] text-ls-blue" />
+                <h2 className="font-semibold text-ls-ink">Your team</h2>
+                <span className="text-xs text-ls-ink-3">({teamQ.data!.profiles.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-ls-line">
+                {teamQ.data!.profiles.map((p) => (
+                  <div key={p.id} className="bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-ls-blue-50 text-ls-blue-deeper grid place-items-center text-sm font-bold shrink-0">{initials(p.name)}</div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-ls-ink truncate">{p.name}</div>
+                          <div className="text-xs text-ls-ink-3 truncate">{[p.title, p.department].filter(Boolean).join(' · ') || '—'}</div>
+                        </div>
+                      </div>
+                      <Link to="/reviews" className="text-xs text-ls-blue hover:underline shrink-0">Open 1:1 →</Link>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+                      <span className={`px-2 py-0.5 rounded-full ${p.checkedIn ? 'bg-ls-thrive-bg text-ls-thrive' : 'bg-ls-bg-2 text-ls-ink-3'}`}>{p.checkedIn ? 'Checked in' : 'Not checked in'}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-ls-bg-2 text-ls-ink-2">Mood {p.mood != null ? `${p.mood}/5` : '—'}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-ls-bg-2 text-ls-ink-2">Priorities {p.priorityTotal ? `${p.priorityDone}/${p.priorityTotal}` : '—'}</span>
+                      {p.concernCount > 0 && <span className="px-2 py-0.5 rounded-full bg-ls-watch-bg text-ls-watch">{p.concernCount} concern{p.concernCount > 1 ? 's' : ''}</span>}
+                      {p.hasWins && <span className="px-2 py-0.5 rounded-full bg-ls-thrive-bg text-ls-thrive">Win logged</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Concerns */}
           <section className="ls-card overflow-hidden">

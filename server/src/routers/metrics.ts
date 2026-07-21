@@ -152,4 +152,82 @@ export const metricsRouter = router({
         wins,
       };
     }),
+
+  // Summary profiles for the signed-in manager's direct reports: who they are
+  // (title / department / role) plus a light weekly-signal snapshot. Read-only.
+  teamProfiles: managerProcedure
+    .input(z.object({ weekStart: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const weekStart = input?.weekStart ?? mondayOf();
+
+      const team = await ctx.db.query.users.findMany({
+        where: and(eq(users.managerId, ctx.user.id), eq(users.isActive, true)),
+      });
+      if (team.length === 0) return { weekStart, teamSize: 0, profiles: [] as any[] };
+      const teamIds = team.map((t) => t.id);
+
+      // Title + department label lookups.
+      const [titles, depts] = await Promise.all([
+        ctx.db.query.jobTitles.findMany(),
+        ctx.db.query.departments.findMany(),
+      ]);
+      const titleOf = new Map<string, string>(
+        (titles as any[]).map((j) => [j.id, j.level ? `${j.title} (${j.level})` : j.title]),
+      );
+      const deptOf = new Map<string, string>((depts as any[]).map((d) => [d.id, d.name]));
+
+      // This week's plans + latest check-in per report.
+      const plans = await ctx.db.query.weeklyCheckins.findMany({
+        where: and(inArray(weeklyCheckins.userId, teamIds), eq(weeklyCheckins.weekStart, weekStart)),
+      });
+      const planByUser = new Map(plans.map((p) => [p.userId, p]));
+
+      const responses = await ctx.db.query.checkinResponses.findMany({
+        where: inArray(checkinResponses.respondentId, teamIds),
+        orderBy: [desc(checkinResponses.submittedAt)],
+      });
+      const latestCheckin = new Map<string, (typeof responses)[number]>();
+      for (const r of responses) {
+        if (r.respondentId && !latestCheckin.has(r.respondentId)) latestCheckin.set(r.respondentId, r);
+      }
+
+      const profiles = team.map((t) => {
+        const plan = planByUser.get(t.id);
+        const prios = plan ? normPriorities(plan.priorities) : [];
+        let concernCount = 0;
+        if (plan) {
+          if (plan.mood != null && plan.mood <= 2) concernCount++;
+          if (plan.blockers && plan.blockers.trim()) concernCount++;
+          if (plan.pulseAnswer === 'Disagree') concernCount++;
+        }
+        const ci = latestCheckin.get(t.id);
+        if (ci) {
+          const answers = (Array.isArray(ci.answers) ? ci.answers : []) as CheckinAnswer[];
+          for (const a of answers) {
+            if (a.type === 'scale5' && a.value != null && a.value <= 2) concernCount++;
+            if (a.type === 'enps' && a.value != null && a.value <= 6) concernCount++;
+          }
+          if (ci.sentiment != null && ci.sentiment <= 2) concernCount++;
+          if (ci.workload != null && ci.workload >= 5) concernCount++;
+        }
+        return {
+          id: t.id,
+          name: t.name ?? t.email,
+          email: t.email,
+          role: t.role,
+          title: t.jobTitleId ? (titleOf.get(t.jobTitleId) ?? null) : null,
+          department: t.departmentId ? (deptOf.get(t.departmentId) ?? null) : null,
+          leaderBadge: t.leaderBadge ?? null,
+          mood: plan?.mood ?? null,
+          checkedIn: !!plan && plan.status === 'saved',
+          priorityDone: prios.filter((p) => p.done).length,
+          priorityTotal: prios.length,
+          concernCount,
+          hasWins: !!(plan?.wins && plan.wins.trim()),
+          latestCheckinAt: ci?.submittedAt ?? null,
+        };
+      });
+
+      return { weekStart, teamSize: team.length, profiles };
+    }),
 });
