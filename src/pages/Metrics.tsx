@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Link } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Trophy, Users, Smile, ClipboardList, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Trophy, Users, Smile, ClipboardList, ShieldAlert, MessageCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 function StatCard({ icon: Icon, label, value, sub }: { icon: typeof Users; label: string; value: string; sub?: string }) {
@@ -26,6 +26,7 @@ function StatCard({ icon: Icon, label, value, sub }: { icon: typeof Users; label
 
 export default function Metrics() {
   const { data, isLoading, error } = trpc.metrics.weekly.useQuery();
+  const alertsQ = trpc.oneOnOne.talkingPointAlerts.useQuery();
 
   if (isLoading) {
     return <div className="text-sm text-ls-ink-3">Loading metrics…</div>;
@@ -60,6 +61,35 @@ export default function Metrics() {
         <h1 className="text-2xl font-bold text-ls-ink">Metrics</h1>
         <p className="text-sm text-ls-ink-3">Insights for your team — week of {weekLabel}.</p>
       </div>
+
+      {/* New talking points from your team (from the 1:1 hub under Reviews) */}
+      {(alertsQ.data?.length ?? 0) > 0 && (
+        <section className="ls-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-ls-line flex items-center gap-2">
+            <MessageCircle className="w-[18px] h-[18px] text-ls-blue" />
+            <h2 className="font-semibold text-ls-ink">New talking points from your team</h2>
+            <span className="text-xs text-ls-ink-3">({alertsQ.data!.reduce((n, g) => n + g.count, 0)})</span>
+          </div>
+          <ul className="divide-y divide-ls-line">
+            {alertsQ.data!.map((g) => (
+              <li key={g.employeeId} className="px-5 py-3 bg-ls-blue-50/40">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-ls-ink">{g.employeeName} <span className="text-xs font-normal text-ls-ink-3">· {g.count} new</span></span>
+                  <Link to="/reviews" className="text-xs text-ls-blue hover:underline">Open 1:1 →</Link>
+                </div>
+                <ul className="mt-1 space-y-1">
+                  {g.items.map((it) => (
+                    <li key={it.id} className="text-sm text-ls-ink-2 flex items-start gap-2">
+                      <MessageCircle className="w-3.5 h-3.5 text-ls-blue-deep mt-0.5 shrink-0" />
+                      <span>{it.message.replace(/^.*?added a talking point: /, '')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {data.teamSize === 0 ? (
         <div className="ls-card p-6 text-sm text-ls-ink-3">

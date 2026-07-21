@@ -9,13 +9,14 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, and, asc, inArray } from 'drizzle-orm';
+import { eq, and, asc, desc, isNull, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { hasMinimumRole } from '../services/permissions.js';
 import type { RoleTier } from '../services/permissions.js';
 import { users } from '../db/schema/core.js';
 import { talkingPoints, actionItems, oneOnOneNotes } from '../db/schema/oneOnOne.js';
+import { notifications } from '../db/schema/notifications.js';
 
 // Throw unless the caller may access this employee's 1:1 pair.
 async function assertPairAccess(
@@ -82,7 +83,71 @@ export const oneOnOneRouter = router({
         employeeId: input.employeeId, createdBy: ctx.user.id, text: input.text,
         sortOrder: existing.length,
       }).returning();
+      // Notify the employee's manager when a talking point is added by anyone
+      // other than the manager (typically the employee). Pull-based: surfaces on
+      // the manager's Insights dashboard + notification bell. referenceId is the
+      // employee so alerts group per-person and clear when the manager opens the 1:1.
+      const emp = await ctx.db.query.users.findFirst({ where: eq(users.id, input.employeeId) });
+      if (emp?.managerId && emp.managerId !== ctx.user.id) {
+        const snippet = input.text.length > 80 ? input.text.slice(0, 77) + '…' : input.text;
+        await ctx.db.insert(notifications).values({
+          userId: emp.managerId,
+          type: 'talking_point',
+          message: `${emp.name ?? 'A team member'} added a talking point: ${snippet}`,
+          referenceId: input.employeeId,
+          referenceType: 'talking_point',
+        });
+      }
       return row;
+    }),
+
+  // Manager Insights: current user's unseen "talking point added" alerts,
+  // grouped by the employee whose 1:1 they belong to (most recent first).
+  talkingPointAlerts: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.notifications.findMany({
+      where: and(
+        eq(notifications.userId, ctx.user.id),
+        eq(notifications.type, 'talking_point'),
+        isNull(notifications.readAt),
+      ),
+      orderBy: [desc(notifications.createdAt)],
+    });
+    const names = await nameMap(ctx, rows.map((r: any) => r.referenceId));
+    type Group = { employeeId: string; employeeName: string; count: number; latestAt: Date; items: { id: string; message: string; createdAt: Date }[] };
+    const byEmp = new Map<string, Group>();
+    for (const r of rows as any[]) {
+      const empId: string | null = r.referenceId;
+      if (!empId) continue;
+      const existing = byEmp.get(empId);
+      const g: Group = existing ?? {
+        employeeId: empId,
+        employeeName: (names.get(empId) as string | undefined) ?? 'A team member',
+        count: 0,
+        latestAt: r.createdAt as Date,
+        items: [],
+      };
+      if (!existing) byEmp.set(empId, g);
+      g.count += 1;
+      g.items.push({ id: r.id, message: r.message, createdAt: r.createdAt });
+      if (r.createdAt > g.latestAt) g.latestAt = r.createdAt;
+    }
+    return Array.from(byEmp.values()).sort((a, b) => (a.latestAt < b.latestAt ? 1 : -1));
+  }),
+
+  // Clear the talking-point alerts for one employee — called when the manager
+  // opens that person's 1:1 space (auto-mark-seen).
+  markTalkingPointAlertsSeen: protectedProcedure
+    .input(empInput)
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.update(notifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(notifications.userId, ctx.user.id),
+          eq(notifications.type, 'talking_point'),
+          eq(notifications.referenceId, input.employeeId),
+          isNull(notifications.readAt),
+        ));
+      return { success: true };
     }),
 
   talkingPointsToggleDone: protectedProcedure

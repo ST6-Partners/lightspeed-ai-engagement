@@ -673,6 +673,20 @@ function ReviewsHub() {
     else if (isManager && !selectedId && reports.length) setSelectedId(reports[0].id);
   }, [isManager, me?.id, reports, selectedId]);
 
+  // Auto-clear "new talking point" alerts for a report once the manager opens
+  // their 1:1 space (marks the matching notifications read + refreshes bell).
+  const utils = trpc.useContext();
+  const markSeen = trpc.oneOnOne.markTalkingPointAlertsSeen.useMutation({
+    onSuccess: () => {
+      utils.oneOnOne.talkingPointAlerts.invalidate();
+      utils.notifications.unreadCount.invalidate();
+      utils.notifications.list.invalidate();
+    },
+  });
+  useEffect(() => {
+    if (isManager && selectedId) markSeen.mutate({ employeeId: selectedId });
+  }, [isManager, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!me) {
     return <div className="max-w-4xl mx-auto"><div className="ls-card p-10 text-center text-sm text-ls-ink-3">Loading…</div></div>;
   }

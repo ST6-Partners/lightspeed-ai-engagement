@@ -13,6 +13,7 @@ const TYPE_ICONS: Record<string, string> = {
   system: '⚙️',
   system_broadcast: '📢',
   mention: '💬',
+  talking_point: '🗣️',
 };
 
 function timeAgo(dateStr: string) {
