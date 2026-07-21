@@ -13,9 +13,9 @@ import CoachingPlans from './CoachingPlans';
 import ExitSurvey from './ExitSurvey';
 
 export default function Development() {
-  const [tab, setTab] = useState<'pip' | 'coaching' | 'exit'>('pip');
+  const [tab, setTab] = useState<'pip' | 'coaching' | 'exit'>('coaching');
   const tabs: Array<['pip' | 'coaching' | 'exit', string]> = [
-    ['pip', 'PIP'], ['coaching', 'Coaching Plans'], ['exit', 'Exit Survey'],
+    ['coaching', 'Coaching Plans'], ['pip', 'PIP'], ['exit', 'Exit Survey'],
   ];
   return (
     <div className="max-w-6xl mx-auto">
