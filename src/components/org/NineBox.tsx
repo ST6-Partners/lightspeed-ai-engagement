@@ -9,7 +9,7 @@ function cellTint(box: number): string {
   return ['#fdecec', '#fdeede', '#fcf6e3', '#eef7ec', '#e6f5ea'][sum];
 }
 
-export default function NineBox({ people }: { people: Person[] }) {
+export default function NineBox({ people, scope }: { people: Person[]; scope?: 'individual' | 'directs' | 'descendants' }) {
   const ids = people.map((p) => p.id);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids }, { enabled: ids.length > 0 });
@@ -35,6 +35,13 @@ export default function NineBox({ people }: { people: Person[] }) {
   for (const r of data?.people ?? []) if (r.box != null) ratingByUser.set(r.userId, r.box);
   const inBox = (box: number) => people.filter((p) => ratingByUser.get(p.id) === box);
   const unrated = people.filter((p) => !ratingByUser.has(p.id));
+
+  // Top performers (7/8/9) and Needs attention (1/2/4) for the right rail.
+  // Hidden for a single person (Individual scope) — a leaderboard of one is noise.
+  const withBox = people.map((p) => ({ person: p, box: ratingByUser.get(p.id) ?? null }));
+  const topPerformers = withBox.filter((x) => x.box != null && [7, 8, 9].includes(x.box as number));
+  const needsAttention = withBox.filter((x) => x.box != null && [1, 2, 4].includes(x.box as number));
+  const showRail = scope !== 'individual';
 
   const doRate = (userId: string, box: number) => { setErr(null); rate.mutate({ userId, box }); };
   const doClear = (userId: string) => { setErr(null); clear.mutate({ userId }); };
@@ -97,6 +104,15 @@ export default function NineBox({ people }: { people: Person[] }) {
         </div>
       </div>
 
+      {/* Top performers / Needs attention — 9 Box only; hidden for a single person. */}
+      {showRail && (
+        <div style={{ minWidth: 220 }}>
+          <RailList title={`Top performers (${topPerformers.length})`} color="#15803d" items={topPerformers} />
+          <div style={{ height: 12 }} />
+          <RailList title={`Needs attention (${needsAttention.length})`} color="#b91c1c" items={needsAttention} />
+        </div>
+      )}
+
       {/* Reposition / place modal */}
       {editing && (
         <RateModal
@@ -108,6 +124,29 @@ export default function NineBox({ people }: { people: Person[] }) {
           onRemove={() => doClear(editing.id)}
           onClose={() => { setErr(null); setEditing(null); }}
         />
+      )}
+    </div>
+  );
+}
+
+function RailList({ title, color, items }: { title: string; color: string; items: { person: Person; box: number | null }[] }) {
+  return (
+    <div className="rounded-lg p-3" style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}` }}>
+      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color }}>{title}</div>
+      {items.length === 0 ? (
+        <div className="text-[11px]" style={{ color: TOKENS.idle }}>None in scope.</div>
+      ) : (
+        <div className="space-y-1">
+          {items.map((x) => (
+            <div key={x.person.id} className="flex items-center justify-between gap-2 text-[12px]">
+              <span className="truncate" style={{ color: TOKENS.activeText }}>
+                {x.person.name}
+                {x.person.dept && <span className="text-[11px]" style={{ color: TOKENS.idle }}> · {x.person.dept}</span>}
+              </span>
+              <span className="text-[11px] whitespace-nowrap" style={{ color }}>{x.box != null ? BOX_NAMES[x.box] : ''}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

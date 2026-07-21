@@ -196,7 +196,7 @@ export default function Organization() {
               {!selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : tab === 'ninebox' ? (
-                <NineBox people={scoped} />
+                <NineBox people={scoped} scope={scope} />
               ) : scoped.length === 0 ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
               ) : banded ? (
