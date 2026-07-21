@@ -12,6 +12,7 @@ import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
+import EngagementSurvey from './pages/EngagementSurvey';
 import ManagerSurvey from './pages/ManagerSurvey';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/pips" element={<Pips />} />
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
+        <Route path="/engagement-survey" element={<EngagementSurvey />} />
         <Route path="/manager-survey" element={<ManagerSurvey />} />
         {/* Core Data */}
         <Route path="/core-data/employees" element={<Employees />} />
