@@ -39,6 +39,7 @@ import { reviewSessionRouter } from './routers/reviewSession.js';
 import { checkinsRouter } from './routers/checkins.js';
 import { checkinQuestionsRouter } from './routers/checkinQuestions.js';
 import { checkinSettingsRouter } from './routers/checkinSettings.js';
+import { oneOnOneRouter } from './routers/oneOnOne.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -63,6 +64,7 @@ export const appRouter = router({
   okrs: okrsRouter,
   orgScreen: orgScreenRouter,
   weeklyPlan: weeklyPlanRouter,
+  oneOnOne: oneOnOneRouter,
   exitSurvey: exitSurveyRouter,
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,

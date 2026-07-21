@@ -414,6 +414,13 @@
       "when": 1784132877845,
       "tag": "0058_remove_vacant_seats",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1784132937845,
+      "tag": "0059_one_on_one",
+      "breakpoints": true
     }
   ]
 }

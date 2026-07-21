@@ -76,3 +76,6 @@ export { checkinQuestions, checkinSettings } from './checkins.js';
 
 // Coaching Plans (crafted from a review; AI-drafted narrative, PDF export — 2026-07-09)
 export { coachingPlans, coachingPlanFocusAreas } from './coaching.js';
+
+// 1:1 Hub (Reviews rework, 2026-07-21) — pair-scoped talking points, action items, notes
+export { talkingPoints, actionItems, oneOnOneNotes } from './oneOnOne.js';
