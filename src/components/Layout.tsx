@@ -52,11 +52,6 @@ const navGroups: NavGroup[] = [
     label: 'Documents',
     items: [
       { path: '/documents/overview', label: 'Overview', icon: FileText },
-    ],
-  },
-  {
-    label: 'Core Data',
-    items: [
       { path: '/core-data', label: 'Core Data', icon: Database },
     ],
   },
