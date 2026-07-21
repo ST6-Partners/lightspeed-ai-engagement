@@ -21,6 +21,7 @@ export const peerReviewRouter = router({
       peerId: z.string().uuid(),
       reviewDate: z.string().min(1),
       ratings: ratingsSchema,
+      comments: z.record(z.string().uuid(), z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (Object.keys(input.ratings).length === 0) {
@@ -38,6 +39,7 @@ export const peerReviewRouter = router({
         peerName: peer?.name ?? null,
         reviewDate: input.reviewDate,
         ratings: input.ratings,
+        comments: input.comments ?? {},
         status: 'complete',
       }).returning();
       return row;

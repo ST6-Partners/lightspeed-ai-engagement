@@ -20,6 +20,8 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const cleanComments = (c: Record<string, string>) => Object.fromEntries(Object.entries(c).filter(([, v]) => (v ?? '').trim() !== ''));
+
 const avgOf = (r: Record<string, number>) => {
   const v = Object.values(r ?? {});
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
@@ -42,6 +44,7 @@ export default function PeerReview() {
   const [peerId, setPeerId] = useState('');
   const [reviewDate, setReviewDate] = useState(todayISO());
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const submit = trpc.peerReview.submit.useMutation({
@@ -65,9 +68,10 @@ export default function PeerReview() {
     !!respondentId && !!peerId && !!reviewDate && allAnswered && respondentId !== peerId;
 
   const setRating = (qid: string, v: number) => setRatings((r) => ({ ...r, [qid]: v }));
+  const setComment = (qid: string, v: string) => setComments((c) => ({ ...c, [qid]: v }));
 
   const resetForm = () => {
-    setRespondentId(''); setPeerId(''); setReviewDate(todayISO()); setRatings({}); setSubmitted(false);
+    setRespondentId(''); setPeerId(''); setReviewDate(todayISO()); setRatings({}); setComments({}); setSubmitted(false);
   };
 
   const TabBar = () => (
@@ -124,12 +128,18 @@ export default function PeerReview() {
                 </span>
               </div>
               <div className="space-y-1.5">
-                {Object.entries((r.ratings ?? {}) as Record<string, number>).map(([qid, v]) => (
-                  <div key={qid} className="flex items-start justify-between gap-3 text-sm">
-                    <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
-                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
-                  </div>
-                ))}
+                {Object.entries((r.ratings ?? {}) as Record<string, number>).map(([qid, v]) => {
+                  const cmt = ((r.comments ?? {}) as Record<string, string>)[qid];
+                  return (
+                    <div key={qid} className="text-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
+                        <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
+                      </div>
+                      {cmt && <div className="text-xs text-gray-500 italic mt-0.5">“{cmt}”</div>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -221,13 +231,19 @@ export default function PeerReview() {
                     })}
                   </div>
                 </div>
+                <textarea
+                  value={comments[q.id] ?? ''}
+                  onChange={(e) => setComment(q.id, e.target.value)}
+                  placeholder="Optional comment — why this rating?"
+                  rows={2}
+                  className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
               </div>
             ))
           )}
 
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-gray-500">{answeredCount} of {activeQuestions.length} answered</span>
-            <button onClick={() => submit.mutate({ respondentId, peerId, reviewDate, ratings })}
+            <button onClick={() => submit.mutate({ respondentId, peerId, reviewDate, ratings, comments: cleanComments(comments) })}
               disabled={!canSubmit || submit.isLoading}
               className="inline-flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {submit.isLoading ? 'Submitting…' : 'Submit feedback'}

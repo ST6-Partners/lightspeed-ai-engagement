@@ -20,6 +20,8 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const cleanComments = (c: Record<string, string>) => Object.fromEntries(Object.entries(c).filter(([, v]) => (v ?? '').trim() !== ''));
+
 const avgOf = (r: Record<string, number>) => {
   const v = Object.values(r ?? {});
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
@@ -42,6 +44,8 @@ export default function ManagerSurvey() {
   const [managerId, setManagerId] = useState('');
   const [reviewDate, setReviewDate] = useState(todayISO());
   const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [anonymous, setAnonymous] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const submit = trpc.managerSurvey.submit.useMutation({
@@ -62,12 +66,13 @@ export default function ManagerSurvey() {
   const answeredCount = Object.keys(ratings).length;
   const allAnswered = activeQuestions.length > 0 && answeredCount === activeQuestions.length;
   const canSubmit =
-    !!respondentId && !!managerId && !!reviewDate && allAnswered && respondentId !== managerId;
+    (anonymous || !!respondentId) && !!managerId && !!reviewDate && allAnswered && (anonymous || respondentId !== managerId);
 
   const setRating = (qid: string, v: number) => setRatings((r) => ({ ...r, [qid]: v }));
+  const setComment = (qid: string, v: string) => setComments((c) => ({ ...c, [qid]: v }));
 
   const resetForm = () => {
-    setRespondentId(''); setManagerId(''); setReviewDate(todayISO()); setRatings({}); setSubmitted(false);
+    setRespondentId(''); setManagerId(''); setReviewDate(todayISO()); setRatings({}); setComments({}); setAnonymous(false); setSubmitted(false);
   };
 
   const TabBar = () => (
@@ -116,7 +121,7 @@ export default function ManagerSurvey() {
                     Manager: {r.managerName ?? '—'}
                   </div>
                   <div className="text-xs text-gray-500">
-                    by {r.respondentName ?? '—'} · {fmtDate(r.reviewDate)}
+                    by {r.anonymous ? 'Anonymous' : (r.respondentName ?? '—')} · {fmtDate(r.reviewDate)}
                   </div>
                 </div>
                 <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
@@ -124,12 +129,18 @@ export default function ManagerSurvey() {
                 </span>
               </div>
               <div className="space-y-1.5">
-                {Object.entries((r.ratings ?? {}) as Record<string, number>).map(([qid, v]) => (
-                  <div key={qid} className="flex items-start justify-between gap-3 text-sm">
-                    <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
-                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
-                  </div>
-                ))}
+                {Object.entries((r.ratings ?? {}) as Record<string, number>).map(([qid, v]) => {
+                  const cmt = ((r.comments ?? {}) as Record<string, string>)[qid];
+                  return (
+                    <div key={qid} className="text-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
+                        <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
+                      </div>
+                      {cmt && <div className="text-xs text-gray-500 italic mt-0.5">“{cmt}”</div>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -164,10 +175,14 @@ export default function ManagerSurvey() {
       <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className={labelCls}>Employee (giving the rating)</label>
-          <select className={`${inputCls} w-full`} value={respondentId} onChange={(e) => setRespondentId(e.target.value)}>
-            <option value="">Select employee…</option>
-            {(people ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {anonymous ? (
+            <div className={`${inputCls} w-full bg-gray-50 text-gray-500`}>Anonymous</div>
+          ) : (
+            <select className={`${inputCls} w-full`} value={respondentId} onChange={(e) => setRespondentId(e.target.value)}>
+              <option value="">Select employee…</option>
+              {(people ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
         </div>
         <div>
           <label className={labelCls}>Manager (being rated)</label>
@@ -180,7 +195,11 @@ export default function ManagerSurvey() {
           <label className={labelCls}>1:1 date</label>
           <input type="date" className={`${inputCls} w-full`} value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} />
         </div>
-        {respondentId && managerId && respondentId === managerId && (
+        <label className="sm:col-span-3 flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+          Submit anonymously — your name won't be recorded with this review.
+        </label>
+        {!anonymous && respondentId && managerId && respondentId === managerId && (
           <div className="sm:col-span-3 text-xs text-red-600">Employee and manager must be different people.</div>
         )}
       </div>
@@ -221,13 +240,19 @@ export default function ManagerSurvey() {
                     })}
                   </div>
                 </div>
+                <textarea
+                  value={comments[q.id] ?? ''}
+                  onChange={(e) => setComment(q.id, e.target.value)}
+                  placeholder="Optional comment — why this rating?"
+                  rows={2}
+                  className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
               </div>
             ))
           )}
 
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-gray-500">{answeredCount} of {activeQuestions.length} answered</span>
-            <button onClick={() => submit.mutate({ respondentId, managerId, reviewDate, ratings })}
+            <button onClick={() => submit.mutate({ respondentId: anonymous ? undefined : respondentId, managerId, reviewDate, ratings, comments: cleanComments(comments), anonymous })}
               disabled={!canSubmit || submit.isLoading}
               className="inline-flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {submit.isLoading ? 'Submitting…' : 'Submit feedback'}

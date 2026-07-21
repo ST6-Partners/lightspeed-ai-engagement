@@ -35,6 +35,8 @@ export const peerReviewResponses = pgTable('peer_review_responses', {
   peerName: varchar('peer_name', { length: 200 }),
   reviewDate: date('review_date').notNull(),
   ratings: jsonb('ratings').$type<Record<string, number>>().notNull().default({}),
+  // Optional free-text elaboration per question: { [questionId]: comment }
+  comments: jsonb('comments').$type<Record<string, string>>().notNull().default({}),
   status: varchar('status', { length: 16 }).notNull().default('complete'),
   submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

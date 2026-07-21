@@ -55,6 +55,10 @@ export const managerSurveyResponses = pgTable('manager_survey_responses', {
   reviewDate: date('review_date').notNull(),
   // { [questionId]: 1..5 }
   ratings: jsonb('ratings').$type<Record<string, number>>().notNull().default({}),
+  // Optional free-text elaboration per question: { [questionId]: comment }
+  comments: jsonb('comments').$type<Record<string, string>>().notNull().default({}),
+  // When true, the respondent identity is NOT recorded (respondentId/Name null).
+  anonymous: boolean('anonymous').notNull().default(false),
   status: varchar('status', { length: 16 }).notNull().default('complete'), // 'draft' | 'complete'
   submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
