@@ -20,6 +20,7 @@ import CheckIns from './pages/CheckIns';
 import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import CoachingPlanDetail from './pages/CoachingPlanDetail';
+import CoreData from './pages/CoreData';
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/manager-survey" element={<ManagerSurvey />} />
         <Route path="/peer-review" element={<PeerReview />} />
         {/* Core Data */}
+        <Route path="/core-data" element={<CoreData />} />
         <Route path="/core-data/employees" element={<Employees />} />
         <Route path="/core-data/job-titles" element={<JobTitles />} />
         <Route path="/core-data/departments" element={<Departments />} />

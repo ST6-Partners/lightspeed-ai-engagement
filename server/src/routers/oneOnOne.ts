@@ -36,7 +36,7 @@ async function nameMap(ctx: { db: any }, ids: (string | null)[]) {
   const uniq = Array.from(new Set(ids.filter((x): x is string => !!x)));
   if (!uniq.length) return new Map<string, string>();
   const rows = await ctx.db.query.users.findMany({ where: inArray(users.id, uniq) });
-  return new Map(rows.map((r) => [r.id, r.name ?? '']));
+  return new Map(rows.map((r: { id: string; name: string | null }) => [r.id, r.name ?? '']));
 }
 
 const empInput = z.object({ employeeId: z.string().uuid() });

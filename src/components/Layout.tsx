@@ -6,10 +6,10 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Bot, MessageCircle, Star,
+  Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
-  Settings, LogOut, MessageSquare, Briefcase, Building2, Contact, ClipboardCheck, FileText, Award,
-  UserCheck, ListChecks, Gauge, ChevronsLeft, ChevronsRight, HeartHandshake} from 'lucide-react';
+  Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
+  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -50,17 +50,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Core Data',
     items: [
-      { path: '/core-data/employees', label: 'Employees', icon: Contact },
-      { path: '/core-data/job-titles', label: 'Job Titles', icon: Briefcase },
-      { path: '/core-data/departments', label: 'Departments', icon: Building2 },
-      { path: '/core-data/survey-questions', label: 'Survey Questions', icon: ListChecks },
-      { path: '/core-data/peer-review-questions', label: 'Peer Review Questions', icon: ListChecks },
-      { path: '/core-data/rating-scale', label: 'Rating Scale', icon: Gauge },
-      { path: '/core-data/org-data', label: 'Org Data', icon: ListChecks },
-      { path: '/core-data/values', label: 'Company Values', icon: Award },
-      { path: '/core-data/performance-criteria', label: 'Performance Criteria', icon: Gauge },
-      { path: '/core-data/checkin-questions', label: 'Check-in Questions', icon: MessageCircle },
-      { path: '/core-data/assessments', label: 'Assessments', icon: ClipboardList },
+      { path: '/core-data', label: 'Core Data', icon: Database },
     ],
   },
   {
