@@ -26,6 +26,8 @@ import {
   EmailTestPanel,
 } from './admin';
 
+import Access from './settings/Access';
+
 // ── Feature flags panel (simple settings table) ──────────────
 function FeatureFlags() {
   const { data: settings } = trpc.admin.getSettings.useQuery();
@@ -80,6 +82,7 @@ const USER_TABS = [
   { id: 'releases', label: 'Releases' },
   { id: 'flags', label: 'Feature Flags' },
   { id: 'export', label: 'Export' },
+  { id: 'access', label: 'Access' },
 ];
 
 const ANALYTICS_TABS = [
@@ -237,6 +240,7 @@ export default function AdminSettings() {
         {activeSection === 'releases' && <ReleaseNotesAdmin />}
         {activeSection === 'flags' && <FeatureFlags />}
         {activeSection === 'export' && <DatabaseExport />}
+        {activeSection === 'access' && <Access />}
         {activeSection === 'telemetry' && showAnalytics && <TelemetryPanel />}
         {activeSection === 'feedback' && showAnalytics && <FeedbackPanel />}
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}

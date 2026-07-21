@@ -28,11 +28,7 @@ export default function Access() {
   const lockedCount = ACCESS_SECTIONS.filter((s) => !hasMinRole(role, s.requiredRole)).length;
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="text-[12px] text-ls-ink-3 mb-1">Settings › Access</div>
-      <h1 className="text-2xl font-bold text-ls-ink mb-1">Access</h1>
-      <p className="text-sm text-ls-ink-2 mb-5">The version of the app you see and your account settings.</p>
-
+    <div className="max-w-3xl">
       {/* Your access */}
       <div className="ls-card p-5 mb-4">
         <div className="text-sm text-ls-ink-2 mb-2">Your access</div>

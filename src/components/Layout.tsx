@@ -9,7 +9,7 @@ import {
   Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
-  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3, KeyRound} from 'lucide-react';
+  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -62,7 +62,6 @@ const navGroups: NavGroup[] = [
     ],
   },
   { label: 'System', items: [{ path: '/admin/settings', label: 'Admin', icon: Settings }] },
-  { label: 'Settings', items: [{ path: '/settings/access', label: 'Access', icon: KeyRound }] },
 ];
 
 export default function Layout() {
