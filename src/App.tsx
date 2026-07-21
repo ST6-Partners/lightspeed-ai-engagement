@@ -21,6 +21,7 @@ import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import CoachingPlanDetail from './pages/CoachingPlanDetail';
 import CoreData from './pages/CoreData';
+import CoreDataSubLayout from './components/CoreDataSubLayout';
 
 export default function App() {
   return (
@@ -44,18 +45,22 @@ export default function App() {
         <Route path="/manager-survey" element={<ManagerSurvey />} />
         <Route path="/peer-review" element={<PeerReview />} />
         {/* Core Data */}
-        <Route path="/core-data" element={<CoreData />} />
-        <Route path="/core-data/employees" element={<Employees />} />
-        <Route path="/core-data/job-titles" element={<JobTitles />} />
-        <Route path="/core-data/departments" element={<Departments />} />
-        <Route path="/core-data/survey-questions" element={<ManagerSurveyQuestions />} />
-        <Route path="/core-data/peer-review-questions" element={<PeerReviewQuestions />} />
-        <Route path="/core-data/rating-scale" element={<ManagerRatingScale />} />
-        <Route path="/core-data/org-data" element={<OrgData />} />
-        <Route path="/core-data/values" element={<CompanyValues />} />
-        <Route path="/core-data/performance-criteria" element={<PerformanceCriteria />} />
-        <Route path="/core-data/checkin-questions" element={<CheckinQuestions />} />
-        <Route path="/core-data/assessments" element={<Assessments />} />
+        <Route path="/core-data">
+          <Route index element={<CoreData />} />
+          <Route element={<CoreDataSubLayout />}>
+            <Route path="employees" element={<Employees />} />
+            <Route path="job-titles" element={<JobTitles />} />
+            <Route path="departments" element={<Departments />} />
+            <Route path="survey-questions" element={<ManagerSurveyQuestions />} />
+            <Route path="peer-review-questions" element={<PeerReviewQuestions />} />
+            <Route path="rating-scale" element={<ManagerRatingScale />} />
+            <Route path="org-data" element={<OrgData />} />
+            <Route path="values" element={<CompanyValues />} />
+            <Route path="performance-criteria" element={<PerformanceCriteria />} />
+            <Route path="checkin-questions" element={<CheckinQuestions />} />
+            <Route path="assessments" element={<Assessments />} />
+          </Route>
+        </Route>
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}
