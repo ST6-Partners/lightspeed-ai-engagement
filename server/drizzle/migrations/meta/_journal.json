@@ -407,6 +407,13 @@
       "when": 1784132817845,
       "tag": "0057_dedupe_leaders_hard",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1784132877845,
+      "tag": "0058_remove_vacant_seats",
+      "breakpoints": true
     }
   ]
 }
