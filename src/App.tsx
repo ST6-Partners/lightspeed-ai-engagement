@@ -20,6 +20,7 @@ import CheckIns from './pages/CheckIns';
 import Metrics from './pages/Metrics';
 import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
+import Development from './pages/Development';
 import CoachingPlanDetail from './pages/CoachingPlanDetail';
 import CoreData from './pages/CoreData';
 import CoreDataSubLayout from './components/CoreDataSubLayout';
@@ -37,6 +38,7 @@ export default function App() {
         {/* Engagement */}
         <Route path="/check-ins" element={<CheckIns />} />
         <Route path="/reviews" element={<Reviews />} />
+        <Route path="/development" element={<Development />} />
         <Route path="/coaching-plans" element={<CoachingPlans />} />
         <Route path="/coaching-plans/:id" element={<CoachingPlanDetail />} />
         <Route path="/pips" element={<Pips />} />

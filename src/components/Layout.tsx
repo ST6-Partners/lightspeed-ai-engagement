@@ -42,10 +42,8 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/check-ins', label: 'Pulses', icon: MessageCircle },
       { path: '/reviews', label: 'Reviews', icon: Star },
-      { path: '/coaching-plans', label: 'Coaching Plans', icon: HeartHandshake },
-      { path: '/pips', label: 'PIP', icon: ClipboardList },
+      { path: '/development', label: 'Development', icon: HeartHandshake },
       { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
-      { path: '/exit-survey', label: 'Exit Survey', icon: DoorOpen },
     ],
   },
   {
