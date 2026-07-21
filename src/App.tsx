@@ -22,6 +22,7 @@ import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import CoachingPlanDetail from './pages/CoachingPlanDetail';
 import CoreData from './pages/CoreData';
+import Access from './pages/settings/Access';
 import CoreDataSubLayout from './components/CoreDataSubLayout';
 
 export default function App() {
@@ -64,6 +65,7 @@ export default function App() {
         </Route>
         {/* Metrics (manager+) */}
         <Route path="/metrics" element={<Metrics />} />
+        <Route path="/settings/access" element={<Access />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
         {/* System */}

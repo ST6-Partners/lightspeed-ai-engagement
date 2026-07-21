@@ -21,6 +21,9 @@ export { promptTemplates, designKnowledge, faqEntries, chatAttachments } from '.
 // Notifications (2 tables)
 export { notifications, releaseNotes } from './notifications.js';
 
+// Access requests (self-service request-access to locked sections)
+export { accessRequests } from './accessRequests.js';
+
 // System Operations (3 tables)
 export { systemJobs, backupLog, onboardingVideos } from './system.js';
 

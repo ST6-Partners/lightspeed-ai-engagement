@@ -9,7 +9,7 @@ import {
   Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
-  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3} from 'lucide-react';
+  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3, KeyRound} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -62,6 +62,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   { label: 'System', items: [{ path: '/admin/settings', label: 'Admin', icon: Settings }] },
+  { label: 'Settings', items: [{ path: '/settings/access', label: 'Access', icon: KeyRound }] },
 ];
 
 export default function Layout() {
@@ -183,9 +184,11 @@ export default function Layout() {
         {user && (
           <div className="px-3 py-3 border-t border-[#36424B]">
             <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-2.5'}`}>
-              <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold shrink-0">
-                {user.name?.charAt(0) || '?'}
-              </div>
+              {user.avatarUrl
+                ? <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                : <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {user.name?.charAt(0) || '?'}
+                  </div>}
               {!navCollapsed && (
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-[#E3E7EA] truncate">{user.name}</div>

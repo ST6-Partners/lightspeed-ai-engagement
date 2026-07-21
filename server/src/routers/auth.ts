@@ -25,7 +25,7 @@ export const authRouter = router({
     if (!ctx.user) return null;
     const dbUser = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.user.id),
-      columns: { id: true, name: true, email: true, role: true, isBeta: true, timezone: true },
+      columns: { id: true, name: true, email: true, role: true, isBeta: true, timezone: true, avatarUrl: true },
     });
     return dbUser ?? null;
   }),
@@ -87,6 +87,18 @@ export const authRouter = router({
     ctx.res.clearCookie('tmpl.sid');
     return { success: true };
   }),
+
+  // ── Update own profile (display name + avatar) ──────────
+  updateProfile: protectedProcedure
+    .input(z.object({ name: z.string().max(255).optional(), avatarUrl: z.string().nullable().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const updates: Record<string, unknown> = {};
+      if (input.name !== undefined) updates.name = input.name.trim() || null;
+      if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl || null;
+      if (Object.keys(updates).length === 0) return { success: true };
+      await ctx.db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, ctx.user.id));
+      return { success: true };
+    }),
 
   // ── Change own password ────────────────────────────────────
   changePassword: protectedProcedure

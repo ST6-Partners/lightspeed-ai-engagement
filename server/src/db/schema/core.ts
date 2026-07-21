@@ -33,6 +33,7 @@ export const users = pgTable('users', {
   // Identity fields populated from JWT claims at login
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
+  avatarUrl: text('avatar_url'),
   title: varchar('title', { length: 255 }),
   // Employee directory fields (Core Data → Employees). Managed lookups:
   jobTitleId: uuid('job_title_id').references(() => jobTitles.id, { onDelete: 'set null' }),
