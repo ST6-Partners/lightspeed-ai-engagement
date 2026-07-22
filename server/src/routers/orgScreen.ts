@@ -31,6 +31,25 @@ const toNum = (v: string | null | undefined) => (v == null ? null : Number(v));
 const toDb = (v: number | null | undefined) => (v == null ? null : String(v));
 const numIn = z.number().nullable().optional();
 
+// Who may PLACE (rate / clear) a given person on the 9 Box (Stage 2): admins,
+// HR-access users, and the person's PRIMARY-manager chain (their primary
+// manager or anyone above them). A non-primary (secondary) manager cannot.
+async function assertCanPlace(ctx: any, targetId: string): Promise<void> {
+  const raterId = ctx.user.id as string;
+  const rater = await ctx.db.query.users.findFirst({ where: eq(users.id, raterId), columns: { role: true, isHrAccess: true } });
+  if (rater && (rater.role === 'admin' || rater.role === 'sysadmin' || rater.isHrAccess)) return;
+  const rows = await ctx.db.select({ id: users.id, managerId: users.managerId }).from(users);
+  const mgrOf = new Map<string, string | null>(rows.map((r: { id: string; managerId: string | null }) => [r.id, r.managerId]));
+  let cur = mgrOf.get(targetId) ?? null;
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur)) {
+    if (cur === raterId) return;
+    seen.add(cur);
+    cur = mgrOf.get(cur) ?? null;
+  }
+  throw new TRPCError({ code: 'FORBIDDEN', message: 'Only this person\u2019s primary manager (or someone above them, HR, or an admin) can place them.' });
+}
+
 export const orgScreenRouter = router({
   // ---- Tree: all active users with resolved title/dept, for the org tree ----
   tree: protectedProcedure.query(async ({ ctx }) => {
@@ -224,9 +243,9 @@ export const orgScreenRouter = router({
     }),
 
   nineboxRate: protectedProcedure
-    .use(requireManager)
     .input(z.object({ userId: z.string().uuid(), box: z.number().int().min(1).max(9), note: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanPlace(ctx, input.userId);
       const today = new Date().toISOString().slice(0, 10);
       // Upsert today's rating: replace an existing same-day row, else insert.
       const existing = await ctx.db.query.nineBoxRatings.findFirst({
@@ -353,9 +372,10 @@ export const orgScreenRouter = router({
   // Clear a person's 9-box placement entirely (all their rating rows) so they
   // return to Unrated. Manager-gated, matching nineboxRate (removing a rating
   // is the same authority as setting one).
-  nineboxClear: protectedProcedure.use(requireManager)
+  nineboxClear: protectedProcedure
     .input(z.object({ userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanPlace(ctx, input.userId);
       await ctx.db.delete(nineBoxRatings).where(eq(nineBoxRatings.userId, input.userId));
       return { ok: true };
     }),

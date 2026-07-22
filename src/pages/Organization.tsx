@@ -37,6 +37,19 @@ export default function Organization() {
   const { data, isLoading } = trpc.orgScreen.tree.useQuery();
   const { data: me } = trpc.auth.me.useQuery();
   const role = (me as { role?: string } | undefined)?.role ?? 'user';
+  const meId = (me as { id?: string } | undefined)?.id ?? null;
+  const meHr = (me as { isHrAccess?: boolean } | undefined)?.isHrAccess ?? false;
+  // Who the current viewer may PLACE on the 9 Box: admins, HR, and anyone in a
+  // person's PRIMARY-manager chain (their primary manager or above). Mirrors the
+  // server rule so the grid only shows a placement affordance where it will work.
+  const canPlace = (personId: string): boolean => {
+    if (role === 'admin' || role === 'sysadmin' || meHr) return true;
+    if (!meId) return false;
+    let cur = maps.byId.get(personId)?.managerId ?? null;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur)) { if (cur === meId) return true; seen.add(cur); cur = maps.byId.get(cur)?.managerId ?? null; }
+    return false;
+  };
   const TABS = ALL_TABS.filter((t) => !t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]);
   const people = (data?.people ?? []) as Person[];
   const maps = useMemo(() => buildMaps(people), [people]);
@@ -196,7 +209,7 @@ export default function Organization() {
               {!selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : tab === 'ninebox' ? (
-                <NineBox people={scoped} scope={scope} />
+                <NineBox people={scoped} scope={scope} canPlace={canPlace} />
               ) : scoped.length === 0 ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
               ) : banded ? (

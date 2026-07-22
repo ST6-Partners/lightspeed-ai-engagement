@@ -28,7 +28,7 @@ export const authRouter = router({
     if (!ctx.user) return null;
     const dbUser = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.user.id),
-      columns: { id: true, name: true, email: true, role: true, isBeta: true, timezone: true, avatarUrl: true },
+      columns: { id: true, name: true, email: true, role: true, isBeta: true, isHrAccess: true, timezone: true, avatarUrl: true },
     });
     return dbUser ?? null;
   }),

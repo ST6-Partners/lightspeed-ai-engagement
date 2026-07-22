@@ -9,7 +9,7 @@ function cellTint(box: number): string {
   return ['#fdecec', '#fdeede', '#fcf6e3', '#eef7ec', '#e6f5ea'][sum];
 }
 
-export default function NineBox({ people, scope }: { people: Person[]; scope?: 'individual' | 'directs' | 'descendants' }) {
+export default function NineBox({ people, scope, canPlace }: { people: Person[]; scope?: 'individual' | 'directs' | 'descendants'; canPlace?: (id: string) => boolean }) {
   const ids = people.map((p) => p.id);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids }, { enabled: ids.length > 0 });
@@ -48,16 +48,25 @@ export default function NineBox({ people, scope }: { people: Person[]; scope?: '
 
   // A placed person: clicking opens the reposition modal (does NOT change the
   // tree selection — that was the old bug).
-  const Chip = ({ person }: { person: Person }) => (
-    <button
-      onClick={() => { setErr(null); setEditing(person); }}
-      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] w-full"
-      style={{ background: '#fff', border: `1px solid ${TOKENS.border}` }}
-      title="Click to reposition">
-      <span style={{ width: 6, height: 6, borderRadius: 3, background: TOKENS.selBar }} />
-      <span className="truncate" style={{ maxWidth: 100 }}>{person.name}</span>
-    </button>
-  );
+  // Placement is gated (Stage 2): only the viewer's placeable people are
+  // clickable; everyone else is read-only. No predicate = allow (safe default).
+  const editable = (id: string) => (canPlace ? canPlace(id) : true);
+  const Chip = ({ person }: { person: Person }) => {
+    const can = editable(person.id);
+    const cls = 'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] w-full';
+    const st = { background: '#fff', border: `1px solid ${TOKENS.border}` };
+    const body = (
+      <>
+        <span style={{ width: 6, height: 6, borderRadius: 3, background: TOKENS.selBar }} />
+        <span className="truncate" style={{ maxWidth: 100 }}>{person.name}</span>
+      </>
+    );
+    return can ? (
+      <button onClick={() => { setErr(null); setEditing(person); }} className={cls} style={st} title="Click to reposition">{body}</button>
+    ) : (
+      <div className={cls} style={{ ...st, opacity: 0.7 }} title="View only — you cannot place this person">{body}</div>
+    );
+  };
 
   return (
     <div className="flex gap-6 items-start flex-wrap">
@@ -102,12 +111,20 @@ export default function NineBox({ people, scope }: { people: Person[]; scope?: '
         {err && <div className="text-[11px] mb-2" style={{ color: '#b91c1c' }}>{err}</div>}
         <div className="space-y-1">
           {unrated.map((u) => (
-            <button key={u.id} onClick={() => { setErr(null); setEditing(u); }}
-              className="w-full text-left rounded px-2 py-1 text-[12px]"
-              style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}` }}
-              title="Click to place on the grid">
-              {u.name}
-            </button>
+            editable(u.id) ? (
+              <button key={u.id} onClick={() => { setErr(null); setEditing(u); }}
+                className="w-full text-left rounded px-2 py-1 text-[12px]"
+                style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}` }}
+                title="Click to place on the grid">
+                {u.name}
+              </button>
+            ) : (
+              <div key={u.id} className="w-full text-left rounded px-2 py-1 text-[12px]"
+                style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}`, opacity: 0.7 }}
+                title="View only — you cannot place this person">
+                {u.name}
+              </div>
+            )
           ))}
           {unrated.length === 0 && <div className="text-[11px]" style={{ color: TOKENS.idle }}>Everyone in scope is rated.</div>}
         </div>
