@@ -261,9 +261,18 @@ export const authRouter = router({
         primaryManager = primaryManagerId ?? managerSet[0] ?? null;
         if (primaryManager && !managerSet.includes(primaryManager)) managerSet.push(primaryManager);
       } else if ('managerId' in rest) {
+        // Inline "Manager" dropdown = set the PRIMARY manager. Preserve any
+        // additional managers already on the person; only "—" (null) clears them.
         const mid = (rest.managerId as string | null) ?? null;
-        managerSet = mid ? [mid] : [];
         primaryManager = mid;
+        if (mid === null) {
+          managerSet = [];
+        } else {
+          const existing = await ctx.db.select({ m: userManagers.managerId }).from(userManagers).where(eq(userManagers.userId, id));
+          const setIds = new Set(existing.map((r) => r.m));
+          setIds.add(mid);
+          managerSet = Array.from(setIds);
+        }
       }
       if (managerSet !== undefined) updates.managerId = primaryManager ?? null;
       // Email is unique per exact string — normalize and reject a collision with a different employee.

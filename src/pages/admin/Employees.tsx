@@ -63,9 +63,11 @@ export default function Employees() {
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
+  const [managerSearch, setManagerSearch] = useState('');
   const ef = (patch: Partial<typeof EDIT_EMPTY>) => setEditForm((prev) => ({ ...prev, ...patch }));
   const openEdit = (u: any) => {
     setEditError(null);
+    setManagerSearch('');
     setEditForm({
       name: u.name ?? '', email: u.email ?? '', role: u.role ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
@@ -267,15 +269,20 @@ export default function Employees() {
                     </select>
                   </td>
 
-                  {/* Manager — another employee (their boss) */}
+                  {/* Manager (primary) — another employee. "+N" = extra managers; manage them in the modal. */}
                   <td className="px-3 py-3 text-sm">
-                    <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })}
-                      className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
-                      <option value="">—</option>
-                      {employeesByFirstName.filter((m: any) => m.id !== user.id).map((m: any) => (
-                        <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1">
+                      <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })}
+                        className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
+                        <option value="">—</option>
+                        {employeesByFirstName.filter((m: any) => m.id !== user.id).map((m: any) => (
+                          <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>
+                        ))}
+                      </select>
+                      {Array.isArray(user.managerIds) && user.managerIds.length > 1 && (
+                        <span title="Additional managers — edit in the employee modal" className="shrink-0 text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1 py-0.5">+{user.managerIds.length - 1}</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Role */}
@@ -375,8 +382,11 @@ export default function Employees() {
                 </select>
               </label>
               <div className="text-xs text-gray-600 sm:col-span-2 lg:col-span-3">Managers
+                <input value={managerSearch} onChange={(e) => setManagerSearch(e.target.value)}
+                  placeholder="Search people…"
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" />
                 <div className="mt-1 max-h-40 overflow-auto rounded border border-gray-300 p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-1">
-                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id).map((m: any) => {
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id && (editForm.managerIds.includes(m.id) || (nameById.get(m.id) ?? '').toLowerCase().includes(managerSearch.toLowerCase()))).map((m: any) => {
                     const checked = editForm.managerIds.includes(m.id);
                     return (
                       <label key={m.id} className="flex items-center gap-1.5 text-xs text-gray-700">
