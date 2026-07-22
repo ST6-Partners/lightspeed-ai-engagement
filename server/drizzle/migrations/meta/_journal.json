@@ -512,6 +512,13 @@
       "when": 1784663887051,
       "tag": "0071_multi_manager_hr_access",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1784663947051,
+      "tag": "0072_sample_archived_surveys",
+      "breakpoints": true
     }
   ]
 }
