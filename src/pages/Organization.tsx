@@ -216,7 +216,7 @@ export default function Organization() {
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
               {tab === 'ninebox' ? (
-                <NineBox people={scoped} scope={scope} canPlace={canPlace} />
+                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} />
               ) : (!selected && scope !== 'organization') ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
