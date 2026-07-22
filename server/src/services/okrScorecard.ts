@@ -154,6 +154,7 @@ function buildPlanChildren(parentId: string, childrenByParent: Map<string | null
 export function computeScorecard(
   nodes: OkrNodeLite[],
   teamOf: (n: OkrNodeLite) => string,
+  allTeams: string[] = [],
 ): PeriodScorecard {
   const active = nodes.filter((n) => !n.archivedAt);
   const childrenByParent = new Map<string | null, OkrNodeLite[]>();
@@ -189,6 +190,10 @@ export function computeScorecard(
 
   // Team leaderboard (weighted attainment within each team).
   const byTeam = new Map<string, typeof scored>();
+  // Seed every known department first so teams with zero objectives this period
+  // still appear (at 0%). 'Unassigned' is not seeded — it shows only when real
+  // objectives lack an owner and a team.
+  for (const t of allTeams) if (!byTeam.has(t)) byTeam.set(t, []);
   for (const s of scored) {
     const arr = byTeam.get(s.team) ?? [];
     arr.push(s);
@@ -213,7 +218,7 @@ export function computeScorecard(
       missPct: round1(100 - attainmentPct),
       items,
     };
-  }).sort((a, b) => b.attainmentPct - a.attainmentPct || b.objectiveCount - a.objectiveCount);
+  }).sort((a, b) => b.attainmentPct - a.attainmentPct || b.objectiveCount - a.objectiveCount || a.team.localeCompare(b.team));
 
   // Top / bottom teams (only meaningful with 2+ teams; bottom excludes the top).
   const realTeams = teams.filter((t) => t.objectiveCount > 0);

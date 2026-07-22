@@ -127,4 +127,16 @@ const explore = sc.plan.find((p) => p.title === 'Explore new AI tooling')!;
 ok('Explore noOwnerOrTeam', explore.noOwnerOrTeam === true);
 eq('Explore status = missed', explore.status, 'missed');
 
+// ── All-departments listing: teams with zero objectives still appear at 0% ──
+const scAll = computeScorecard(nodes, teamOf, ['Engineering', 'Sales', 'Customer Success', 'Operations', 'Legal', 'Finance']);
+const allTeamNames = scAll.teams.map((t) => t.team);
+ok('empty dept Legal listed', allTeamNames.includes('Legal'));
+ok('empty dept Finance listed', allTeamNames.includes('Finance'));
+const legal = scAll.teams.find((t) => t.team === 'Legal')!;
+eq('Legal has 0 objectives', legal.objectiveCount, 0);
+eq('Legal at 0%', legal.attainmentPct, 0);
+eq('Legal 0 met', legal.completedCount, 0);
+ok('Unassigned still present (real unowned objective)', allTeamNames.includes('Unassigned'));
+eq('company attainment unchanged by empty depts', scAll.companyAttainmentPct, 58.1);
+
 console.log(`\nokrScorecard.test.ts — ${passed} assertions passed\n`);

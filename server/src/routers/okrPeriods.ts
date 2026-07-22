@@ -45,7 +45,12 @@ async function computeForPeriod(ctx: any, periodId: string): Promise<PeriodScore
     }
     return 'Unassigned';
   };
-  return computeScorecard(nodes as OkrNodeLite[], teamOf);
+  // Link the team leaderboard to the Core Data department directory: seed with
+  // active departments (mirrors the Core Data → Departments live list) so every
+  // department appears even with no objectives. Objectives assigned to a retired
+  // department still surface because they carry their own team into the rollup.
+  const activeDeptNames = deptRows.filter((d: any) => d.isActive).map((d: any) => d.name);
+  return computeScorecard(nodes as OkrNodeLite[], teamOf, activeDeptNames);
 }
 
 // Deterministic recap used when no model key is configured (keeps the feature

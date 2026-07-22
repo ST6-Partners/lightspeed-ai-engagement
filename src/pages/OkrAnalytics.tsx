@@ -211,7 +211,7 @@ export default function OkrAnalytics() {
                     <span className="w-40 shrink-0 font-semibold text-sm text-ls-ink truncate">{t.team}</span>
                     <div className="flex-1"><Bar pct={t.attainmentPct} /></div>
                     <span className="text-[13px] font-semibold tabular-nums w-14 text-right shrink-0">{t.attainmentPct}%</span>
-                    <span className="text-[12px] text-ls-ink-3 w-16 text-right shrink-0">{t.completedCount}/{t.objectiveCount} met</span>
+                    <span className="text-[12px] text-ls-ink-3 w-20 text-right shrink-0">{t.objectiveCount ? `${t.completedCount}/${t.objectiveCount} met` : 'no objectives'}</span>
                   </div>
                 ))}
               </div>
@@ -272,9 +272,12 @@ export default function OkrAnalytics() {
                         <span className="flex-1 font-semibold text-sm truncate">{t.team}</span>
                         <div className="w-28 shrink-0"><Bar pct={t.attainmentPct} /></div>
                         <span className="text-[12px] text-ls-ink-2 tabular-nums w-11 text-right shrink-0">{t.attainmentPct}%</span>
-                        <span className="text-[12px] text-ls-ink-3 w-16 text-right shrink-0">{t.completedCount}/{t.objectiveCount} met</span>
+                        <span className="text-[12px] text-ls-ink-3 w-20 text-right shrink-0">{t.objectiveCount ? `${t.completedCount}/${t.objectiveCount} met` : 'no objectives'}</span>
                       </div>
                       <div className="px-3 py-1">
+                        {t.items.length === 0 && (
+                          <div className="py-2 text-[12px] text-ls-ink-3">No objectives set for this team in this period.</div>
+                        )}
                         {t.items.map((it) => (
                           <div key={it.id} className="flex items-center gap-2.5 py-2 border-b border-ls-line last:border-0">
                             <span className="flex-1 min-w-0 text-[13px] text-ls-ink truncate">{it.title}</span>
