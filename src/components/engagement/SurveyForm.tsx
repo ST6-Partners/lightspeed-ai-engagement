@@ -18,7 +18,6 @@ const labelCls = 'block text-xs font-medium text-gray-500 uppercase mb-1';
 
 export default function SurveyForm() {
   const [answers, setAnswers] = useState<Likert>({});
-  const [employeeId, setEmployeeId] = useState('');
   const [jobTitleId, setJobTitleId] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [enpsScore, setEnpsScore] = useState<number | null>(null);
@@ -26,7 +25,6 @@ export default function SurveyForm() {
   const [submitted, setSubmitted] = useState(false);
   const [showGaps, setShowGaps] = useState(false);
 
-  const { data: users } = trpc.pip.listUsers.useQuery();
   const { data: titles } = trpc.jobTitles.list.useQuery();
   const { data: depts } = trpc.departments.list.useQuery();
 
@@ -38,7 +36,7 @@ export default function SurveyForm() {
     () => ALL_LIKERT_IDS.filter((id) => typeof answers[id] === 'number').length,
     [answers],
   );
-  const aboutComplete = !!employeeId && !!jobTitleId && !!departmentId;
+  const aboutComplete = !!jobTitleId && !!departmentId;
   const complete = aboutComplete && answeredCount === LIKERT_COUNT && enpsScore != null;
   const set = (id: string, v: number) => setAnswers((p) => ({ ...p, [id]: v }));
   const missing = (id: string) => showGaps && typeof answers[id] !== 'number';
@@ -51,7 +49,6 @@ export default function SurveyForm() {
     }
     submit.mutate({
       answers,
-      respondentName: (users ?? []).find((u) => u.id === employeeId)?.name ?? undefined,
       jobTitle: (titles ?? []).find((t) => t.id === jobTitleId)?.title ?? undefined,
       department: (depts ?? []).find((d) => d.id === departmentId)?.name ?? undefined,
       enpsScore: enpsScore ?? undefined,
@@ -76,26 +73,17 @@ export default function SurveyForm() {
   return (
     <div>
       <p className="text-sm text-ls-ink-3 mb-4">
-        Tell us who you are, then rate how strongly you agree or disagree with each statement. Takes ~6 minutes.
+        Rate how strongly you agree or disagree with each statement. Your responses are anonymous. Takes ~6 minutes.
       </p>
       <div className="ls-card p-3 mb-5 text-[13px] text-ls-ink-2">
-        ℹ️ Your name, job title, and department are recorded with your responses so results can be organized by team. Results are reported in aggregate.
+        ℹ️ This survey is <b>anonymous</b> — your name is not recorded. Only your job title and department are saved, so results can be organized by role and team, and always reported in aggregate.
       </div>
 
       {/* About you */}
       <div className="ls-card p-5 mb-6">
         <h3 className="text-lg font-bold text-ls-blue-deep mb-1">About you</h3>
-        <p className="text-[13px] text-ls-ink-3 mb-3">So we can organize results by person, role, and team.</p>
-        <div className="grid sm:grid-cols-3 gap-3">
-          <div>
-            <label className={labelCls}>Name</label>
-            <select className={selectCls + gapCls(!employeeId)} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              <option value="">Select your name…</option>
-              {(users ?? []).map((u) => (
-                <option key={u.id} value={u.id}>{u.name}{u.role ? ` · ${u.role}` : ''}</option>
-              ))}
-            </select>
-          </div>
+        <p className="text-[13px] text-ls-ink-3 mb-3">So results can be organized by role and team. Your responses stay anonymous — no name is collected.</p>
+        <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Job Title</label>
             <select className={selectCls + gapCls(!jobTitleId)} value={jobTitleId} onChange={(e) => setJobTitleId(e.target.value)}>
@@ -197,7 +185,7 @@ export default function SurveyForm() {
         </button>
         {!complete && showGaps && (
           <span className="ls-chip bg-ls-watch-bg text-ls-watch">
-            {aboutComplete ? 'Please answer every required question' : 'Please fill in your name, title, and department'}
+            {aboutComplete ? 'Please answer every required question' : 'Please select your title and department'}
           </span>
         )}
         {submit.isError && <span className="ls-chip bg-ls-risk-bg text-ls-risk">Something went wrong — try again</span>}

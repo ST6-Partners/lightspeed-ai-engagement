@@ -24,8 +24,9 @@ export const engagementSurveyRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.insert(engagementSurveyResponses).values({
-        respondentId: ctx.user.id,
-        respondentName: input.respondentName?.trim() || null,
+        // Anonymous survey: do NOT record who submitted (no respondent identity stored).
+        respondentId: null,
+        respondentName: null,
         jobTitle: input.jobTitle?.trim() || null,
         department: input.department?.trim() || null,
         answers: input.answers,
