@@ -97,7 +97,29 @@ export const weeklyPlanRouter = router({
         .sort((a, b) => (a[0] < b[0] ? 1 : -1))
         .map(([w, items]) => ({ weekStart: w, items }));
 
-      return { weekStart, checkin: row ?? null, assigned: assignedActive, completedByWeek };
+      // PAST PRIORITIES — own priorities from PRIOR weeks that were never
+      // completed (and not dismissed/archived). Previously these just fell off
+      // the current-week view at end of week; now they surface in a dedicated
+      // "Past priorities" box so nothing is silently lost. The user can carry
+      // one forward to the current week or dismiss it. Assigned (manager)
+      // priorities are weekStart-NULL and persist on their own, so they are not
+      // included here.
+      const pastByWeek = new Map<string, { id: string; label: string; okrNodeId: string | null }[]>();
+      for (const wc of allWeeks) {
+        if (wc.weekStart === weekStart) continue;
+        normOwn(wc.priorities).forEach((p, idx) => {
+          if (p.done || p.archived) return;
+          if (!p.text.trim() && !p.okrNodeId) return;
+          const a = pastByWeek.get(wc.weekStart) ?? [];
+          a.push({ id: `own-${wc.weekStart}-${idx}`, label: p.text, okrNodeId: p.okrNodeId });
+          pastByWeek.set(wc.weekStart, a);
+        });
+      }
+      const pastPriorities = [...pastByWeek.entries()]
+        .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+        .map(([w, items]) => ({ weekStart: w, items }));
+
+      return { weekStart, checkin: row ?? null, assigned: assignedActive, completedByWeek, pastPriorities };
     }),
 
   save: protectedProcedure
@@ -138,5 +160,31 @@ export const weeklyPlanRouter = router({
           },
         }).returning();
       return row;
+    }),
+
+  // Dismiss (archive) or restore a single OWN priority in a specific week's row.
+  // Used by the "Past priorities" box to move an unfinished item out of view
+  // (on its own, or after carrying it forward into the current week).
+  setOwnPriorityArchived: protectedProcedure
+    .input(z.object({
+      weekStart: z.string(),
+      index: z.number().int().min(0),
+      archived: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.db.query.weeklyCheckins.findFirst({
+        where: and(eq(weeklyCheckins.userId, ctx.user.id), eq(weeklyCheckins.weekStart, input.weekStart)),
+      });
+      if (!row) return { ok: false as const };
+      const arr = (row.priorities as unknown as Array<string | WeeklyPriority>).map((p) =>
+        typeof p === 'string'
+          ? { text: p, okrNodeId: null as string | null, done: false, archived: false }
+          : { text: p.text, okrNodeId: p.okrNodeId ?? null, done: p.done ?? false, archived: p.archived ?? false });
+      if (input.index < 0 || input.index >= arr.length) return { ok: false as const };
+      arr[input.index] = { ...arr[input.index], archived: input.archived };
+      await ctx.db.update(weeklyCheckins)
+        .set({ priorities: arr, updatedAt: new Date() })
+        .where(eq(weeklyCheckins.id, row.id));
+      return { ok: true as const };
     }),
 });

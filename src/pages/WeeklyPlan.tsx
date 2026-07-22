@@ -130,6 +130,30 @@ export default function WeeklyPlan() {
     setPriorities(next); persist(next, curStatus());
   };
 
+  // ---- Past priorities (unfinished items carried over from earlier weeks) ----
+  const setPastArchived = trpc.weeklyPlan.setOwnPriorityArchived.useMutation({ onSuccess: () => refetch() });
+  // Parse an `own-<weekStart>-<index>` id (weekStart itself contains dashes).
+  const parseOwnId = (id: string) => {
+    const rest = id.slice(4); // strip "own-"
+    const li = rest.lastIndexOf('-');
+    return { weekStart: rest.slice(0, li), index: Number(rest.slice(li + 1)) };
+  };
+  const dismissPast = (id: string) => {
+    const { weekStart: ws, index } = parseOwnId(id);
+    setPastArchived.mutate({ weekStart: ws, index, archived: true });
+  };
+  const carryForwardPast = (item: { id: string; label: string; okrNodeId: string | null }) => {
+    // Add the unfinished item to THIS week's active priorities, then dismiss the
+    // original so it leaves the Past box (moved, not duplicated).
+    const next = [
+      ...priorities.filter((p) => p.text.trim() || p.okrNodeId),
+      { text: item.label, okrNodeId: item.okrNodeId, done: false, archived: false },
+    ];
+    setPriorities(next);
+    persist(next, curStatus());
+    dismissPast(item.id);
+  };
+
   // Shared grouped OKR menu. `onPick` receives the chosen node id + title.
   // `withWriteOwn` adds the "Write my own…" item (used by the Add-priority dropdown).
   const okrMenu = (onPick: (id: string, title: string) => void, withWriteOwn: boolean) => (
@@ -314,6 +338,41 @@ export default function WeeklyPlan() {
           {picker === 'add' && okrMenu((id, title) => addFromNode(id, title), true)}
         </div>
       </section>
+
+      {(data?.pastPriorities?.length ?? 0) > 0 && (
+        <section className="ls-card p-5 mt-4">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-bold">Past priorities</h2>
+            <span className="ls-chip bg-ls-watch-bg text-ls-watch">Carried over</span>
+          </div>
+          <p className="text-sm text-ls-ink-3 mb-3">
+            Priorities you didn&rsquo;t finish in earlier weeks. Carry one forward to this week, or dismiss it.
+          </p>
+          <div className="space-y-4">
+            {data!.pastPriorities.map((wk) => (
+              <div key={wk.weekStart}>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Week of {wk.weekStart}</div>
+                <ul className="space-y-1.5">
+                  {wk.items.map((it) => (
+                    <li key={it.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-ls-watch shrink-0">•</span>
+                      <span className="flex-1 text-ls-ink">{it.label}</span>
+                      <button onClick={() => carryForwardPast(it)}
+                        className="text-xs font-medium text-ls-blue-deep hover:underline shrink-0">
+                        Carry forward
+                      </button>
+                      <button onClick={() => dismissPast(it.id)}
+                        className="text-xs text-ls-ink-3 hover:text-ls-watch shrink-0">
+                        Dismiss
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {(data?.completedByWeek?.length ?? 0) > 0 && (
         <section className="ls-card p-5 mt-4">
