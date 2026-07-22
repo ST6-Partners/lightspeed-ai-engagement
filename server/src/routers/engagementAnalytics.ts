@@ -62,7 +62,7 @@ function aggregate(values: number[]): Agg | null {
   };
 }
 
-interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCount: number; responseCount: number; source: string; isCurrent: boolean; }
+interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCount: number; responseCount: number; source: string; isCurrent: boolean; scaleMax: number; }
 
 export const engagementAnalyticsRouter = router({
   results: protectedProcedure
@@ -154,12 +154,13 @@ export const engagementAnalyticsRouter = router({
         responseCount: respondents.size || responses.length,
         source: 'live',
         isCurrent: true,
+        scaleMax: 5,
       };
     }
 
     // ── Ordered period series (historical asc + live last) ───────────────────
     const historical: PeriodInfo[] = periodRows
-      .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate, eligibleCount: p.eligibleCount, responseCount: p.responseCount, source: p.source, isCurrent: p.isCurrent }))
+      .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate, eligibleCount: p.eligibleCount, responseCount: p.responseCount, source: p.source, isCurrent: p.isCurrent, scaleMax: p.scaleMax }))
       .sort((a, b) => a.periodDate.localeCompare(b.periodDate));
     const periods: PeriodInfo[] = livePeriod ? [...historical, livePeriod] : historical;
 
@@ -195,6 +196,7 @@ export const engagementAnalyticsRouter = router({
     const prevFav = prev ? favOf(prev, 'company', '', 'overall', '') : null;
     const company = {
       label: latest.label,
+      scaleMax: latest.scaleMax,
       favorablePct: compFav,
       unfavorablePct: compUnfav,
       mean: compMean,
@@ -275,8 +277,10 @@ export const engagementAnalyticsRouter = router({
         eligibleCount: eligCount,
         participationPct: eligCount ? r1((respCount / eligCount) * 100) : null,
         prevFavorablePct: pf,
-        delta: fav != null && pf != null ? r1(fav - pf) : null,
-        vsCompany: fav != null && compFav != null ? r1(fav - compFav) : null,
+        // Only compare like-to-like: imported 15Five departments hold a 0-100 engagement SCORE,
+        // not favorability, so no delta vs a different-basis period and no vs-company (company is favorability).
+        delta: (fav != null && pf != null && prev && prev.source === latest.source) ? r1(fav - pf) : null,
+        vsCompany: (latest.source !== 'import' && fav != null && compFav != null) ? r1(fav - compFav) : null,
         byDriver: DRIVER_KEYS.map((key) => ({ key, favorablePct: favOf(latest, 'department', name, 'driver', key), mean: meanOf(latest, 'department', name, 'driver', key) }))
           .filter((d) => d.favorablePct != null),
       };
@@ -291,6 +295,7 @@ export const engagementAnalyticsRouter = router({
       drivers,
       questions,
       departments: departmentsOut,
+      departmentBasis: latest.source === 'import' ? 'score' as const : 'favorability' as const,
     };
   }),
 
@@ -363,9 +368,9 @@ export const engagementAnalyticsRouter = router({
       }
 
       const historical = periodRows
-        .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
+        .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate, source: p.source }))
         .sort((a, b) => a.periodDate.localeCompare(b.periodDate));
-      const liveEntry = hasLive ? { id: 'live', label: `${new Date().getFullYear()} (in progress)`, periodDate: new Date().toISOString().slice(0, 10) } : null;
+      const liveEntry = hasLive ? { id: 'live', label: `${new Date().getFullYear()} (in progress)`, periodDate: new Date().toISOString().slice(0, 10), source: 'live' } : null;
       const periods = liveEntry ? [...historical, liveEntry] : historical;
       if (periods.length === 0) {
         return { hasData: false as const, periods: [] as { id: string; label: string }[], selectedId: null as string | null, canSeeIndividual, department: null, individual: null };
@@ -419,8 +424,8 @@ export const engagementAnalyticsRouter = router({
             suppressed: false,
             favorablePct: deptFav,
             mean: meanOf(selected.id, 'department', personDept, 'overall', ''),
-            delta: deptFav != null && prevFav != null ? r1(deptFav - prevFav) : null,
-            vsCompany: deptFav != null && companyFav != null ? r1(deptFav - companyFav) : null,
+            delta: (deptFav != null && prevFav != null && prev && prev.source === selected.source) ? r1(deptFav - prevFav) : null,
+            vsCompany: (selected.source !== 'import' && deptFav != null && companyFav != null) ? r1(deptFav - companyFav) : null,
             participationPct: eligible ? r1((respCount / eligible) * 100) : null,
             strongest: sortedDesc.slice(0, 2),
             needsAttention: sortedDesc.slice(-2).reverse(),

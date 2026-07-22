@@ -49,7 +49,7 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
             <div className="text-4xl font-extrabold text-ls-blue-deep">{pct(c.favorablePct)}</div>
             <div className="mb-1"><DeltaChip delta={c.prevFavorablePct != null && c.favorablePct != null ? Math.round((c.favorablePct - c.prevFavorablePct) * 10) / 10 : null} /></div>
           </div>
-          <div className="text-[12px] text-ls-ink-3 mt-1">favorable{c.mean != null ? ` · avg response ${c.mean.toFixed(2)}` : ''}</div>
+          <div className="text-[12px] text-ls-ink-3 mt-1">favorable{c.mean != null ? ` · avg response ${c.mean.toFixed(2)} / ${c.scaleMax}` : ''}</div>
         </div>
         <div className="ls-card p-5">
           <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Participation</div>
@@ -148,10 +148,13 @@ export function ResultsBreakdown({ data }: { data: AnalyticsData }) {
   return (
     <div>
       <p className="text-sm text-ls-ink-3 mb-4">Engagement by department for the latest period. Click a row for its driver breakdown. Change is vs. the prior period; “vs company” compares to the company favorability.</p>
+      {data.departmentBasis === 'score' && (
+        <div className="ls-card p-3 mb-4 border-l-4 border-ls-watch text-[12.5px] text-ls-ink-2">These department numbers are 15Five’s 0–100 <b>engagement score</b> (the only per-department metric in the export) — a different measure than the company favorability %, so “change” and “vs company” are hidden. Departments get a favorability baseline at the first in-app survey.</div>
+      )}
       <div className="ls-card overflow-hidden">
         <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-ls-line text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">
           <div className="col-span-4">Department</div>
-          <div className="col-span-2 text-center">Favorable</div>
+          <div className="col-span-2 text-center">{data.departmentBasis === 'score' ? 'Engagement score' : 'Favorable'}</div>
           <div className="col-span-2 text-center">Change</div>
           <div className="col-span-2 text-center">vs company</div>
           <div className="col-span-2 text-center">Response rate</div>
@@ -162,8 +165,8 @@ export function ResultsBreakdown({ data }: { data: AnalyticsData }) {
             <div key={d.name} className="border-b border-ls-line last:border-0">
               <div className="grid grid-cols-12 gap-2 px-4 py-3 items-center cursor-pointer hover:bg-ls-blue-50" onClick={() => setOpen(isOpen ? null : d.name)}>
                 <div className="col-span-4 font-semibold flex items-center gap-2"><span className="text-ls-ink-3 text-xs">{isOpen ? '▾' : '▸'}</span>{d.name}</div>
-                <div className="col-span-2 text-center"><span className={`ls-chip ${toneCls(d.favorablePct)}`}>{pct(d.favorablePct)}</span></div>
-                <div className="col-span-2 text-center"><DeltaChip delta={d.delta} /></div>
+                <div className="col-span-2 text-center"><span className={`ls-chip ${toneCls(d.favorablePct)}`}>{data.departmentBasis === 'score' ? (d.favorablePct == null ? '—' : d.favorablePct.toFixed(1)) : pct(d.favorablePct)}</span></div>
+                <div className="col-span-2 text-center">{d.delta == null ? <span className="text-ls-ink-3 text-[13px]">—</span> : <DeltaChip delta={d.delta} />}</div>
                 <div className="col-span-2 text-center text-[13px] font-semibold" style={{ color: (d.vsCompany ?? 0) >= 0 ? '#1F9D6B' : '#D1495B' }}>{d.vsCompany == null ? '—' : `${d.vsCompany >= 0 ? '+' : ''}${d.vsCompany.toFixed(1)}`}</div>
                 <div className="col-span-2 text-center text-[13px] text-ls-ink-2">{d.participationPct != null ? `${Math.round(d.participationPct)}%` : '—'}<span className="text-ls-ink-3 text-[11px]"> ({d.responseCount}{d.eligibleCount ? `/${d.eligibleCount}` : ''})</span></div>
               </div>

@@ -17,6 +17,7 @@ export const surveyPeriods = pgTable('survey_periods', {
   eligibleCount: integer('eligible_count').notNull().default(0),
   responseCount: integer('response_count').notNull().default(0),
   source: varchar('source', { length: 16 }).notNull().default('import'), // 'import' | 'live'
+  scaleMax: integer('scale_max').notNull().default(5), // response-scale points: 15Five imports = 4, in-app = 5. Favorability % is the safe cross-scale comparison metric.
   isCurrent: boolean('is_current').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
