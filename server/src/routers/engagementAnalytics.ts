@@ -7,6 +7,7 @@
 import { router, protectedProcedure } from '../trpc.js';
 import { surveyPeriods, surveyMetrics } from '../db/schema/engagementAnalytics.js';
 import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
+import { engagementImportRows } from '../db/schema/engagementImportRows.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { z } from 'zod';
@@ -561,6 +562,51 @@ export const engagementAnalyticsRouter = router({
         ? weakest.map((d) => `• Focus on ${d.label} — favorability is ${d.favorablePct}%, among the lowest. Run listening sessions with affected teams and identify one concrete change to pilot.`).join('\n')
         : 'Not enough data yet to recommend focus areas — collect more responses first.';
       return { source: 'fallback' as const, recommendations: fb };
+    }),
+
+
+  // ── Raw Responses (source rows behind a period) ──────────────────────────
+  // Imported periods -> the raw uploaded statement rows. Live/current period ->
+  // individual (anonymous) in-app responses. Honors the period + team toggles.
+  rawResponses: protectedProcedure
+    .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const hasLive = responses.length > 0;
+      const hist = periodRows
+        .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
+        .sort((a, b) => a.periodDate.localeCompare(b.periodDate));
+      const live = hasLive ? { id: 'live', label: 'Current survey', periodDate: new Date().toISOString().slice(0, 10) } : null;
+      const periods = live ? [...hist, live] : hist;
+      if (periods.length === 0) return { kind: 'empty' as const, periodLabel: '', rows: [] };
+      const target = (input?.periodId && periods.find((p) => p.id === input.periodId)) || periods[periods.length - 1];
+      const dept = (input?.department && input.department !== 'all') ? input.department : null;
+
+      if (target.id !== 'live') {
+        const imp = (await ctx.db.query.engagementImportRows.findMany()).filter((r) => r.periodId === target.id);
+        const filtered = dept ? imp.filter((r) => r.groupName === dept) : imp;
+        return {
+          kind: 'import' as const,
+          periodLabel: target.label,
+          rows: filtered.map((r) => ({
+            group: r.groupName ?? 'Company', dimension: r.dimension, statement: r.statement,
+            avgResponse: r.avgResponse != null ? Number(r.avgResponse) : null,
+            unfavorable: r.unfavorable, neutral: r.neutral, favorable: r.favorable,
+            totalResponses: r.totalResponses, responseRate: r.responseRate != null ? Number(r.responseRate) : null,
+          })),
+        };
+      }
+      // live -> individual (anonymous) responses
+      const rows = responses
+        .filter((r) => r.status === 'complete')
+        .filter((r) => !dept || r.department === dept)
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+        .map((r) => ({
+          submittedAt: r.submittedAt, department: r.department ?? null, jobTitle: r.jobTitle ?? null,
+          enps: r.enpsScore ?? null, answered: Object.keys((r.answers ?? {}) as Record<string, number>).length,
+        }));
+      return { kind: 'live' as const, periodLabel: target.label, rows };
     }),
 
 });

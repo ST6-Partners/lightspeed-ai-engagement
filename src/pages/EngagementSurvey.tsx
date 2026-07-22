@@ -15,7 +15,7 @@ const fmtPeriodDate = (iso: string | undefined, isCurrent?: boolean) => {
     : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 };
 
-const TABS = ['Summary', 'Breakdown', 'Drivers', 'Take Survey'] as const;
+const TABS = ['Summary', 'Breakdown', 'Drivers', 'Raw Responses', 'Take Survey'] as const;
 type Tab = (typeof TABS)[number];
 
 const selectCls =
@@ -32,6 +32,10 @@ export default function EngagementSurvey() {
     { enabled: isResultsTab },
   );
   const data = results.data;
+  const raw = trpc.engagementAnalytics.rawResponses.useQuery(
+    { periodId, department },
+    { enabled: tab === 'Raw Responses' },
+  );
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -92,6 +96,65 @@ export default function EngagementSurvey() {
           {tab === 'Breakdown' && <ResultsBreakdown data={data} />}
           {tab === 'Drivers' && <ResultsDrivers data={data} />}
         </>
+      )}
+
+      {tab === 'Raw Responses' && (
+        <div>
+          {raw.isLoading && <div className="ls-card p-8 text-center text-sm text-ls-ink-3">Loading raw responses…</div>}
+          {!raw.isLoading && raw.data && raw.data.kind === 'empty' && (
+            <div className="ls-card p-8 text-center text-sm text-ls-ink-3">No raw responses for this period yet.</div>
+          )}
+          {!raw.isLoading && raw.data && raw.data.kind === 'import' && (
+            <div>
+              <p className="text-sm text-ls-ink-3 mb-3">Raw uploaded statement-level data for <b>{raw.data.periodLabel}</b>{department !== 'all' ? <> · <b>{department}</b></> : ''} — {raw.data.rows.length} rows. This is the source data behind the imported results.</p>
+              <div className="ls-card overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-ls-ink-3 border-b border-ls-line">
+                    <th className="px-3 py-2">Team</th><th className="px-3 py-2">Dimension</th><th className="px-3 py-2">Statement</th>
+                    <th className="px-3 py-2 text-right">Avg</th><th className="px-3 py-2 text-right">Fav</th><th className="px-3 py-2 text-right">Neu</th><th className="px-3 py-2 text-right">Unfav</th><th className="px-3 py-2 text-right">Resp</th>
+                  </tr></thead>
+                  <tbody>
+                    {raw.data.rows.map((r, i) => (
+                      <tr key={i} className="border-b border-ls-line/60">
+                        <td className="px-3 py-2 whitespace-nowrap text-ls-ink-3">{r.group}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.dimension}</td>
+                        <td className="px-3 py-2">{r.statement}</td>
+                        <td className="px-3 py-2 text-right">{r.avgResponse ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.favorable ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.neutral ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.unfavorable ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.totalResponses ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {!raw.isLoading && raw.data && raw.data.kind === 'live' && (
+            <div>
+              <p className="text-sm text-ls-ink-3 mb-3">Individual (anonymous) responses for <b>{raw.data.periodLabel}</b>{department !== 'all' ? <> · <b>{department}</b></> : ''} — {raw.data.rows.length} responses. No names are recorded.</p>
+              <div className="ls-card overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-ls-ink-3 border-b border-ls-line">
+                    <th className="px-3 py-2">Submitted</th><th className="px-3 py-2">Team</th><th className="px-3 py-2">Job title</th><th className="px-3 py-2 text-right">eNPS</th><th className="px-3 py-2 text-right">Answered</th>
+                  </tr></thead>
+                  <tbody>
+                    {raw.data.rows.map((r, i) => (
+                      <tr key={i} className="border-b border-ls-line/60">
+                        <td className="px-3 py-2 whitespace-nowrap text-ls-ink-3">{new Date(r.submittedAt).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.department ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.jobTitle ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.enps ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{r.answered}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {tab === 'Take Survey' && <SurveyForm />}

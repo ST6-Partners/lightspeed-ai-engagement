@@ -54,6 +54,7 @@ export { engagementSurveyResponses } from './engagementSurvey.js';
 export { surveyPeriods, surveyMetrics } from './engagementAnalytics.js';
 export { engagementSurveyQuestions } from './engagementSurveyQuestions.js';
 export { engagementSurveyVersions, engagementSurveyVersionQuestions } from './engagementSurveyVersions.js';
+export { engagementImportRows } from './engagementImportRows.js';
 
 // Manager Survey (3 tables) — questions lookup + rating scale + responses
 export { managerSurveyQuestions, managerRatingScale, managerSurveyResponses } from './managerSurvey.js';
