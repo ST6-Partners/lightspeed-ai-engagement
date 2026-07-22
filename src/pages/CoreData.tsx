@@ -35,6 +35,8 @@ const cards: Card[] = [
     desc: 'The criteria used to evaluate performance.' },
   { path: '/core-data/checkin-questions', label: 'Check-in Questions', icon: MessageCircle,
     desc: 'The prompts used in recurring pulses / check-ins.' },
+  { path: '/core-data/engagement-questions', label: 'Engagement Questions', icon: ListChecks,
+    desc: 'Add, remove, or toggle the questions on the engagement survey.' },
   { path: '/core-data/assessments', label: 'Assessments', icon: ClipboardList,
     desc: 'The assessment definitions available to the app.' },
 ];

@@ -14,16 +14,17 @@ import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
 
 type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
-  | 'manager_effectiveness' | 'coworkers' | 'leadership' | 'rewards_fairness' | 'commitment';
+  | 'manager_effectiveness' | 'coworkers' | 'leadership' | 'rewards_fairness' | 'commitment'
+  | 'dei' | 'wellbeing' | 'remote_work' | 'retention' | (string & {});
 
-const DRIVER_KEYS: DriverKey[] = [
+const BASE_DRIVER_KEYS: DriverKey[] = [
   'purpose', 'autonomy', 'utilization', 'capacity', 'manager_relationship',
   'manager_effectiveness', 'coworkers', 'leadership', 'rewards_fairness', 'commitment',
 ];
 
 // question id -> driver (mirror of src/lib/engagementSurvey.ts). Kept here so the
 // live-period rollup does not depend on the client bundle.
-const Q_DRIVER: Record<string, DriverKey> = {
+const Q_DRIVER_FALLBACK: Record<string, DriverKey> = {
   work_1: 'commitment', work_2: 'autonomy', work_3: 'capacity', work_4: 'purpose',
   work_5: 'purpose', work_6: 'commitment', work_7: 'utilization', work_8: 'utilization',
   work_9: 'commitment', work_10: 'capacity', work_11: 'capacity', work_12: 'purpose',
@@ -70,6 +71,16 @@ export const engagementAnalyticsRouter = router({
     .query(async ({ ctx, input }) => {
     const periodRows = await ctx.db.query.surveyPeriods.findMany();
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
+    // Question bank drives the driver map + question text (falls back to the built-in
+    // 66 if the bank table is empty). New drivers (D&I, wellbeing, etc.) flow through here.
+    const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+    const Q_DRIVER: Record<string, DriverKey> = qbank.length
+      ? Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as DriverKey]))
+      : Q_DRIVER_FALLBACK;
+    const Q_TEXT: Record<string, string> = Object.fromEntries(qbank.map((q) => [q.id, q.text]));
+    const bankDrivers = qbank.filter((q) => q.driver).map((q) => q.driver as DriverKey);
+    const histDrivers = metricRows.filter((m) => m.dimension === 'driver' && m.metricKey).map((m) => m.metricKey as DriverKey);
+    const DRIVER_KEYS: DriverKey[] = Array.from(new Set<DriverKey>([...BASE_DRIVER_KEYS, ...bankDrivers, ...histDrivers]));
 
     // Department roster from the org chart (active users grouped by department).
     // Lets the Breakdown tab show real teams + headcount even before a period
@@ -229,11 +240,11 @@ export const engagementAnalyticsRouter = router({
     const liveQ = latest.id === 'live'
       ? [...liveAgg.entries()].filter(([k]) => k.startsWith('company||question|'))
       : [];
-    let questions: Array<{ id: string; driver: DriverKey | null; favorablePct: number | null; unfavorablePct: number | null; mean: number | null; prevFavorablePct: number | null; delta: number | null }> = [];
+    let questions: Array<{ id: string; text: string | null; driver: DriverKey | null; favorablePct: number | null; unfavorablePct: number | null; mean: number | null; prevFavorablePct: number | null; delta: number | null }> = [];
     if (latest.id === 'live') {
       questions = liveQ.map(([k, a]) => {
         const id = k.split('|').pop() as string;
-        return { id, driver: Q_DRIVER[id] ?? null, favorablePct: a.favorablePct, unfavorablePct: a.unfavorablePct, mean: a.mean, prevFavorablePct: null, delta: null };
+        return { id, text: Q_TEXT[id] ?? null, driver: Q_DRIVER[id] ?? null, favorablePct: a.favorablePct, unfavorablePct: a.unfavorablePct, mean: a.mean, prevFavorablePct: null, delta: null };
       });
     } else {
       const prevQMap = new Map<string, number | null>();
@@ -246,7 +257,7 @@ export const engagementAnalyticsRouter = router({
         const id = m.metricKey ?? '';
         const fav = n(m.favorablePct);
         const pf = prevQMap.get(id) ?? null;
-        return { id, driver: Q_DRIVER[id] ?? null, favorablePct: fav, unfavorablePct: n(m.unfavorablePct), mean: n(m.mean), prevFavorablePct: pf, delta: fav != null && pf != null ? r1(fav - pf) : null };
+        return { id, text: Q_TEXT[id] ?? null, driver: Q_DRIVER[id] ?? null, favorablePct: fav, unfavorablePct: n(m.unfavorablePct), mean: n(m.mean), prevFavorablePct: pf, delta: fav != null && pf != null ? r1(fav - pf) : null };
       });
     }
 
@@ -327,6 +338,11 @@ export const engagementAnalyticsRouter = router({
       const periodRows = await ctx.db.query.surveyPeriods.findMany();
       const metricRows = await ctx.db.query.surveyMetrics.findMany();
       const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const Q_DRIVER: Record<string, DriverKey> = qbank.length
+        ? Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as DriverKey]))
+        : Q_DRIVER_FALLBACK;
+      const DRIVER_KEYS: DriverKey[] = Array.from(new Set<DriverKey>([...BASE_DRIVER_KEYS, ...qbank.filter((q) => q.driver).map((q) => q.driver as DriverKey)]));
       const allUsers = await ctx.db.query.users.findMany();
       const allDepts = await ctx.db.query.departments.findMany();
 

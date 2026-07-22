@@ -8,7 +8,7 @@ import ResetPassword from './pages/ResetPassword';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
-import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments, PeerReviewQuestions } from './pages/admin';
+import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments, PeerReviewQuestions, EngagementQuestions } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
 import WeeklyPlan from './pages/WeeklyPlan';
@@ -63,6 +63,7 @@ export default function App() {
             <Route path="values" element={<CompanyValues />} />
             <Route path="performance-criteria" element={<PerformanceCriteria />} />
             <Route path="checkin-questions" element={<CheckinQuestions />} />
+            <Route path="engagement-questions" element={<EngagementQuestions />} />
             <Route path="assessments" element={<Assessments />} />
           </Route>
         </Route>

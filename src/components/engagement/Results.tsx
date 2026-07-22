@@ -90,7 +90,7 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
             {celebrate.map((q) => (
               <div key={q.id} className="flex items-center gap-3">
                 <span className="ls-chip bg-ls-thrive-bg text-ls-thrive shrink-0 w-14 justify-center">{pct(q.favorablePct)}</span>
-                <span className="text-[13px] text-ls-ink-2">{QUESTION_TEXT[q.id] ?? q.id}</span>
+                <span className="text-[13px] text-ls-ink-2">{q.text ?? QUESTION_TEXT[q.id] ?? q.id}</span>
               </div>
             ))}
           </div>
@@ -102,7 +102,7 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
             {improve.map((q) => (
               <div key={q.id} className="flex items-center gap-3">
                 <span className="ls-chip bg-ls-risk-bg text-ls-risk shrink-0 w-14 justify-center">{pct(q.favorablePct)}</span>
-                <span className="text-[13px] text-ls-ink-2">{QUESTION_TEXT[q.id] ?? q.id}</span>
+                <span className="text-[13px] text-ls-ink-2">{q.text ?? QUESTION_TEXT[q.id] ?? q.id}</span>
               </div>
             ))}
           </div>
@@ -250,7 +250,7 @@ export function ResultsDrivers({ data }: { data: AnalyticsData }) {
                     {qs.map((q) => (
                       <div key={q.id} className="flex items-center gap-3">
                         <span className={`ls-chip ${toneCls(q.favorablePct)} shrink-0 w-14 justify-center`}>{pct(q.favorablePct)}</span>
-                        <span className="text-[13px] text-ls-ink-2">{QUESTION_TEXT[q.id] ?? q.id}</span>
+                        <span className="text-[13px] text-ls-ink-2">{q.text ?? QUESTION_TEXT[q.id] ?? q.id}</span>
                       </div>
                     ))}
                   </div>

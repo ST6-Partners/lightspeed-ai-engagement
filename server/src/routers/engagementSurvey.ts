@@ -17,6 +17,7 @@ export const engagementSurveyRouter = router({
     .input(z.object({
       answers: answersSchema,
       respondentName: z.string().max(200).optional(),
+      textAnswers: z.record(z.string(), z.string().max(4000)).optional(),
       jobTitle: z.string().max(200).optional(),
       department: z.string().max(160).optional(),
       enpsScore: z.number().int().min(0).max(10).optional(),
@@ -30,6 +31,7 @@ export const engagementSurveyRouter = router({
         jobTitle: input.jobTitle?.trim() || null,
         department: input.department?.trim() || null,
         answers: input.answers,
+        textAnswers: input.textAnswers ?? {},
         enpsScore: input.enpsScore ?? null,
         enpsReason: input.enpsReason?.trim() || null,
         status: 'complete',

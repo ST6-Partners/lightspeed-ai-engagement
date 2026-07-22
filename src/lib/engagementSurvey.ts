@@ -8,7 +8,8 @@
 
 export type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
-  | 'manager_effectiveness' | 'coworkers' | 'leadership' | 'rewards_fairness' | 'commitment';
+  | 'manager_effectiveness' | 'coworkers' | 'leadership' | 'rewards_fairness' | 'commitment'
+  | 'dei' | 'wellbeing' | 'remote_work' | 'retention';
 
 export interface Driver { key: DriverKey; label: string; meaning: string; }
 
@@ -25,6 +26,10 @@ export const DRIVERS: Driver[] = [
   { key: 'leadership', label: 'Leadership', meaning: 'Executive availability, reliability, and following through.' },
   { key: 'rewards_fairness', label: 'Rewards & Fairness', meaning: 'Rewards are equitable and people decisions are made fairly.' },
   { key: 'commitment', label: 'Commitment & Advocacy', meaning: 'Pride, loyalty, and willingness to recommend and stay.' },
+  { key: 'dei', label: 'Diversity & Inclusion', meaning: 'Fair treatment, belonging, and equity across all backgrounds.' },
+  { key: 'wellbeing', label: 'Wellbeing & Burnout', meaning: 'Energy, rest, and freedom from chronic exhaustion at work.' },
+  { key: 'remote_work', label: 'Remote Work', meaning: 'A healthy, workable environment when working from home.' },
+  { key: 'retention', label: 'Commitment & Retention', meaning: 'Intent to stay and confidence in the company\u2019s future.' },
 ];
 
 export const DRIVER_LABEL: Record<DriverKey, string> = Object.fromEntries(

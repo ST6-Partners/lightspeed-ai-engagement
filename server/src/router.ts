@@ -29,6 +29,7 @@ import { exitSurveyRouter } from './routers/exitSurvey.js';
 import { departmentsRouter } from './routers/departments.js';
 import { engagementSurveyRouter } from './routers/engagementSurvey.js';
 import { engagementAnalyticsRouter } from './routers/engagementAnalytics.js';
+import { engagementSurveyQuestionsRouter } from './routers/engagementSurveyQuestions.js';
 import { managerSurveyQuestionsRouter } from './routers/managerSurveyQuestions.js';
 import { managerRatingScaleRouter } from './routers/managerRatingScale.js';
 import { managerSurveyRouter } from './routers/managerSurvey.js';
@@ -75,6 +76,7 @@ export const appRouter = router({
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,
   engagementAnalytics: engagementAnalyticsRouter,
+  engagementSurveyQuestions: engagementSurveyQuestionsRouter,
   managerSurveyQuestions: managerSurveyQuestionsRouter,
   managerRatingScale: managerRatingScaleRouter,
   managerSurvey: managerSurveyRouter,

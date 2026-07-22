@@ -1,23 +1,21 @@
-// Take Survey — the engagement survey form (under the Engagement Survey page's
-// "Take Survey" tab). Starts with an "About you" block (name / job title /
-// department dropdowns) so results can be organized, then 5 Likert sections
-// (66 statements) + eNPS 0..10 + open text. Submits via engagementSurvey.submit.
+// Take Survey — the engagement survey form. Questions are loaded from the
+// admin-managed question bank (engagementSurveyQuestions.listActive), grouped by
+// section, then eNPS 0..10 + open text. Anonymous: no name is collected; only
+// job title + department (for aggregate rollups). Submits via engagementSurvey.submit.
 import { useMemo, useState } from 'react';
 import { trpc } from '../../lib/trpc';
-import {
-  SECTIONS, LIKERT, ALL_LIKERT_IDS, LIKERT_COUNT,
-  ENPS_INTRO, ENPS_QUESTION, ENPS_REASON_QUESTION,
-} from '../../lib/engagementSurvey';
+import { LIKERT, ENPS_INTRO, ENPS_QUESTION, ENPS_REASON_QUESTION } from '../../lib/engagementSurvey';
 
 type Likert = Record<string, number>;
+type TextAns = Record<string, string>;
 
-// Shared field styling (matches the PIP / Core Data forms).
 const selectCls =
   'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
 const labelCls = 'block text-xs font-medium text-gray-500 uppercase mb-1';
 
 export default function SurveyForm() {
   const [answers, setAnswers] = useState<Likert>({});
+  const [textAnswers, setTextAnswers] = useState<TextAns>({});
   const [jobTitleId, setJobTitleId] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [enpsScore, setEnpsScore] = useState<number | null>(null);
@@ -25,6 +23,7 @@ export default function SurveyForm() {
   const [submitted, setSubmitted] = useState(false);
   const [showGaps, setShowGaps] = useState(false);
 
+  const { data: questions } = trpc.engagementSurveyQuestions.listActive.useQuery();
   const { data: titles } = trpc.jobTitles.list.useQuery();
   const { data: depts } = trpc.departments.list.useQuery();
 
@@ -32,12 +31,25 @@ export default function SurveyForm() {
     onSuccess: () => { setSubmitted(true); window.scrollTo({ top: 0, behavior: 'smooth' }); },
   });
 
+  // Group active questions into sections, preserving order.
+  const sections = useMemo(() => {
+    const out: { key: string; title: string; intro: string; questions: NonNullable<typeof questions> }[] = [];
+    for (const q of questions ?? []) {
+      let sec = out.find((s) => s.key === q.section);
+      if (!sec) { sec = { key: q.section, title: q.sectionTitle, intro: q.sectionIntro, questions: [] }; out.push(sec); }
+      sec.questions.push(q);
+    }
+    return out;
+  }, [questions]);
+
+  const likertIds = useMemo(() => (questions ?? []).filter((q) => q.type === 'likert5').map((q) => q.id), [questions]);
+  const likertCount = likertIds.length;
   const answeredCount = useMemo(
-    () => ALL_LIKERT_IDS.filter((id) => typeof answers[id] === 'number').length,
-    [answers],
+    () => likertIds.filter((id) => typeof answers[id] === 'number').length,
+    [likertIds, answers],
   );
   const aboutComplete = !!jobTitleId && !!departmentId;
-  const complete = aboutComplete && answeredCount === LIKERT_COUNT && enpsScore != null;
+  const complete = aboutComplete && likertCount > 0 && answeredCount === likertCount && enpsScore != null;
   const set = (id: string, v: number) => setAnswers((p) => ({ ...p, [id]: v }));
   const missing = (id: string) => showGaps && typeof answers[id] !== 'number';
 
@@ -49,6 +61,7 @@ export default function SurveyForm() {
     }
     submit.mutate({
       answers,
+      textAnswers: Object.keys(textAnswers).length ? textAnswers : undefined,
       jobTitle: (titles ?? []).find((t) => t.id === jobTitleId)?.title ?? undefined,
       department: (depts ?? []).find((d) => d.id === departmentId)?.name ?? undefined,
       enpsScore: enpsScore ?? undefined,
@@ -108,44 +121,54 @@ export default function SurveyForm() {
       <div className="ls-card p-4 mb-5 sticky top-2 z-10">
         <div className="flex items-center justify-between mb-2">
           <div className="text-[13px] font-semibold text-ls-ink-2">
-            {answeredCount} of {LIKERT_COUNT} statements answered{enpsScore != null ? ' · recommendation rated' : ''}
+            {answeredCount} of {likertCount} statements answered{enpsScore != null ? ' · recommendation rated' : ''}
           </div>
           <span className={`ls-chip ${complete ? 'bg-ls-thrive-bg text-ls-thrive' : 'bg-ls-bg-2 text-ls-ink-3'}`}>
-            {complete ? 'Ready to submit' : `${LIKERT_COUNT - answeredCount + (enpsScore == null ? 1 : 0)} remaining`}
+            {complete ? 'Ready to submit' : `${Math.max(0, likertCount - answeredCount) + (enpsScore == null ? 1 : 0)} remaining`}
           </span>
         </div>
         <div className="h-2 rounded-full bg-ls-bg-2 overflow-hidden">
-          <div className="h-full bg-ls-active transition-all" style={{ width: `${((answeredCount + (enpsScore != null ? 1 : 0)) / (LIKERT_COUNT + 1)) * 100}%` }} />
+          <div className="h-full bg-ls-active transition-all" style={{ width: `${((answeredCount + (enpsScore != null ? 1 : 0)) / (likertCount + 1)) * 100}%` }} />
         </div>
       </div>
 
       <div className="space-y-6">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <section key={section.key}>
             <div className="mb-3">
               <h3 className="text-lg font-bold text-ls-blue-deep">{section.title}</h3>
-              <p className="text-[13px] text-ls-ink-3">{section.intro}</p>
+              {section.intro && <p className="text-[13px] text-ls-ink-3">{section.intro}</p>}
             </div>
             <div className="space-y-3">
               {section.questions.map((q) => (
-                <div key={q.id} data-missing={missing(q.id) ? '1' : undefined}
-                  className={`ls-card p-5 ${missing(q.id) ? 'border-ls-risk ring-1 ring-ls-risk' : ''}`}>
-                  <div className="text-[15px] font-semibold mb-3">{q.text}</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {LIKERT.map((opt) => {
-                      const active = answers[q.id] === opt.value;
-                      return (
-                        <button key={opt.value} type="button" onClick={() => set(q.id, opt.value)} title={opt.label}
-                          className={`flex flex-col items-center text-center border rounded-lg px-1.5 py-2 transition-colors ${
-                            active ? 'border-ls-blue bg-ls-blue-50 text-ls-blue-deep' : 'border-ls-line text-ls-ink-2 hover:border-ls-blue'
-                          }`}>
-                          <span className={`text-base font-bold ${active ? 'text-ls-blue-deep' : 'text-ls-ink-2'}`}>{opt.value}</span>
-                          <span className="text-[10.5px] leading-tight mt-0.5 text-ls-ink-3">{opt.label}</span>
-                        </button>
-                      );
-                    })}
+                q.type === 'text' ? (
+                  <div key={q.id} className="ls-card p-5">
+                    <div className="text-[15px] font-semibold mb-1">{q.text}</div>
+                    <p className="text-[12px] text-ls-ink-3 mb-2">Optional.</p>
+                    <textarea value={textAnswers[q.id] ?? ''} onChange={(e) => setTextAnswers((p) => ({ ...p, [q.id]: e.target.value }))} rows={3}
+                      placeholder="Write your response here…"
+                      className="w-full text-sm border border-ls-line rounded-lg px-3 py-2 focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50" />
                   </div>
-                </div>
+                ) : (
+                  <div key={q.id} data-missing={missing(q.id) ? '1' : undefined}
+                    className={`ls-card p-5 ${missing(q.id) ? 'border-ls-risk ring-1 ring-ls-risk' : ''}`}>
+                    <div className="text-[15px] font-semibold mb-3">{q.text}</div>
+                    <div className="grid grid-cols-5 gap-2">
+                      {LIKERT.map((opt) => {
+                        const active = answers[q.id] === opt.value;
+                        return (
+                          <button key={opt.value} type="button" onClick={() => set(q.id, opt.value)} title={opt.label}
+                            className={`flex flex-col items-center text-center border rounded-lg px-1.5 py-2 transition-colors ${
+                              active ? 'border-ls-blue bg-ls-blue-50 text-ls-blue-deep' : 'border-ls-line text-ls-ink-2 hover:border-ls-blue'
+                            }`}>
+                            <span className={`text-base font-bold ${active ? 'text-ls-blue-deep' : 'text-ls-ink-2'}`}>{opt.value}</span>
+                            <span className="text-[10.5px] leading-tight mt-0.5 text-ls-ink-3">{opt.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
               ))}
             </div>
           </section>

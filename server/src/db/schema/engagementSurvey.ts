@@ -17,6 +17,7 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   jobTitle: varchar('job_title', { length: 200 }),               // selected job title (denormalized)
   department: varchar('department', { length: 160 }),            // selected department (denormalized) — used to organize results
   answers: jsonb('answers').$type<Record<string, number>>().notNull().default({}),
+  textAnswers: jsonb('text_answers').$type<Record<string, string>>().notNull().default({}),  // free-text question answers, keyed by question id
   enpsScore: integer('enps_score'),                 // 0..10
   enpsReason: text('enps_reason'),                  // confidential open text
   status: varchar('status', { length: 16 }).notNull().default('complete'),

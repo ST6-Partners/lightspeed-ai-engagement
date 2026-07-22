@@ -26,3 +26,4 @@ export { default as CompanyValues } from './CompanyValues';
 export { default as PerformanceCriteria } from './PerformanceCriteria';
 export { default as CheckinQuestions } from './CheckinQuestions';
 export { default as Assessments } from './Assessments';
+export { default as EngagementQuestions } from './EngagementQuestions';
