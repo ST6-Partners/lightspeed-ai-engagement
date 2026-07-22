@@ -1,11 +1,20 @@
 // Weekly Plan router — per-user weekly check-in: read current + upsert. (DD-002 Planning)
 import { z } from 'zod';
 import { and, eq, isNull, asc, inArray } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { weeklyCheckins, type WeeklyPriority } from '../db/schema/weeklyPlan.js';
 import { priorities } from '../db/schema/orgScreen.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { users } from '../db/schema/core.js';
+import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
+
+// Add `n` days to a YYYY-MM-DD string (UTC), returning YYYY-MM-DD.
+function addDays(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 // Monday (ISO) of the week containing `d`, as YYYY-MM-DD.
 function mondayOf(d = new Date()): string {
@@ -186,5 +195,77 @@ export const weeklyPlanRouter = router({
         .set({ priorities: arr, updatedAt: new Date() })
         .where(eq(weeklyCheckins.id, row.id));
       return { ok: true as const };
+    }),
+
+  // Admin-only demo seeder. Populates a few PAST weeks (mix of completed and
+  // unfinished own priorities) plus some manager-assigned priorities, all for
+  // the CURRENT user, so the Weekly Plan surfaces — Past priorities, Completed
+  // priorities (by week), and manager-assigned — can be demoed with data.
+  // Idempotent: skips a past week that already has a row, and skips assigned
+  // seeding if the user already has manager-assigned priorities. Never touches
+  // the current week's own check-in.
+  seedSampleData: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+      }
+      const cur = mondayOf();
+
+      // Three prior weeks with a done/not-done mix.
+      const sampleWeeks: { weekStart: string; priorities: WeeklyPriority[]; wins: string; blockers: string; mood: number }[] = [
+        { weekStart: addDays(cur, -21),
+          priorities: [
+            { text: 'Ship the onboarding email revamp', okrNodeId: null, done: true, archived: false },
+            { text: 'Close out Q2 engagement recap', okrNodeId: null, done: true, archived: false },
+            { text: 'Draft the manager enablement guide', okrNodeId: null, done: false, archived: false },
+          ], wins: 'Onboarding revamp shipped ahead of schedule.', blockers: 'Waiting on brand assets.', mood: 4 },
+        { weekStart: addDays(cur, -14),
+          priorities: [
+            { text: 'Run the pulse-survey pilot with the CS team', okrNodeId: null, done: true, archived: false },
+            { text: 'Rework the 9-box calibration deck', okrNodeId: null, done: false, archived: false },
+            { text: 'Interview 3 candidates for the PM role', okrNodeId: null, done: false, archived: false },
+          ], wins: 'Pulse pilot hit 82% participation.', blockers: 'Calibration deck blocked on data.', mood: 3 },
+        { weekStart: addDays(cur, -7),
+          priorities: [
+            { text: 'Finalize Q3 OKR drafts with leads', okrNodeId: null, done: false, archived: false },
+            { text: 'Publish the weekly engagement digest', okrNodeId: null, done: true, archived: false },
+          ], wins: 'Digest went out on time.', blockers: 'OKR drafts still in review.', mood: 4 },
+      ];
+
+      let weeksSeeded = 0;
+      for (const w of sampleWeeks) {
+        const existing = await ctx.db.query.weeklyCheckins.findFirst({
+          where: and(eq(weeklyCheckins.userId, ctx.user.id), eq(weeklyCheckins.weekStart, w.weekStart)),
+        });
+        if (existing) continue;
+        await ctx.db.insert(weeklyCheckins).values({
+          userId: ctx.user.id,
+          weekStart: w.weekStart,
+          priorities: w.priorities,
+          wins: w.wins,
+          blockers: w.blockers,
+          mood: w.mood,
+          status: 'saved',
+        });
+        weeksSeeded++;
+      }
+
+      // Manager-assigned priorities (weekStart NULL = current-state). assignedBy
+      // left NULL so the UI shows the neutral "Assigned by your manager" badge.
+      let assignedSeeded = 0;
+      const existingAssigned = await ctx.db.query.priorities.findFirst({
+        where: and(eq(priorities.userId, ctx.user.id), isNull(priorities.weekStart)),
+      });
+      if (!existingAssigned) {
+        await ctx.db.insert(priorities).values([
+          { userId: ctx.user.id, weekStart: null, itemType: 'ktbr', ktbrLabel: 'Present hiring plan at the leadership sync', sortOrder: 0, assignedBy: null, assignedAt: new Date(), done: false, archived: false },
+          { userId: ctx.user.id, weekStart: null, itemType: 'ktbr', ktbrLabel: 'Finalize the interview scorecard rubric', sortOrder: 1, assignedBy: null, assignedAt: new Date(), done: false, archived: false },
+          { userId: ctx.user.id, weekStart: null, itemType: 'ktbr', ktbrLabel: 'Send the Q2 engagement recap to the ELT', sortOrder: 2, assignedBy: null, assignedAt: new Date(), done: true, completedAt: new Date(), archived: false },
+        ]);
+        assignedSeeded = 3;
+      }
+
+      return { ok: true as const, weeksSeeded, assignedSeeded };
     }),
 });

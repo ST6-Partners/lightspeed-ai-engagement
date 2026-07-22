@@ -27,6 +27,9 @@ export default function WeeklyPlan() {
   const { data: ciPriorities } = trpc.checkins.myLatestPriorities.useQuery();
   const planActionItems = trpc.oneOnOne.myWeeklyPlanActionItems.useQuery();
   const planToggle = trpc.oneOnOne.actionItemsToggleDone.useMutation({ onSuccess: () => planActionItems.refetch() });
+  const { data: me } = trpc.auth.me.useQuery();
+  const isAdmin = !!me && (me.role === 'admin' || me.role === 'sysadmin');
+  const seedSample = trpc.weeklyPlan.seedSampleData.useMutation({ onSuccess: () => { refetch(); refetchOkrs(); } });
 
   const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
   const [wins, setWins] = useState('');
@@ -34,7 +37,9 @@ export default function WeeklyPlan() {
   const [mood, setMood] = useState<number | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
   const [addedCi, setAddedCi] = useState<Set<number>>(new Set());
-  const [showCompleted, setShowCompleted] = useState(false);
+  // Per-week expand/collapse for the Completed priorities box (default: current
+  // week open, older weeks collapsed to keep the list tidy as weeks accumulate).
+  const [weekOpen, setWeekOpen] = useState<Record<string, boolean>>({});
 
   // Which picker is open: 'add' for the Add-priority button, or a row index for a row's link control.
   const [picker, setPicker] = useState<'add' | number | null>(null);
@@ -121,6 +126,8 @@ export default function WeeklyPlan() {
     });
   const ownDone = (p: Priority) => (p.okrNodeId ? okrDone(p.okrNodeId) : !!p.done);
   const curStatus = (): 'draft' | 'saved' => (data?.checkin?.status === 'saved' ? 'saved' : 'draft');
+  const isWeekOpen = (w: string) => weekOpen[w] ?? (w === weekStart);
+  const toggleWeek = (w: string) => setWeekOpen((m) => ({ ...m, [w]: !(m[w] ?? (w === weekStart)) }));
   const archiveOwn = (i: number) => { const next = priorities.map((x, j) => (j === i ? { ...x, done: true, archived: true } : x)); setPriorities(next); persist(next, curStatus()); };
   const unarchiveOwnById = (id: string) => {
     const pre = `own-${weekStart}-`;
@@ -218,6 +225,16 @@ export default function WeeklyPlan() {
           </div>
           {weekStart && <p className="text-sm text-ls-ink-3 mt-1.5">Week of {weekStart}.</p>}
         </div>
+        {isAdmin && (
+          <button
+            onClick={() => seedSample.mutate()}
+            disabled={seedSample.isPending}
+            title="Admin only — populate sample past / completed / manager-assigned priorities for your account"
+            className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
+          >
+            {seedSample.isPending ? 'Loading…' : 'Load sample data'}
+          </button>
+        )}
       </div>
 
       {ciPriorities && ciPriorities.items.length > 0 && (
@@ -376,44 +393,52 @@ export default function WeeklyPlan() {
 
       {(data?.completedByWeek?.length ?? 0) > 0 && (
         <section className="ls-card p-5 mt-4">
-          <button onClick={() => setShowCompleted((v) => !v)} className="w-full flex items-center justify-between">
-            <h2 className="font-bold">Completed priorities</h2>
-            <span className="text-ls-ink-3 text-sm">{showCompleted ? '▾ hide' : '▸ show'}</span>
-          </button>
-          {showCompleted && (
-            <div className="mt-3 space-y-4">
-              {data!.completedByWeek.map((wk) => (
-                <div key={wk.weekStart}>
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">
-                    {wk.weekStart === weekStart ? 'This week' : `Week of ${wk.weekStart}`}
-                  </div>
-                  <ul className="space-y-1">
-                    {wk.items.map((it) => (
-                      <li key={it.id} className="flex items-center gap-2 text-sm">
-                        <span className="text-ls-thrive shrink-0">✓</span>
-                        <span className="flex-1 line-through text-ls-ink-3">{it.label}</span>
-                        {it.source === 'assigned' && (
-                          <span className="text-[11px] shrink-0" style={{ color: '#9ca3af' }}>
-                            assigned{it.assignedByName ? ` · ${it.assignedByName}` : ''}
-                          </span>
-                        )}
-                        {it.archived && wk.weekStart === weekStart && (
-                          <button
-                            onClick={() => (it.source === 'assigned'
-                              ? archiveAssigned.mutate({ id: it.id, archived: false })
-                              : unarchiveOwnById(it.id))}
-                            title="Restore to active list"
-                            className="text-xs text-ls-blue-deep hover:underline shrink-0">
-                            Restore
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+          <h2 className="font-bold mb-2">Completed priorities</h2>
+          <div className="divide-y divide-ls-line">
+            {data!.completedByWeek.map((wk) => {
+              const open = isWeekOpen(wk.weekStart);
+              return (
+                <div key={wk.weekStart} className="py-2 first:pt-0 last:pb-0">
+                  <button onClick={() => toggleWeek(wk.weekStart)}
+                    className="w-full flex items-center justify-between text-left"
+                    aria-expanded={open}>
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">
+                      {wk.weekStart === weekStart ? 'This week' : `Week of ${wk.weekStart}`}
+                      <span className="ml-2 text-ls-ink-3/70 font-medium normal-case tracking-normal">
+                        {wk.items.length} completed
+                      </span>
+                    </span>
+                    <span className="text-ls-ink-3 text-sm shrink-0">{open ? '▾' : '▸'}</span>
+                  </button>
+                  {open && (
+                    <ul className="space-y-1 mt-2">
+                      {wk.items.map((it) => (
+                        <li key={it.id} className="flex items-center gap-2 text-sm">
+                          <span className="text-ls-thrive shrink-0">✓</span>
+                          <span className="flex-1 line-through text-ls-ink-3">{it.label}</span>
+                          {it.source === 'assigned' && (
+                            <span className="text-[11px] shrink-0" style={{ color: '#9ca3af' }}>
+                              assigned{it.assignedByName ? ` · ${it.assignedByName}` : ''}
+                            </span>
+                          )}
+                          {it.archived && wk.weekStart === weekStart && (
+                            <button
+                              onClick={() => (it.source === 'assigned'
+                                ? archiveAssigned.mutate({ id: it.id, archived: false })
+                                : unarchiveOwnById(it.id))}
+                              title="Restore to active list"
+                              className="text-xs text-ls-blue-deep hover:underline shrink-0">
+                              Restore
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </section>
       )}
 
