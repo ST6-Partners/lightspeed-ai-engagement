@@ -4,7 +4,7 @@ import { fmtDate } from '../lib/date';
 // description); add key results / tasks inline; archive (reversible) vs delete
 // (permanent); By-Person view via employee search; Archived section.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus, Archive, RotateCcw, Search } from 'lucide-react';
+import { ChevronRight, Target, KeyRound, CheckSquare, Trash2, Pencil, Plus, Archive, RotateCcw, Search, Lock, Settings2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { fireConfetti } from '../lib/confetti';
 
@@ -13,6 +13,11 @@ interface OkrRow {
   id: string; parentId: string | null; type: string; title: string;
   owner: string | null; ownerUserId: string | null; departmentId: string | null; status: string; light: string | null;
   startDate: string | null; dueDate: string | null; description: string | null; sortOrder: number; weight: number;
+}
+
+interface PeriodRow {
+  id: string; label: string; startDate: string | null; endDate: string | null;
+  status: string; isCurrent: boolean; closedAt: string | null;
 }
 
 const LIGHT_HEX: Record<Light, string> = { green: '#2E9E7B', yellow: '#C99300', red: '#C2615A' };
@@ -52,8 +57,23 @@ interface EditForm {
 }
 
 export default function Okrs() {
-  const { data, isLoading, refetch } = trpc.okrs.list.useQuery();
-  const archivedQ = trpc.okrs.listArchived.useQuery();
+  const periodsQ = trpc.okrPeriods.list.useQuery();
+  const { data: me } = trpc.auth.me.useQuery();
+  const periods = (periodsQ.data ?? []) as PeriodRow[];
+  const currentPeriod = periods.find((p) => p.isCurrent) ?? null;
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedPeriodId && periods.length) setSelectedPeriodId(currentPeriod?.id ?? periods[0].id);
+  }, [selectedPeriodId, periods, currentPeriod]);
+  const selectedPeriod = periods.find((p) => p.id === selectedPeriodId) ?? null;
+  const isReadOnly = !!selectedPeriod && (!selectedPeriod.isCurrent || selectedPeriod.status === 'closed');
+  const canEdit = !isReadOnly;
+  const canManagePeriods = ['admin', 'sysadmin'].includes((me as { role?: string } | undefined)?.role ?? 'user');
+  const [showPeriodMgr, setShowPeriodMgr] = useState(false);
+  const periodInput = selectedPeriodId ? { periodId: selectedPeriodId } : undefined;
+
+  const { data, isLoading, refetch } = trpc.okrs.list.useQuery(periodInput);
+  const archivedQ = trpc.okrs.listArchived.useQuery(periodInput);
   const { data: org } = trpc.organization.list.useQuery();
   const { data: depts } = trpc.departments.list.useQuery();
 
@@ -449,6 +469,7 @@ export default function Okrs() {
         <>
           <div className="flex items-center justify-between mb-3">
             <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep capitalize">{sel.type.replace('_', ' ')}</span>
+            {canEdit && (
             <div className="flex gap-2">
               {childSpec && (
                 <button onClick={addChild} disabled={create.isPending}
@@ -462,6 +483,7 @@ export default function Okrs() {
               <button onClick={() => deleteNode(sel.id)} disabled={remove.isPending}
                 className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
             </div>
+            )}
           </div>
           <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
           <div className="mb-4">
@@ -529,6 +551,31 @@ export default function Okrs() {
       <h1 className="text-2xl font-bold tracking-tight">OKRs</h1>
       <p className="text-sm text-ls-ink-3 mb-5">Objectives down to key results and the tasks teams commit to.</p>
 
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <label className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Period</label>
+        <select className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-active"
+          value={selectedPeriodId ?? ''} onChange={(e) => { setSelectedPeriodId(e.target.value); setSelected(null); setEditing(false); }}>
+          {periods.length === 0 && <option value="">No periods yet</option>}
+          {periods.map((pd) => (
+            <option key={pd.id} value={pd.id}>{pd.label}{pd.isCurrent ? '  • current' : pd.status === 'closed' ? '  • closed' : ''}</option>
+          ))}
+        </select>
+        {isReadOnly && (
+          <span className="inline-flex items-center gap-1 text-[12px] text-ls-ink-3"><Lock size={12} /> View only</span>
+        )}
+        {canManagePeriods && (
+          <button onClick={() => setShowPeriodMgr(true)}
+            className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 ml-auto"><Settings2 size={13} /> Manage periods</button>
+        )}
+      </div>
+
+      {isReadOnly && (
+        <div className="mb-4 flex items-center gap-2 text-[12.5px] text-ls-ink-2 border border-ls-line rounded-md px-3 py-2 bg-ls-bg-2">
+          <Lock size={14} className="text-ls-ink-3 shrink-0" />
+          <span>Viewing <b>{selectedPeriod?.label}</b> — a past goal-setting period. It's read-only; new OKRs go in the current period.</span>
+        </div>
+      )}
+
       <div className="inline-flex gap-1 p-1 rounded-lg bg-ls-bg-2 mb-5">
         {([['plan', 'Plan'], ['people', 'By Person'], ['team', 'By Team'], ['archived', 'Archived']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
@@ -550,9 +597,11 @@ export default function Okrs() {
           <div className="w-[340px] shrink-0 border-r border-ls-line py-2 overflow-y-auto">
             <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-ls-line">
               <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Plan</span>
-              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green', weight: 100 }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
+              {canEdit && (
+              <button onClick={() => create.mutate({ type: 'objective', title: 'New Objective', light: 'green', weight: 100, periodId: selectedPeriodId }, { onSuccess: (row) => { openInEdit(row as unknown as OkrRow); setNewNodeId((row as { id: string }).id); } })}
                 disabled={create.isPending}
                 className="ls-btn ls-btn-primary text-xs py-1.5 px-2.5">+ Objective</button>
+              )}
             </div>
             {isLoading && <div className="px-3 py-3 text-sm text-ls-ink-3">Loading…</div>}
             {!isLoading && rootNodes.map((n) => renderNode(n, 0))}
@@ -759,10 +808,12 @@ export default function Okrs() {
                         {ownerName(n) ?? 'Unassigned'} · {STATUS_LABEL[n.status] ?? n.status}{n.startDate ? ` · ${fmtDate(n.startDate)}` : ''}
                       </div>
                     </div>
+                    {canEdit && (<>
                     <button onClick={() => unarchive.mutate({ id: n.id })} disabled={unarchive.isPending}
                       className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep"><RotateCcw size={13} /> Restore</button>
                     <button onClick={() => deleteNode(n.id)} disabled={remove.isPending}
                       className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-risk"><Trash2 size={13} /> Delete</button>
+                    </>)}
                   </div>
                 ))}
               </div>
@@ -781,6 +832,15 @@ export default function Okrs() {
             {renderDetail()}
           </div>
         </div>
+      )}
+
+      {showPeriodMgr && (
+        <PeriodManager
+          periods={periods}
+          onClose={() => setShowPeriodMgr(false)}
+          onChange={() => { periodsQ.refetch(); refetch(); archivedQ.refetch(); }}
+          onSelect={(id) => setSelectedPeriodId(id)}
+        />
       )}
     </div>
   );
@@ -803,6 +863,94 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div>
       <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">{label}</div>
       <div className="text-ls-ink">{children}</div>
+    </div>
+  );
+}
+
+// ── Admin: create / activate / close goal-setting periods ──
+function PeriodManager({ periods, onClose, onChange, onSelect }: {
+  periods: PeriodRow[]; onClose: () => void; onChange: () => void; onSelect: (id: string) => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [makeCurrent, setMakeCurrent] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const create = trpc.okrPeriods.create.useMutation({
+    onSuccess: (row) => { setLabel(''); setStartDate(''); setEndDate(''); onChange(); if (makeCurrent && row?.id) onSelect(row.id); },
+    onError: (e) => setErr(e.message),
+  });
+  const setCurrent = trpc.okrPeriods.setCurrent.useMutation({ onSuccess: (row) => { onChange(); if (row?.id) onSelect(row.id); }, onError: (e) => setErr(e.message) });
+  const close = trpc.okrPeriods.close.useMutation({ onSuccess: () => onChange(), onError: (e) => setErr(e.message) });
+
+  const submit = () => {
+    setErr(null);
+    if (!label.trim()) { setErr('Give the period a name (e.g. "2027 Goals").'); return; }
+    create.mutate({ label: label.trim(), startDate: startDate || null, endDate: endDate || null, makeCurrent });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-start justify-center p-6 overflow-y-auto" onClick={onClose}>
+      <div className="ls-card bg-ls-surface w-full max-w-2xl p-5 my-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold">Manage goal-setting periods</h2>
+          <button onClick={onClose} className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Close</button>
+        </div>
+
+        {err && <div className="mb-3 text-[12.5px] text-ls-risk border border-ls-risk rounded-md px-3 py-2" style={{ background: '#FBEAE8' }}>{err}</div>}
+
+        <div className="border border-ls-line rounded-md p-3 mb-5">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">New period</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">Name</label>
+              <input className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-active"
+                placeholder="2027 Goals" value={label} onChange={(e) => setLabel(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">Start date</label>
+              <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1">End date</label>
+              <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+          </div>
+          <label className="mt-3 inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={makeCurrent} onChange={(e) => setMakeCurrent(e.target.checked)} />
+            Make this the current period (where new OKRs land)
+          </label>
+          <div className="mt-3">
+            <button onClick={submit} disabled={create.isPending} className="ls-btn ls-btn-primary text-xs py-1.5 px-3">
+              {create.isPending ? 'Creating…' : 'Create period'}</button>
+          </div>
+        </div>
+
+        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-2">Existing periods</div>
+        <div className="space-y-1.5">
+          {periods.map((pd) => (
+            <div key={pd.id} className="flex items-center gap-2 py-2 border-b border-ls-line last:border-0">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate">{pd.label}
+                  {pd.isCurrent && <span className="ml-2 ls-chip bg-ls-blue-50 text-ls-blue-deep">current</span>}
+                  {pd.status === 'closed' && <span className="ml-2 ls-chip" style={{ background: '#EEE', color: '#666' }}>closed</span>}
+                  {pd.status === 'draft' && <span className="ml-2 ls-chip" style={{ background: '#FBF2DC', color: '#C99300' }}>draft</span>}
+                </div>
+              </div>
+              {!pd.isCurrent && (
+                <button onClick={() => setCurrent.mutate({ id: pd.id })} disabled={setCurrent.isPending}
+                  className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5 text-ls-blue-deep">Set current</button>
+              )}
+              {pd.status !== 'closed' && (
+                <button onClick={() => { if (window.confirm(`Close "${pd.label}"? This freezes its scorecard and makes it read-only.`)) close.mutate({ id: pd.id }); }}
+                  disabled={close.isPending}
+                  className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Close</button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

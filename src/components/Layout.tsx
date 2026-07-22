@@ -33,6 +33,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/organization', label: 'Organization', icon: Users },
       { path: '/okrs', label: 'OKRs', icon: Target },
+      { path: '/okr-analytics', label: 'OKR Analytics', icon: BarChart3, minRole: 'manager' },
       { path: '/weekly-plan', label: 'Weekly Plan', icon: CalendarCheck },
     ],
   },

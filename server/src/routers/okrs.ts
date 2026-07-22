@@ -1,9 +1,12 @@
 // OKRs router — flat node list (client builds the tree) + CRUD. (DD-002 Planning)
+// Period-aware (2026-07-22): every query can be scoped to a goal-setting period,
+// and new nodes inherit their parent's period (objectives default to current).
 import { z } from 'zod';
-import { eq, asc, isNull, isNotNull, inArray } from 'drizzle-orm';
+import { eq, and, asc, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { okrNodes } from '../db/schema/okr.js';
+import { okrPeriods } from '../db/schema/okrPeriods.js';
 
 const nodeType = z.enum(['objective', 'key_result', 'task']);
 const light = z.enum(['green', 'yellow', 'red']);
@@ -28,14 +31,36 @@ function subtreeIds(all: { id: string; parentId: string | null }[], rootId: stri
   return out;
 }
 
+// Resolve the period a new node belongs to: inherit the parent's period, else
+// the explicitly requested period, else the current period.
+async function resolvePeriodId(
+  ctx: { db: any },
+  parentId: string | null | undefined,
+  requested: string | null | undefined,
+): Promise<string | null> {
+  if (parentId) {
+    const parent = await ctx.db.query.okrNodes.findFirst({
+      where: eq(okrNodes.id, parentId),
+      columns: { periodId: true },
+    });
+    if (parent?.periodId) return parent.periodId;
+  }
+  if (requested) return requested;
+  const cur = await ctx.db.query.okrPeriods.findFirst({ where: eq(okrPeriods.isCurrent, true) });
+  return cur?.id ?? null;
+}
+
 export const okrsRouter = router({
   // Per-person OKRs for the Org screen card. Matches on ownerUserId (reliable)
   // OR the denormalized owner name (fallback for seed data without a FK).
   byUser: protectedProcedure
-    .input(z.object({ userId: z.string().uuid(), name: z.string().optional() }))
+    .input(z.object({ userId: z.string().uuid(), name: z.string().optional(), periodId: z.string().uuid().optional() }))
     .query(async ({ ctx, input }) => {
+      const where = input.periodId
+        ? and(isNull(okrNodes.archivedAt), eq(okrNodes.periodId, input.periodId))
+        : isNull(okrNodes.archivedAt);
       const all = await ctx.db.query.okrNodes.findMany({
-        where: isNull(okrNodes.archivedAt),
+        where,
         orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
       });
       const mine = (n: typeof all[number]) =>
@@ -51,20 +76,30 @@ export const okrsRouter = router({
       return { hasData: objectives.length > 0, objectives };
     }),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.okrNodes.findMany({
-      where: isNull(okrNodes.archivedAt),
-      orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
-    });
-  }),
+  list: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const where = input?.periodId
+        ? and(isNull(okrNodes.archivedAt), eq(okrNodes.periodId, input.periodId))
+        : isNull(okrNodes.archivedAt);
+      return ctx.db.query.okrNodes.findMany({
+        where,
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+      });
+    }),
 
-  // Archived OKRs for the Archive section.
-  listArchived: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.okrNodes.findMany({
-      where: isNotNull(okrNodes.archivedAt),
-      orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
-    });
-  }),
+  // Archived OKRs for the Archive section (optionally scoped to a period).
+  listArchived: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const where = input?.periodId
+        ? and(isNotNull(okrNodes.archivedAt), eq(okrNodes.periodId, input.periodId))
+        : isNotNull(okrNodes.archivedAt);
+      return ctx.db.query.okrNodes.findMany({
+        where,
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+      });
+    }),
 
   create: protectedProcedure
     .input(z.object({
@@ -74,6 +109,7 @@ export const okrsRouter = router({
       owner: z.string().max(200).nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
+      periodId: z.string().uuid().nullable().optional(),
       status: status.optional(),
       light: light.nullable().optional(),
       startDate: z.string().optional(),
@@ -83,6 +119,7 @@ export const okrsRouter = router({
       weight: z.number().int().min(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const periodId = await resolvePeriodId(ctx, input.parentId ?? null, input.periodId ?? null);
       const [row] = await ctx.db.insert(okrNodes).values({
         parentId: input.parentId ?? null,
         type: input.type,
@@ -90,6 +127,7 @@ export const okrsRouter = router({
         owner: input.owner ?? null,
         ownerUserId: input.ownerUserId ?? null,
         departmentId: input.departmentId ?? null,
+        periodId,
         status: input.status ?? 'not_started',
         light: input.light ?? null,
         startDate: input.startDate ?? new Date().toISOString().slice(0, 10),
@@ -108,6 +146,7 @@ export const okrsRouter = router({
       owner: z.string().max(200).nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
+      periodId: z.string().uuid().nullable().optional(),
       status: status.optional(),
       light: light.nullable().optional(),
       startDate: z.string().nullable().optional(),

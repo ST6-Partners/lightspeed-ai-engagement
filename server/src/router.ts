@@ -23,6 +23,7 @@ import { pipRouter } from './routers/pip.js';
 import { jobTitlesRouter } from './routers/jobTitles.js';
 import { organizationRouter } from './routers/organization.js';
 import { okrsRouter } from './routers/okrs.js';
+import { okrPeriodsRouter } from './routers/okrPeriods.js';
 import { orgScreenRouter } from './routers/orgScreen.js';
 import { weeklyPlanRouter } from './routers/weeklyPlan.js';
 import { exitSurveyRouter } from './routers/exitSurvey.js';
@@ -68,6 +69,7 @@ export const appRouter = router({
   jobTitles: jobTitlesRouter,
   organization: organizationRouter,
   okrs: okrsRouter,
+  okrPeriods: okrPeriodsRouter,
   orgScreen: orgScreenRouter,
   weeklyPlan: weeklyPlanRouter,
   oneOnOne: oneOnOneRouter,

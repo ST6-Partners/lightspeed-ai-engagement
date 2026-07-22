@@ -11,6 +11,7 @@ import PipDetail from './pages/PipDetail';
 import { JobTitles, Departments, Employees, ManagerSurveyQuestions, ManagerRatingScale, OrgData, CompanyValues, PerformanceCriteria, CheckinQuestions, Assessments, PeerReviewQuestions, EngagementQuestions } from './pages/admin';
 import Organization from './pages/Organization';
 import Okrs from './pages/Okrs';
+import OkrAnalytics from './pages/OkrAnalytics';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
@@ -36,6 +37,7 @@ export default function App() {
         {/* Planning */}
         <Route path="/organization" element={<Organization />} />
         <Route path="/okrs" element={<Okrs />} />
+        <Route path="/okr-analytics" element={<OkrAnalytics />} />
         <Route path="/weekly-plan" element={<WeeklyPlan />} />
         {/* Engagement */}
         <Route path="/check-ins" element={<CheckIns />} />

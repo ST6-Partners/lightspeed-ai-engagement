@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 import { departments } from './departments.js';
+import { okrPeriods } from './okrPeriods.js';
 
 export const okrNodes = pgTable('okr_nodes', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -22,6 +23,9 @@ export const okrNodes = pgTable('okr_nodes', {
   ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
   // Optional explicit team tag (department). Independent of the owner's team.
   departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
+  // Goal-setting cycle this node belongs to. Set on objectives and inherited
+  // by descendants at create time; used by the period selector + scorecard.
+  periodId: uuid('period_id').references(() => okrPeriods.id, { onDelete: 'set null' }),
   status: varchar('status', { length: 24 }).notNull().default('not_started'),
     // 'not_started' | 'in_progress' | 'on_hold' | 'complete'
   light: varchar('light', { length: 8 }),                 // 'green' | 'yellow' | 'red' (outcomes only)

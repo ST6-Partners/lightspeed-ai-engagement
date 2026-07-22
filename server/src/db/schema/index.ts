@@ -41,6 +41,7 @@ export {
 
 // New surfaces (DD-002): Planning + Engagement backends
 export { okrNodes } from './okr.js';
+export { okrPeriods } from './okrPeriods.js';
 export { weeklyCheckins } from './weeklyPlan.js';
 export { exitSurveys } from './exitSurvey.js';
 
