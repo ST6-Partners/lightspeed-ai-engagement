@@ -400,15 +400,15 @@ export default function WeeklyPlan() {
               return (
                 <div key={wk.weekStart} className="py-2 first:pt-0 last:pb-0">
                   <button onClick={() => toggleWeek(wk.weekStart)}
-                    className="w-full flex items-center justify-between text-left"
+                    className="w-full flex items-center gap-2 text-left hover:text-ls-ink-2 group"
                     aria-expanded={open}>
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">
+                    <span className="text-ls-ink-3 text-xs shrink-0 w-3 group-hover:text-ls-blue-deep">{open ? '▾' : '▸'}</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 group-hover:text-ls-blue-deep">
                       {wk.weekStart === weekStart ? 'This week' : `Week of ${wk.weekStart}`}
-                      <span className="ml-2 text-ls-ink-3/70 font-medium normal-case tracking-normal">
-                        {wk.items.length} completed
-                      </span>
                     </span>
-                    <span className="text-ls-ink-3 text-sm shrink-0">{open ? '▾' : '▸'}</span>
+                    <span className="text-[11px] text-ls-ink-3/70 font-medium normal-case tracking-normal">
+                      · {wk.items.length} completed
+                    </span>
                   </button>
                   {open && (
                     <ul className="space-y-1 mt-2">
