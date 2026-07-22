@@ -9,6 +9,7 @@ import {
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../../server/src/router';
 import { DRIVERS, DRIVER_LABEL, QUESTION_TEXT, type DriverKey } from '../../lib/engagementSurvey';
+import { trpc } from '../../lib/trpc';
 
 type Results = inferRouterOutputs<AppRouter>['engagementAnalytics']['results'];
 export type AnalyticsData = Extract<Results, { hasData: true }>;
@@ -42,6 +43,16 @@ function DeltaChip({ delta }: { delta: number | null | undefined }) {
 // ---------------- SUMMARY ----------------
 export function ResultsSummary({ data }: { data: AnalyticsData }) {
   const c = data.company;
+  const recs = trpc.engagementAnalytics.recommendations.useMutation();
+  const generateRecs = () => recs.mutate({
+    periodLabel: c.label,
+    scopeLabel: data.selectedDepartment ?? 'All departments',
+    overallFavorablePct: c.favorablePct,
+    drivers: data.drivers.map((d) => ({ label: DRIVER_LABEL[d.key as DriverKey] ?? d.key, favorablePct: d.favorablePct })),
+    lowlights: [...data.questions].filter((q) => q.favorablePct != null)
+      .sort((a, b) => (a.favorablePct ?? 0) - (b.favorablePct ?? 0)).slice(0, 6)
+      .map((q) => ({ text: q.text ?? QUESTION_TEXT[q.id] ?? q.id, favorablePct: q.favorablePct })),
+  });
   const trend = c.trend.map((t) => ({ label: t.label, favorable: t.favorablePct == null ? null : Math.round(t.favorablePct) }));
   const ranked = [...data.questions].filter((q) => q.favorablePct != null).sort((a, b) => (b.favorablePct ?? 0) - (a.favorablePct ?? 0));
   const celebrate = ranked.slice(0, 5);
@@ -115,6 +126,21 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="ls-card p-5 border-l-4 border-ls-blue">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+          <h3 className="font-bold">Recommended actions <span className="text-[12px] font-normal text-ls-ink-3">· AI · {data.selectedDepartment ?? 'All departments'} · {c.label}</span></h3>
+          <button onClick={generateRecs} disabled={recs.isPending}
+            className="ls-btn ls-btn-primary disabled:opacity-50">
+            {recs.isPending ? 'Analyzing…' : recs.data ? 'Regenerate' : 'Generate recommendations'}
+          </button>
+        </div>
+        <p className="text-[12px] text-ls-ink-3 mb-2">AI-suggested focus areas from the results shown above. Reflects the selected period and team.</p>
+        {recs.isError && <div className="ls-chip bg-ls-risk-bg text-ls-risk">Couldn’t generate — try again.</div>}
+        {recs.data
+          ? <div className="text-[13.5px] text-ls-ink-2 whitespace-pre-line leading-relaxed">{recs.data.recommendations}{recs.data.source === 'fallback' && <div className="text-[11px] text-ls-ink-3 mt-2">(Generated without AI — set ANTHROPIC_API_KEY for richer suggestions.)</div>}</div>
+          : !recs.isPending && <div className="text-[13px] text-ls-ink-3">Click “Generate recommendations” for AI-suggested focus areas based on these results.</div>}
       </div>
     </div>
   );

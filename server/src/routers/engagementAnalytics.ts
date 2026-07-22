@@ -10,6 +10,8 @@ import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { z } from 'zod';
+import { generateText } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
 
 type DriverKey =
@@ -514,4 +516,51 @@ export const engagementAnalyticsRouter = router({
         individual,
       };
     }),
+
+  // ── AI recommended action areas (Summary tab, on-demand) ─────────────────
+  // Takes the on-screen summary (already scoped to the selected period + team)
+  // and asks Claude for concrete focus areas. Falls back to a rule-based list if
+  // no API key is configured. Aggregate-only — no individual data is involved.
+  recommendations: protectedProcedure
+    .input(z.object({
+      periodLabel: z.string().max(120),
+      scopeLabel: z.string().max(120),
+      overallFavorablePct: z.number().nullable().optional(),
+      drivers: z.array(z.object({ label: z.string().max(80), favorablePct: z.number().nullable() })).max(40),
+      lowlights: z.array(z.object({ text: z.string().max(400), favorablePct: z.number().nullable() })).max(20).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const ranked = [...input.drivers].filter((d) => d.favorablePct != null)
+        .sort((a, b) => (a.favorablePct ?? 0) - (b.favorablePct ?? 0));
+      const weakest = ranked.slice(0, 4);
+      const lines = [
+        `Survey: ${input.periodLabel} — ${input.scopeLabel}.`,
+        input.overallFavorablePct != null ? `Overall favorability: ${input.overallFavorablePct}%.` : '',
+        weakest.length ? `Lowest-scoring drivers: ${weakest.map((d) => `${d.label} (${d.favorablePct}%)`).join(', ')}.` : '',
+        (input.lowlights && input.lowlights.length)
+          ? `Lowest-scoring statements: ${input.lowlights.slice(0, 6).map((q) => `"${q.text}" (${q.favorablePct}%)`).join('; ')}.` : '',
+      ].filter(Boolean).join('\n');
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (apiKey) {
+        try {
+          const anthropic = createAnthropic({ apiKey });
+          const result = await generateText({
+            model: anthropic('claude-sonnet-4-6'),
+            system: 'You are an experienced HR / people-operations advisor. From aggregate engagement-survey results, recommend 3–5 SPECIFIC, actionable focus areas a manager or HR team could act on in the next quarter. Ground each recommendation in the data provided (name the driver/theme and its score). Be concrete and concise — one short paragraph or a tight bullet each, no preamble, no restating the numbers back verbatim. Never reference or infer any individual person.',
+            prompt: `Here are the engagement results to act on:\n${lines}\n\nGive the recommended focus areas.`,
+            maxOutputTokens: 700,
+          });
+          return { source: 'ai' as const, recommendations: result.text.trim() };
+        } catch {
+          // fall through to rule-based
+        }
+      }
+      // Rule-based fallback (no API key / API error)
+      const fb = weakest.length
+        ? weakest.map((d) => `• Focus on ${d.label} — favorability is ${d.favorablePct}%, among the lowest. Run listening sessions with affected teams and identify one concrete change to pilot.`).join('\n')
+        : 'Not enough data yet to recommend focus areas — collect more responses first.';
+      return { source: 'fallback' as const, recommendations: fb };
+    }),
+
 });
