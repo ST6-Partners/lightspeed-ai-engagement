@@ -9,7 +9,7 @@ function cellTint(box: number): string {
   return ['#fdecec', '#fdeede', '#fcf6e3', '#eef7ec', '#e6f5ea'][sum];
 }
 
-export default function NineBox({ people, scope, canPlace }: { people: Person[]; scope?: 'individual' | 'directs' | 'descendants'; canPlace?: (id: string) => boolean }) {
+export default function NineBox({ people, scope, canPlace }: { people: Person[]; scope?: 'individual' | 'directs' | 'descendants' | 'organization'; canPlace?: (id: string) => boolean }) {
   const ids = people.map((p) => p.id);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids }, { enabled: ids.length > 0 });

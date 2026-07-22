@@ -10,7 +10,7 @@ export type Person = {
   role: string;
 };
 
-export type Scope = 'individual' | 'directs' | 'descendants';
+export type Scope = 'individual' | 'directs' | 'descendants' | 'organization';
 export type TabKey = 'priorities' | 'okrs' | 'engagement' | 'assessments' | 'review' | 'ninebox';
 
 // Spec §12 tokens (carried verbatim where precise).

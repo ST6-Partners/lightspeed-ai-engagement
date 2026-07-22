@@ -26,6 +26,7 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: 'individual', label: 'Individual' },
   { key: 'directs', label: 'Directs' },
   { key: 'descendants', label: 'Team' },
+  { key: 'organization', label: 'Organization' },
 ];
 
 const ls = {
@@ -39,6 +40,10 @@ export default function Organization() {
   const role = (me as { role?: string } | undefined)?.role ?? 'user';
   const meId = (me as { id?: string } | undefined)?.id ?? null;
   const meHr = (me as { isHrAccess?: boolean } | undefined)?.isHrAccess ?? false;
+  const meBadge = (me as { leaderBadge?: string | null } | undefined)?.leaderBadge ?? null;
+  // Company-wide (Organization) scope is limited to admins, ELT, and HR.
+  const canSeeCompanyWide = role === 'admin' || role === 'sysadmin' || meHr || meBadge === 'ELT';
+  const visibleScopes = SCOPES.filter((sc) => sc.key !== 'organization' || canSeeCompanyWide);
   // Who the current viewer may PLACE on the 9 Box: admins, HR, and anyone in a
   // person's PRIMARY-manager chain (their primary manager or above). Mirrors the
   // server rule so the grid only shows a placement affordance where it will work.
@@ -96,6 +101,9 @@ export default function Organization() {
   const select = (id: string) => { setSelectedId(id); ls.set('org.selected', id); };
   const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
   const chooseTab = (t: TabKey) => { setTab(t); ls.set('org.tab', t); };
+  useEffect(() => {
+    if (scope === 'organization' && !canSeeCompanyWide) { setScope('individual'); ls.set('org.scope', 'individual'); }
+  }, [canSeeCompanyWide, scope]);
 
   // Resizable split between the org tree (left) and the card/9-box body (right).
   const [treeW, setTreeW] = useState<number>(() => {
@@ -126,11 +134,12 @@ export default function Organization() {
 
   // In-scope people (spec §6).
   const scoped: Person[] = useMemo(() => {
+    if (scope === 'organization') return people;
     if (!selected) return [];
     if (scope === 'individual') return [selected];
     if (scope === 'directs') return directsOf(maps, selected.id);
     return descendantsOf(maps, selected.id);
-  }, [selected, scope, maps]);
+  }, [selected, scope, maps, people]);
 
   // Team scope → depth-banded groups.
   const banded = useMemo(() => {
@@ -161,7 +170,7 @@ export default function Organization() {
             {/* Scope header */}
             <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}` }}>
               <div className="inline-flex rounded-lg p-0.5" style={{ background: '#eef0f2' }}>
-                {SCOPES.map((s) => (
+                {visibleScopes.map((s) => (
                   <button key={s.key} onClick={() => chooseScope(s.key)}
                     className="text-[12px] font-medium rounded-md px-3 py-1"
                     style={scope === s.key ? { background: '#fff', color: TOKENS.activeText, boxShadow: '0 1px 2px rgba(0,0,0,.08)' } : { color: '#6c757d' }}>
@@ -206,10 +215,10 @@ export default function Organization() {
             </div>
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
-              {!selected ? (
-                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
-              ) : tab === 'ninebox' ? (
+              {tab === 'ninebox' ? (
                 <NineBox people={scoped} scope={scope} canPlace={canPlace} />
+              ) : (!selected && scope !== 'organization') ? (
+                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
               ) : banded ? (
