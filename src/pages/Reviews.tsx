@@ -16,7 +16,7 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 // ============================================================
 
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import ManagerSurvey from './ManagerSurvey';
 import PeerReview from './PeerReview';
@@ -943,7 +943,14 @@ function PrivateNotesSection({ employeeId }: { employeeId: string }) {
 // Consolidates the three former Engagement nav items. 2026-07-21 (bf).
 // ============================================================
 export default function Reviews() {
-  const [tab, setTab] = useState<'reviews' | 'manager' | 'peer'>('reviews');
+  // Tab is URL-addressable (?tab=manager|peer) so the sidebar dropdown can
+  // deep-link to a specific instrument. Absent/unknown param → Reviews.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const param = searchParams.get('tab');
+  const tab: 'reviews' | 'manager' | 'peer' =
+    param === 'manager' || param === 'peer' ? param : 'reviews';
+  const setTab = (next: 'reviews' | 'manager' | 'peer') =>
+    setSearchParams(next === 'reviews' ? {} : { tab: next });
   const tabs: Array<['reviews' | 'manager' | 'peer', string]> = [
     ['reviews', 'Reviews'], ['manager', 'Manager Review'], ['peer', 'Peer Review'],
   ];

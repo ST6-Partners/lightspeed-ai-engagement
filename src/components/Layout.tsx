@@ -9,14 +9,15 @@ import {
   Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
-  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3} from 'lucide-react';
+  UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3,
+  ChevronDown, ChevronRight} from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
 type RoleTier = 'user' | 'manager' | 'admin' | 'sysadmin';
-type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier };
+type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier; children?: { path: string; label: string }[] };
 type NavGroup = { label: string | null; items: NavItem[] };
 
 // Information architecture per DD-002
@@ -42,7 +43,11 @@ const navGroups: NavGroup[] = [
     // Order mirrors the Documents → Overview chart's Engagement row.
     items: [
       { path: '/check-ins', label: 'Pulses', icon: MessageCircle },
-      { path: '/reviews', label: 'Reviews', icon: Star },
+      { path: '/reviews', label: 'Reviews', icon: Star, children: [
+        { path: '/reviews?tab=reviews', label: 'Reviews' },
+        { path: '/reviews?tab=manager', label: 'Manager Review' },
+        { path: '/reviews?tab=peer', label: 'Peer Review' },
+      ] },
       { path: '/development', label: 'Development', icon: HeartHandshake },
       { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
     ],
@@ -51,7 +56,20 @@ const navGroups: NavGroup[] = [
     label: 'Documents',
     items: [
       { path: '/documents/overview', label: 'Overview', icon: FileText },
-      { path: '/core-data', label: 'Core Data', icon: Database },
+      { path: '/core-data', label: 'Core Data', icon: Database, children: [
+        { path: '/core-data/employees', label: 'Employees' },
+        { path: '/core-data/job-titles', label: 'Job Titles' },
+        { path: '/core-data/departments', label: 'Departments' },
+        { path: '/core-data/survey-questions', label: 'Survey Questions' },
+        { path: '/core-data/peer-review-questions', label: 'Peer Review Questions' },
+        { path: '/core-data/rating-scale', label: 'Rating Scale' },
+        { path: '/core-data/org-data', label: 'Org Data' },
+        { path: '/core-data/values', label: 'Company Values' },
+        { path: '/core-data/performance-criteria', label: 'Performance Criteria' },
+        { path: '/core-data/checkin-questions', label: 'Check-in Questions' },
+        { path: '/core-data/engagement-questions', label: 'Engagement Questions' },
+        { path: '/core-data/assessments', label: 'Assessments' },
+      ] },
     ],
   },
   {
@@ -74,6 +92,16 @@ export default function Layout() {
     const n = !v;
     try { localStorage.setItem('nav.collapsed', n ? '1' : '0'); } catch { /* noop */ }
     return n;
+  });
+
+  // Per-parent expand state for sidebar dropdowns (Reviews, Core Data).
+  const [navExpanded, setNavExpanded] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('nav.expanded') || '{}'); } catch { return {}; }
+  });
+  const toggleExpand = (path: string) => setNavExpanded((prev) => {
+    const next = { ...prev, [path]: !(prev[path] ?? false) };
+    try { localStorage.setItem('nav.expanded', JSON.stringify(next)); } catch { /* noop */ }
+    return next;
   });
 
   const { data: user, isLoading } = trpc.auth.me.useQuery();
@@ -109,6 +137,19 @@ export default function Layout() {
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+
+  // A sub-page link is active when the pathname matches; for the query-driven
+  // Reviews tabs, also compare the ?tab= value (absent tab === 'reviews').
+  const isChildActive = (childPath: string) => {
+    const [pathOnly, query] = childPath.split('?');
+    const cur = location.pathname;
+    if (query) {
+      const want = new URLSearchParams(query).get('tab');
+      const have = new URLSearchParams(location.search).get('tab') ?? 'reviews';
+      return cur === pathOnly && have === want;
+    }
+    return cur === pathOnly || cur.startsWith(pathOnly + '/');
+  };
 
   if (isLoading || !user) {
     return (
@@ -159,20 +200,79 @@ export default function Layout() {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
+                const hasChildren = !!item.children?.length;
+
+                // Plain link: leaf items, or any item while the sidebar is collapsed.
+                if (!hasChildren || navCollapsed) {
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      title={navCollapsed ? item.label : undefined}
+                      className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'} px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-colors ${
+                        active
+                          ? 'bg-ls-active text-white font-medium shadow-[0_4px_14px_rgba(79,169,214,.3)]'
+                          : 'text-[#B9C3CB] hover:bg-[#323D46] hover:text-white'
+                      }`}
+                    >
+                      <Icon size={18} className={active ? 'opacity-100' : 'opacity-85'} />
+                      {!navCollapsed && item.label}
+                    </Link>
+                  );
+                }
+
+                // Dropdown parent: name links to the hub page; the chevron to the
+                // right of the name expands/collapses the sub-page list. Auto-open
+                // when the section is active; manual toggle persists in localStorage.
+                const expanded = navExpanded[item.path] ?? active;
                 return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    title={navCollapsed ? item.label : undefined}
-                    className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'} px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-colors ${
-                      active
-                        ? 'bg-ls-active text-white font-medium shadow-[0_4px_14px_rgba(79,169,214,.3)]'
-                        : 'text-[#B9C3CB] hover:bg-[#323D46] hover:text-white'
-                    }`}
-                  >
-                    <Icon size={18} className={active ? 'opacity-100' : 'opacity-85'} />
-                    {!navCollapsed && item.label}
-                  </Link>
+                  <div key={item.path} className="mb-0.5">
+                    <div
+                      className={`flex items-center gap-1 pr-1 rounded-lg transition-colors ${
+                        active
+                          ? 'bg-ls-active text-white font-medium shadow-[0_4px_14px_rgba(79,169,214,.3)]'
+                          : 'text-[#B9C3CB] hover:bg-[#323D46] hover:text-white'
+                      }`}
+                    >
+                      <Link
+                        to={item.path}
+                        className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm flex-1 min-w-0"
+                      >
+                        <Icon size={18} className={active ? 'opacity-100' : 'opacity-85'} />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(item.path)}
+                        aria-label={expanded ? `Collapse ${item.label}` : `Expand ${item.label}`}
+                        aria-expanded={expanded}
+                        className="p-1 rounded-md hover:bg-black/15 shrink-0"
+                      >
+                        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-0.5 ml-3 pl-3 border-l border-[#36424B] flex flex-col">
+                        {item.children!.map((child) => {
+                          const cActive = isChildActive(child.path);
+                          return (
+                            <Link
+                              key={child.path}
+                              to={child.path}
+                              className={`px-2.5 py-1.5 rounded-lg text-[13px] mb-0.5 transition-colors ${
+                                cActive
+                                  ? 'bg-ls-active/90 text-white font-medium'
+                                  : 'text-[#9FAAB3] hover:bg-[#323D46] hover:text-white'
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
