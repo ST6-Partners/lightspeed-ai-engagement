@@ -191,7 +191,11 @@ export const okrPeriodsRouter = router({
       const period = await ctx.db.query.okrPeriods.findFirst({ where: eq(okrPeriods.id, input.periodId) });
       if (!period) throw new TRPCError({ code: 'NOT_FOUND' });
       if (period.status === 'closed' && period.scorecard && !input.refresh) {
-        return period.scorecard as PeriodScorecard;
+        const snap = period.scorecard as PeriodScorecard;
+        // Older frozen snapshots predate the Plan tree — recompute it live so the
+        // Plan tab still renders (the frozen company/team numbers are preserved).
+        if (!snap.plan) snap.plan = (await computeForPeriod(ctx, input.periodId)).plan;
+        return snap;
       }
       return computeForPeriod(ctx, input.periodId);
     }),

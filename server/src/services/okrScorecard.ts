@@ -3,9 +3,11 @@
 //
 // Given the OKR nodes belonging to one goal-setting period, compute the
 // "Period Scorecard": company attainment, a per-team leaderboard, the
-// met/partial/missed distribution, and integrity + hygiene flags. Pure and
-// deterministic so it is unit-testable and produces a stable JSON snapshot to
-// freeze into okr_periods.scorecard when a period is closed.
+// met/partial/missed distribution, integrity + hygiene flags, AND a full
+// `plan` tree (every objective with its key results and tasks, each annotated
+// with status, attainment, and sibling weight-%) that powers the Plan view.
+// Pure and deterministic so it is unit-testable and produces a stable JSON
+// snapshot to freeze into okr_periods.scorecard when a period is closed.
 //
 // Attainment mirrors the Plan view's weighted rollup: a leaf reads its status
 // (complete = 100, in_progress = 50, else 0); a parent is the weight-weighted
@@ -22,6 +24,7 @@ export interface OkrNodeLite {
   departmentId: string | null;
   ownerUserId: string | null;
   owner: string | null;
+  sortOrder?: number;         // display order within a sibling group
   archivedAt?: unknown;       // non-null => excluded from the scorecard
 }
 
@@ -47,6 +50,34 @@ export interface ScorecardFlag {
   team: string;
 }
 
+// ── Plan tree (drill-down: objective -> key results -> tasks) ──
+export type PlanStatus = 'met' | 'partial' | 'missed';
+
+export interface PlanNode {
+  id: string;
+  title: string;
+  type: string;               // 'key_result' | 'task'
+  rawStatus: string;          // 'not_started' | 'in_progress' | 'on_hold' | 'complete'
+  statusLabel: string;        // 'Done' | 'In progress' | 'On hold' | 'Not started'
+  attainmentPct: number;      // 0..100 weighted rollup for this node
+  weightPct: number;          // this node's share of its siblings' weight (0..100)
+  children: PlanNode[];
+}
+
+export interface PlanObjective {
+  id: string;
+  title: string;
+  owner: string | null;
+  team: string;
+  attainmentPct: number;      // 0..100 weighted rollup
+  status: PlanStatus;
+  markedComplete: boolean;    // objective.status === 'complete'
+  hasOpenChildren: boolean;   // a descendant KR/task is not complete (integrity signal)
+  noOwnerOrTeam: boolean;     // no owner and no team (hygiene signal)
+  weightPct: number;          // this objective's share of all objectives' weight
+  children: PlanNode[];
+}
+
 export interface PeriodScorecard {
   generatedAt: string;
   objectiveCount: number;
@@ -58,12 +89,25 @@ export interface PeriodScorecard {
   bottomTeam: ScorecardTeam | null;
   integrityFlags: ScorecardFlag[];   // objective marked complete while a child KR/task is not
   hygieneFlags: ScorecardFlag[];     // objective with neither owner nor team
+  plan: PlanObjective[];             // full objective -> KR -> task breakdown
   narrative?: string | null;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const statusPct = (status: string) =>
   status === 'complete' ? 100 : status === 'in_progress' ? 50 : 0;
+
+const STATUS_LABEL: Record<string, string> = {
+  complete: 'Done',
+  in_progress: 'In progress',
+  on_hold: 'On hold',
+  not_started: 'Not started',
+};
+const statusLabelOf = (s: string) => STATUS_LABEL[s] ?? 'Not started';
+
+// Stable display order within a sibling group.
+const bySort = (a: OkrNodeLite, b: OkrNodeLite) =>
+  (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title);
 
 /** Weight-weighted rollup of a node's completion (0..100). Mirrors the UI. */
 export function attainmentOf(node: OkrNodeLite, childrenByParent: Map<string | null, OkrNodeLite[]>): number {
@@ -84,6 +128,22 @@ function descendants(node: OkrNodeLite, childrenByParent: Map<string | null, Okr
     stack.push(...(childrenByParent.get(n.id) ?? []));
   }
   return out;
+}
+
+/** Build the plan sub-tree for a parent id (key results, then their tasks). */
+function buildPlanChildren(parentId: string, childrenByParent: Map<string | null, OkrNodeLite[]>): PlanNode[] {
+  const kids = [...(childrenByParent.get(parentId) ?? [])].sort(bySort);
+  const totW = kids.reduce((a, k) => a + (k.weight || 1), 0) || 1;
+  return kids.map((k) => ({
+    id: k.id,
+    title: k.title,
+    type: k.type,
+    rawStatus: k.status,
+    statusLabel: statusLabelOf(k.status),
+    attainmentPct: round1(attainmentOf(k, childrenByParent)),
+    weightPct: Math.round(((k.weight || 1) / totW) * 100),
+    children: buildPlanChildren(k.id, childrenByParent),
+  }));
 }
 
 /**
@@ -171,9 +231,31 @@ export function computeScorecard(
   }
 
   // Hygiene: objective with neither an owner nor a team.
+  const noOwnerOrTeam = (s: typeof scored[number]) =>
+    !s.node.ownerUserId && !(s.node.owner && s.node.owner.trim()) && !s.node.departmentId;
   const hygieneFlags: ScorecardFlag[] = scored
-    .filter((s) => !s.node.ownerUserId && !(s.node.owner && s.node.owner.trim()) && !s.node.departmentId)
+    .filter(noOwnerOrTeam)
     .map((s) => ({ id: s.node.id, title: s.node.title, team: s.team }));
+
+  // Plan tree: objectives in display order, each with its KR/task sub-tree.
+  const plan: PlanObjective[] = [...scored]
+    .sort((a, b) => bySort(a.node, b.node))
+    .map((s) => {
+      const kids = descendants(s.node, childrenByParent);
+      return {
+        id: s.node.id,
+        title: s.node.title,
+        owner: s.node.owner ?? null,
+        team: s.team,
+        attainmentPct: round1(s.attainment),
+        status: (s.attainment >= 100 ? 'met' : s.attainment > 0 ? 'partial' : 'missed') as PlanStatus,
+        markedComplete: s.node.status === 'complete',
+        hasOpenChildren: kids.some((k) => k.status !== 'complete'),
+        noOwnerOrTeam: noOwnerOrTeam(s),
+        weightPct: Math.round(((s.node.weight || 1) / totW) * 100),
+        children: buildPlanChildren(s.node.id, childrenByParent),
+      };
+    });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -186,6 +268,7 @@ export function computeScorecard(
     bottomTeam,
     integrityFlags,
     hygieneFlags,
+    plan,
     narrative: null,
   };
 }
