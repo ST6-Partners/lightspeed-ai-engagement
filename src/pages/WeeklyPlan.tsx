@@ -1,6 +1,6 @@
 // Weekly Plan — live, per-user weekly check-in (DD-002 Planning). No scoring, no lock.
 import { useEffect, useRef, useState } from 'react';
-import { Hand, Link2, X, Trash2, Pencil, Archive } from 'lucide-react';
+import { Hand, Link2, X, Trash2, Pencil, Archive, ChevronRight, ChevronDown } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
 import { fireConfetti } from '../lib/confetti';
@@ -364,7 +364,9 @@ export default function WeeklyPlan() {
           <button onClick={() => setPastOpen((v) => !v)}
             className="w-full flex items-center justify-between group" aria-expanded={pastOpen}>
             <span className="flex items-center gap-2">
-              <span className="text-ls-ink-3 text-xs w-3 group-hover:text-ls-blue-deep">{pastOpen ? '▾' : '▸'}</span>
+              {pastOpen
+                ? <ChevronDown size={20} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />
+                : <ChevronRight size={20} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />}
               <span className="font-bold">Past priorities</span>
             </span>
             <span className="ls-chip bg-ls-watch-bg text-ls-watch">Carried over</span>
@@ -404,7 +406,9 @@ export default function WeeklyPlan() {
         <section className="ls-card p-5 mt-4">
           <button onClick={() => setCompletedOpen((v) => !v)}
             className="w-full flex items-center gap-2 group mb-2" aria-expanded={completedOpen}>
-            <span className="text-ls-ink-3 text-xs w-3 group-hover:text-ls-blue-deep">{completedOpen ? '▾' : '▸'}</span>
+            {completedOpen
+              ? <ChevronDown size={20} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />
+              : <ChevronRight size={20} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />}
             <span className="font-bold">Completed priorities</span>
           </button>
           {completedOpen && (
@@ -416,7 +420,9 @@ export default function WeeklyPlan() {
                   <button onClick={() => toggleWeek(wk.weekStart)}
                     className="w-full flex items-center gap-2 text-left hover:text-ls-ink-2 group"
                     aria-expanded={open}>
-                    <span className="text-ls-ink-3 text-xs shrink-0 w-3 group-hover:text-ls-blue-deep">{open ? '▾' : '▸'}</span>
+                    {open
+                      ? <ChevronDown size={16} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />
+                      : <ChevronRight size={16} className="text-ls-ink-3 shrink-0 group-hover:text-ls-blue-deep" />}
                     <span className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 group-hover:text-ls-blue-deep">
                       {wk.weekStart === weekStart ? 'This week' : `Week of ${wk.weekStart}`}
                     </span>
