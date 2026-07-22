@@ -59,7 +59,7 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', leaderBadge: '', isActive: true, isBeta: false };
+  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
@@ -69,8 +69,11 @@ export default function Employees() {
     setEditForm({
       name: u.name ?? '', email: u.email ?? '', role: u.role ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
-      managerId: u.managerId ?? '', leaderBadge: u.leaderBadge ?? '',
-      isActive: !!u.isActive, isBeta: !!u.isBeta,
+      managerId: u.managerId ?? '',
+      managerIds: (u.managerIds ?? (u.managerId ? [u.managerId] : [])) as string[],
+      primaryManagerId: u.managerId ?? '',
+      leaderBadge: u.leaderBadge ?? '',
+      isActive: !!u.isActive, isBeta: !!u.isBeta, isHrAccess: !!u.isHrAccess,
     });
     setEditUser(u);
   };
@@ -89,10 +92,12 @@ export default function Employees() {
       role: editForm.role as any,
       jobTitleId: editForm.jobTitleId || null,
       departmentId: editForm.departmentId || null,
-      managerId: editForm.managerId || null,
+      managerIds: editForm.managerIds,
+      primaryManagerId: editForm.primaryManagerId || null,
       leaderBadge: (editForm.leaderBadge || null) as any,
       isActive: editForm.isActive,
       isBeta: editForm.isBeta,
+      isHrAccess: editForm.isHrAccess,
     } as any);
   };
 
@@ -369,12 +374,38 @@ export default function Employees() {
                   {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-gray-600">Manager
-                <select value={editForm.managerId} onChange={(e) => ef({ managerId: e.target.value })}
+              <div className="text-xs text-gray-600 sm:col-span-2 lg:col-span-3">Managers
+                <div className="mt-1 max-h-40 overflow-auto rounded border border-gray-300 p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-1">
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id).map((m: any) => {
+                    const checked = editForm.managerIds.includes(m.id);
+                    return (
+                      <label key={m.id} className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...editForm.managerIds, m.id]
+                              : editForm.managerIds.filter((x) => x !== m.id);
+                            const primary = next.includes(editForm.primaryManagerId) ? editForm.primaryManagerId : (next[0] ?? '');
+                            ef({ managerIds: next, primaryManagerId: primary });
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="truncate">{nameById.get(m.id)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <span className="mt-1 block text-[11px] text-gray-400">Pick one or more. The primary manager (below) is the one who can place them on the 9 Box.</span>
+              </div>
+              <label className="text-xs text-gray-600">Primary manager
+                <select value={editForm.primaryManagerId} onChange={(e) => ef({ primaryManagerId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">— (top of tree)</option>
-                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+                  {editForm.managerIds.map((mid) => <option key={mid} value={mid}>{nameById.get(mid)}</option>)}
                 </select>
+              </label>
+              <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
+                <input type="checkbox" checked={editForm.isHrAccess} onChange={(e) => ef({ isHrAccess: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> HR access (company-wide view)
               </label>
               <label className="text-xs text-gray-600">Leader badge
                 <select value={editForm.leaderBadge} onChange={(e) => ef({ leaderBadge: e.target.value })}

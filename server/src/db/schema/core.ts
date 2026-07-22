@@ -13,7 +13,7 @@
 //     per-app). The library authenticates; this column authorizes.
 // ============================================================
 
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { jobTitles } from './jobTitles.js';
 import { departments } from './departments.js';
 
@@ -45,6 +45,7 @@ export const users = pgTable('users', {
   role: varchar('role', { length: 20 }).notNull().default('user'),
     // 'user' | 'manager' | 'admin' | 'sysadmin'
   isBeta: boolean('is_beta').notNull().default(false),
+  isHrAccess: boolean('is_hr_access').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true),
   timezone: varchar('timezone', { length: 100 }),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
@@ -84,3 +85,11 @@ export const screenInventory = pgTable('screen_inventory', {
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Additional managers (matrixed / dotted-line). `users.managerId` stays the
+// PRIMARY manager — the org tree groups a person under their primary. This join
+// table holds the FULL set of a person's managers (including the primary).
+export const userManagers = pgTable('user_managers', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  managerId: uuid('manager_id').notNull().references((): AnyPgColumn => users.id, { onDelete: 'cascade' }),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.managerId] }) }));

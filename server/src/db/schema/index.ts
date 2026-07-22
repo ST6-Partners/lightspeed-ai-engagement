@@ -4,7 +4,7 @@
 // Core (4 tables)
 // Sessions are stored in Postgres via connect-pg-simple (the
 // `auth_sessions` table, created on first run by getSessionMiddleware).
-export { users, userPreferences, appSettings, screenInventory } from './core.js';
+export { users, userManagers, userPreferences, appSettings, screenInventory } from './core.js';
 
 // Feedback (4 tables) — SC-002 feedback + AI review + agent (SC-034)
 export { feedback, feedbackAttachments, feedbackReviewAttempts, agentRuns } from './feedback.js';

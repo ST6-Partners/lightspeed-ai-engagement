@@ -505,6 +505,13 @@
       "when": 1784663827051,
       "tag": "0070_ninebox_demo_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1784663887051,
+      "tag": "0071_multi_manager_hr_access",
+      "breakpoints": true
     }
   ]
 }

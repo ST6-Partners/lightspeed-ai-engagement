@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { users } from '../db/schema/core.js';
+import { users, userManagers } from '../db/schema/core.js';
 import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
@@ -204,14 +204,24 @@ export const authRouter = router({
   listUsers: protectedProcedure
     .use(requireAdmin)
     .query(async ({ ctx }) => {
-      return ctx.db.query.users.findMany({
-        columns: {
-          id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
-          jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
-          connectionType: true, isActive: true, isBeta: true, timezone: true,
-          lastActiveAt: true, lastLoginAt: true,
-        },
-      });
+      const [rows, mgrRows] = await Promise.all([
+        ctx.db.query.users.findMany({
+          columns: {
+            id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
+            jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
+            connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true,
+            lastActiveAt: true, lastLoginAt: true,
+          },
+        }),
+        ctx.db.select({ userId: userManagers.userId, managerId: userManagers.managerId }).from(userManagers),
+      ]);
+      const byUser = new Map<string, string[]>();
+      for (const m of mgrRows) {
+        const arr = byUser.get(m.userId) ?? [];
+        arr.push(m.managerId);
+        byUser.set(m.userId, arr);
+      }
+      return rows.map((u) => ({ ...u, managerIds: byUser.get(u.id) ?? (u.managerId ? [u.managerId] : []) }));
     }),
 
   // Admin: update a user's app-level fields.
@@ -226,6 +236,9 @@ export const authRouter = router({
       departmentId: z.string().uuid().nullable().optional(),
       managerId: z.string().uuid().nullable().optional(),
       leaderBadge: z.enum(['ELT', 'SLT', 'ST6']).nullable().optional(),
+      isHrAccess: z.boolean().optional(),
+      managerIds: z.array(z.string().uuid()).optional(),
+      primaryManagerId: z.string().uuid().nullable().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
       isActive: z.boolean().optional(),
       isBeta: z.boolean().optional(),
@@ -237,8 +250,22 @@ export const authRouter = router({
       if (input.id === ctx.user.id && input.isActive === false) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "You can't set your own account to inactive — you'd be locked out of the app." });
       }
-      const { id, ...rest } = input;
+      const { id, managerIds, primaryManagerId, ...rest } = input;
       const updates: Record<string, unknown> = { ...rest };
+      // Manager set: unify legacy single managerId with the new managerIds[] +
+      // primaryManagerId. users.managerId stays the PRIMARY (drives the tree).
+      let managerSet: string[] | undefined;
+      let primaryManager: string | null | undefined;
+      if (managerIds !== undefined) {
+        managerSet = Array.from(new Set(managerIds));
+        primaryManager = primaryManagerId ?? managerSet[0] ?? null;
+        if (primaryManager && !managerSet.includes(primaryManager)) managerSet.push(primaryManager);
+      } else if ('managerId' in rest) {
+        const mid = (rest.managerId as string | null) ?? null;
+        managerSet = mid ? [mid] : [];
+        primaryManager = mid;
+      }
+      if (managerSet !== undefined) updates.managerId = primaryManager ?? null;
       // Email is unique per exact string — normalize and reject a collision with a different employee.
       if (typeof updates.email === 'string') {
         const email = updates.email.toLowerCase().trim();
@@ -263,6 +290,12 @@ export const authRouter = router({
       // name captured at submission time and are intentionally NOT rewritten.
       if ('name' in updates) {
         await ctx.db.update(okrNodes).set({ owner: user.name }).where(eq(okrNodes.ownerUserId, id));
+      }
+      if (managerSet !== undefined) {
+        await ctx.db.delete(userManagers).where(eq(userManagers.userId, id));
+        if (managerSet.length) {
+          await ctx.db.insert(userManagers).values(managerSet.map((mId) => ({ userId: id, managerId: mId })));
+        }
       }
       return user;
     }),
@@ -333,6 +366,9 @@ export const authRouter = router({
         isActive: input.isActive ?? true,
         passwordHash: input.tempPassword ? await hashPassword(input.tempPassword) : null,
       }).returning();
+      if (input.managerId) {
+        await ctx.db.insert(userManagers).values({ userId: user.id, managerId: input.managerId });
+      }
       return { id: user.id, email: user.email, name: user.name };
     }),
 
