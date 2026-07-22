@@ -24,10 +24,11 @@ const selectCls =
 export default function EngagementSurvey() {
   const [tab, setTab] = useState<Tab>('Summary');
   const [periodId, setPeriodId] = useState<string | undefined>(undefined);
+  const [department, setDepartment] = useState<string>('all');
   const isResultsTab = tab !== 'Take Survey';
 
   const results = trpc.engagementAnalytics.results.useQuery(
-    periodId ? { periodId } : undefined,
+    { periodId, department },
     { enabled: isResultsTab },
   );
   const data = results.data;
@@ -53,6 +54,13 @@ export default function EngagementSurvey() {
             >
               {[...data.periods].reverse().map((p) => (
                 <option key={p.id} value={p.id}>{p.label} · {fmtPeriodDate(p.periodDate, p.isCurrent)}</option>
+              ))}
+            </select>
+            <label className="text-[11px] font-medium text-gray-500 uppercase ml-2">Team</label>
+            <select className={selectCls} value={department} onChange={(e) => setDepartment(e.target.value)}>
+              <option value="all">All departments</option>
+              {(data.departmentOptions ?? []).map((d) => (
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
           </div>

@@ -67,7 +67,7 @@ interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCo
 
 export const engagementAnalyticsRouter = router({
   results: protectedProcedure
-    .input(z.object({ periodId: z.string().optional() }).optional())
+    .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
     const periodRows = await ctx.db.query.surveyPeriods.findMany();
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
@@ -200,11 +200,23 @@ export const engagementAnalyticsRouter = router({
     const li = periods.indexOf(latest);
     const prev = li > 0 ? periods[li - 1] : null;
 
+    // Optional department scope (the analytics view dropdown). When set, the
+    // summary/drivers reflect that team; 'All' (null) = company-wide.
+    const scopeDept = (input?.department && input.department !== 'all') ? input.department : null;
+    const sScope = scopeDept ? 'department' : 'company';
+    const sDept = scopeDept ?? '';
+    let scRespCount = latest.responseCount;
+    let scEligCount: number | null = latest.eligibleCount;
+    if (scopeDept) {
+      if (latest.id === 'live') { scRespCount = liveAgg.get(`department|${sDept}|overall|`)?.count ?? 0; scEligCount = null; }
+      else { const row = metricMap.get(mkey(latest.id, 'department', sDept, 'overall', '')); scRespCount = row?.responseCount ?? 0; scEligCount = row?.eligibleCount ?? null; }
+    }
+
     // ── Company summary + trend ──────────────────────────────────────────────
-    const compMean = meanOf(latest, 'company', '', 'overall', '');
-    const compFav = favOf(latest, 'company', '', 'overall', '');
-    const compUnfav = unfavOf(latest, 'company', '', 'overall', '');
-    const prevFav = prev ? favOf(prev, 'company', '', 'overall', '') : null;
+    const compMean = meanOf(latest, sScope, sDept, 'overall', '');
+    const compFav = favOf(latest, sScope, sDept, 'overall', '');
+    const compUnfav = unfavOf(latest, sScope, sDept, 'overall', '');
+    const prevFav = prev ? favOf(prev, sScope, sDept, 'overall', '') : null;
     const company = {
       label: latest.label,
       periodDate: latest.periodDate,
@@ -214,17 +226,17 @@ export const engagementAnalyticsRouter = router({
       unfavorablePct: compUnfav,
       mean: compMean,
       score: compMean != null ? scoreFromMean(compMean) : null,
-      responseCount: latest.responseCount,
-      eligibleCount: latest.eligibleCount,
-      participationPct: latest.eligibleCount ? r1((latest.responseCount / latest.eligibleCount) * 100) : null,
+      responseCount: scRespCount,
+      eligibleCount: scEligCount,
+      participationPct: scEligCount ? r1((scRespCount / scEligCount) * 100) : null,
       prevFavorablePct: prevFav,
-      trend: periods.map((p) => ({ label: p.label, favorablePct: favOf(p, 'company', '', 'overall', ''), mean: meanOf(p, 'company', '', 'overall', '') })),
+      trend: periods.map((p) => ({ label: p.label, favorablePct: favOf(p, sScope, sDept, 'overall', ''), mean: meanOf(p, sScope, sDept, 'overall', '') })),
     };
 
     // ── Drivers (latest) with trend + delta ──────────────────────────────────
     const drivers = DRIVER_KEYS.map((key) => {
-      const fav = favOf(latest, 'company', '', 'driver', key);
-      const pf = prev ? favOf(prev, 'company', '', 'driver', key) : null;
+      const fav = favOf(latest, sScope, sDept, 'driver', key);
+      const pf = prev ? favOf(prev, sScope, sDept, 'driver', key) : null;
       return {
         key,
         favorablePct: fav,
@@ -232,7 +244,7 @@ export const engagementAnalyticsRouter = router({
         mean: meanOf(latest, 'company', '', 'driver', key),
         prevFavorablePct: pf,
         delta: fav != null && pf != null ? r1(fav - pf) : null,
-        trend: periods.map((p) => ({ label: p.label, favorablePct: favOf(p, 'company', '', 'driver', key) })),
+        trend: periods.map((p) => ({ label: p.label, favorablePct: favOf(p, sScope, sDept, 'driver', key) })),
       };
     }).filter((d) => d.favorablePct != null)
       .sort((a, b) => (b.favorablePct ?? 0) - (a.favorablePct ?? 0));
@@ -243,7 +255,9 @@ export const engagementAnalyticsRouter = router({
       ? [...liveAgg.entries()].filter(([k]) => k.startsWith('company||question|'))
       : [];
     let questions: Array<{ id: string; text: string | null; driver: DriverKey | null; favorablePct: number | null; unfavorablePct: number | null; mean: number | null; prevFavorablePct: number | null; delta: number | null }> = [];
-    if (latest.id === 'live') {
+    if (scopeDept) {
+      questions = []; // question-level favorability is company-wide only
+    } else if (latest.id === 'live') {
       questions = liveQ.map(([k, a]) => {
         const id = k.split('|').pop() as string;
         return { id, text: Q_TEXT[id] ?? null, driver: Q_DRIVER[id] ?? null, favorablePct: a.favorablePct, unfavorablePct: a.unfavorablePct, mean: a.mean, prevFavorablePct: null, delta: null };
@@ -309,6 +323,8 @@ export const engagementAnalyticsRouter = router({
       questions,
       departments: departmentsOut,
       departmentBasis: latest.source === 'import' ? 'score' as const : 'favorability' as const,
+      selectedDepartment: scopeDept,
+      departmentOptions: [...new Set(departmentsOut.map((d) => d.name))],
     };
   }),
 
