@@ -23,7 +23,12 @@ export default function SurveyForm() {
   const [submitted, setSubmitted] = useState(false);
   const [showGaps, setShowGaps] = useState(false);
 
-  const { data: questions } = trpc.engagementSurveyQuestions.listActive.useQuery();
+  const { data: versions } = trpc.engagementSurveyVersions.list.useQuery();
+  const [versionId, setVersionId] = useState<string | undefined>(undefined);
+  const effectiveVersionId = versionId ?? versions?.find((v) => v.isDefault)?.id ?? versions?.[0]?.id;
+  const { data: versionData } = trpc.engagementSurveyVersions.getQuestions.useQuery(
+    { versionId: effectiveVersionId }, { enabled: !!effectiveVersionId });
+  const questions = versionData?.questions;
   const { data: titles } = trpc.jobTitles.list.useQuery();
   const { data: depts } = trpc.departments.list.useQuery();
 
@@ -61,6 +66,7 @@ export default function SurveyForm() {
     }
     submit.mutate({
       answers,
+      versionId: effectiveVersionId,
       textAnswers: Object.keys(textAnswers).length ? textAnswers : undefined,
       jobTitle: (titles ?? []).find((t) => t.id === jobTitleId)?.title ?? undefined,
       department: (depts ?? []).find((d) => d.id === departmentId)?.name ?? undefined,
@@ -91,6 +97,19 @@ export default function SurveyForm() {
       <div className="ls-card p-3 mb-5 text-[13px] text-ls-ink-2">
         ℹ️ This survey is <b>anonymous</b> — your name is not recorded. Only your job title and department are saved, so results can be organized by role and team, and always reported in aggregate.
       </div>
+
+      {(versions?.length ?? 0) > 1 && (
+        <div className="ls-card p-4 mb-5 flex items-center gap-3 flex-wrap">
+          <span className="text-[13px] font-semibold text-ls-ink-2">Survey version:</span>
+          <select className={selectCls + " max-w-xs"} value={effectiveVersionId ?? ''}
+            onChange={(e) => { setVersionId(e.target.value); setAnswers({}); setTextAnswers({}); setEnpsScore(null); setShowGaps(false); }}>
+            {(versions ?? []).map((v) => (
+              <option key={v.id} value={v.id}>{v.name}{v.isDefault ? ' (default)' : ''}</option>
+            ))}
+          </select>
+          <span className="text-[12px] text-ls-ink-3">{questions?.length ?? 0} questions</span>
+        </div>
+      )}
 
       {/* About you */}
       <div className="ls-card p-5 mb-6">

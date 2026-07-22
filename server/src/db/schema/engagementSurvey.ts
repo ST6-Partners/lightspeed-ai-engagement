@@ -20,6 +20,7 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   textAnswers: jsonb('text_answers').$type<Record<string, string>>().notNull().default({}),  // free-text question answers, keyed by question id
   enpsScore: integer('enps_score'),                 // 0..10
   enpsReason: text('enps_reason'),                  // confidential open text
+  versionId: uuid('version_id'),  // which survey version was taken (engagement_survey_versions.id)
   status: varchar('status', { length: 16 }).notNull().default('complete'),
     // 'draft' | 'complete'
   submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
