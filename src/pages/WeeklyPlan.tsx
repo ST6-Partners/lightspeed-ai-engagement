@@ -40,6 +40,9 @@ export default function WeeklyPlan() {
   // Per-week expand/collapse for the Completed priorities box (default: current
   // week open, older weeks collapsed to keep the list tidy as weeks accumulate).
   const [weekOpen, setWeekOpen] = useState<Record<string, boolean>>({});
+  // Section-level collapse for the Past / Completed priorities cards.
+  const [pastOpen, setPastOpen] = useState(true);
+  const [completedOpen, setCompletedOpen] = useState(true);
 
   // Which picker is open: 'add' for the Add-priority button, or a row index for a row's link control.
   const [picker, setPicker] = useState<'add' | number | null>(null);
@@ -358,11 +361,16 @@ export default function WeeklyPlan() {
 
       {(data?.pastPriorities?.length ?? 0) > 0 && (
         <section className="ls-card p-5 mt-4">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="font-bold">Past priorities</h2>
+          <button onClick={() => setPastOpen((v) => !v)}
+            className="w-full flex items-center justify-between group" aria-expanded={pastOpen}>
+            <span className="flex items-center gap-2">
+              <span className="text-ls-ink-3 text-xs w-3 group-hover:text-ls-blue-deep">{pastOpen ? '▾' : '▸'}</span>
+              <span className="font-bold">Past priorities</span>
+            </span>
             <span className="ls-chip bg-ls-watch-bg text-ls-watch">Carried over</span>
-          </div>
-          <p className="text-sm text-ls-ink-3 mb-3">
+          </button>
+          {pastOpen && (<>
+          <p className="text-sm text-ls-ink-3 mb-3 mt-2">
             Priorities you didn&rsquo;t finish in earlier weeks. Carry one forward to this week, or dismiss it.
           </p>
           <div className="space-y-4">
@@ -388,12 +396,18 @@ export default function WeeklyPlan() {
               </div>
             ))}
           </div>
+          </>)}
         </section>
       )}
 
       {(data?.completedByWeek?.length ?? 0) > 0 && (
         <section className="ls-card p-5 mt-4">
-          <h2 className="font-bold mb-2">Completed priorities</h2>
+          <button onClick={() => setCompletedOpen((v) => !v)}
+            className="w-full flex items-center gap-2 group mb-2" aria-expanded={completedOpen}>
+            <span className="text-ls-ink-3 text-xs w-3 group-hover:text-ls-blue-deep">{completedOpen ? '▾' : '▸'}</span>
+            <span className="font-bold">Completed priorities</span>
+          </button>
+          {completedOpen && (
           <div className="divide-y divide-ls-line">
             {data!.completedByWeek.map((wk) => {
               const open = isWeekOpen(wk.weekStart);
@@ -439,6 +453,7 @@ export default function WeeklyPlan() {
               );
             })}
           </div>
+          )}
         </section>
       )}
 
