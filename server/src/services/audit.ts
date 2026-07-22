@@ -19,16 +19,21 @@ export async function auditChange(
   fieldChange?: { field: string; oldValue: string | null; newValue: string | null } | null,
   batchId?: string
 ): Promise<void> {
-  await db.insert(changeLog).values({
-    userId,
-    entityId,
-    entityType,
-    action,
-    field: fieldChange?.field || null,
-    oldValue: fieldChange?.oldValue || null,
-    newValue: fieldChange?.newValue || null,
-    batchId: batchId || null,
-  });
+  try {
+    await db.insert(changeLog).values({
+      userId,
+      entityId,
+      entityType,
+      action,
+      field: fieldChange?.field || null,
+      oldValue: fieldChange?.oldValue || null,
+      newValue: fieldChange?.newValue || null,
+      batchId: batchId || null,
+    });
+  } catch (err) {
+    // Audit logging is best-effort — never let it break the underlying mutation.
+    console.error('[auditChange] failed to write change_log entry:', err);
+  }
 }
 
 /**

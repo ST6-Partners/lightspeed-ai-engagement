@@ -9,7 +9,7 @@ import { users } from './core.js';
 export const changeLog = pgTable('change_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id),
-  entityId: uuid('entity_id'),
+  entityId: varchar('entity_id', { length: 64 }),
   entityType: varchar('entity_type', { length: 100 }),
   action: varchar('action', { length: 20 }).notNull(),
     // 'create' | 'update' | 'archive' | 'delete'
