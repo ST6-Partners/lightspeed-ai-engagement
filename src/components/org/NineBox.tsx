@@ -87,6 +87,8 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
   if (cohortMode) {
     const managerIdSet = new Set(all.map((p) => p.managerId).filter((m): m is string => !!m));
     peoplePop = cohort === 'elt' ? all.filter((p) => p.leaderBadge === 'ELT') : all.filter((p) => managerIdSet.has(p.id));
+  } else if (deptMode && deptFilter === 'viewall') {
+    peoplePop = all;
   } else if (deptMode && deptFilter !== 'all') {
     peoplePop = all.filter((p) => p.dept === deptFilter);
   }
@@ -136,6 +138,7 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
     ) : deptMode ? (
       <div className="mb-3">{ddLabel('Department')}
         <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} className="text-[12px]" style={selStyle}>
+          <option value="viewall">View all (everyone)</option>
           <option value="all">All departments</option>
           {departments.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
@@ -161,9 +164,9 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
   }
 
   return (
-    <div className="flex gap-6 items-start flex-wrap">
+    <div className="flex gap-6 items-start">
       {/* Grid + axes */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 shrink-0">
         <div className="flex flex-col items-center justify-center">
           <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Potential →</div>
         </div>
@@ -185,26 +188,26 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
         </div>
       </div>
 
-      {/* Unrated list (people views only) */}
-      {!teamView && (
-        <div style={{ minWidth: 180 }}>
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: TOKENS.idle }}>Unrated ({unrated.length})</div>
-          {err && <div className="text-[11px] mb-2" style={{ color: '#b91c1c' }}>{err}</div>}
-          <div className="space-y-1">
-            {unrated.map((u) => (
-              editable(u.id) ? (
-                <button key={u.id} onClick={() => { setErr(null); setEditing(u); }} className="w-full text-left rounded px-2 py-1 text-[12px]" style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}` }} title="Click to place on the grid">{u.name}</button>
-              ) : (
-                <div key={u.id} className="w-full text-left rounded px-2 py-1 text-[12px]" style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}`, opacity: 0.7 }} title="View only — you cannot place this person">{u.name}</div>
-              )
-            ))}
-            {unrated.length === 0 && <div className="text-[11px]" style={{ color: TOKENS.idle }}>Everyone in scope is rated.</div>}
+      {/* Right column — rail (dropdown + Top/Needs) then Unrated, beside the grid */}
+      <div className="flex flex-col gap-4" style={{ minWidth: 230 }}>
+        {showRail && <div>{rail}</div>}
+        {!teamView && (
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: TOKENS.idle }}>Unrated ({unrated.length})</div>
+            {err && <div className="text-[11px] mb-2" style={{ color: '#b91c1c' }}>{err}</div>}
+            <div className="space-y-1">
+              {unrated.map((u) => (
+                editable(u.id) ? (
+                  <button key={u.id} onClick={() => { setErr(null); setEditing(u); }} className="w-full text-left rounded px-2 py-1 text-[12px]" style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}` }} title="Click to place on the grid">{u.name}</button>
+                ) : (
+                  <div key={u.id} className="w-full text-left rounded px-2 py-1 text-[12px]" style={{ background: '#fff', border: `1px solid ${TOKENS.borderSoft}`, opacity: 0.7 }} title="View only — you cannot place this person">{u.name}</div>
+                )
+              ))}
+              {unrated.length === 0 && <div className="text-[11px]" style={{ color: TOKENS.idle }}>Everyone in scope is rated.</div>}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Right rail: dropdown + Top/Needs (people) or Top teams/Needs (teams) */}
-      {showRail && <div style={{ minWidth: 230 }}>{rail}</div>}
+        )}
+      </div>
 
       {editing && (
         <RateModal

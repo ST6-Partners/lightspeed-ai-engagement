@@ -26,7 +26,6 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: 'individual', label: 'Individual' },
   { key: 'directs', label: 'Directs' },
   { key: 'descendants', label: 'Team' },
-  { key: 'organization', label: 'Organization' },
 ];
 
 const ls = {
@@ -43,7 +42,7 @@ export default function Organization() {
   const meBadge = (me as { leaderBadge?: string | null } | undefined)?.leaderBadge ?? null;
   // Company-wide (Organization) scope is limited to admins, ELT, and HR.
   const canSeeCompanyWide = role === 'admin' || role === 'sysadmin' || meHr || meBadge === 'ELT';
-  const visibleScopes = SCOPES.filter((sc) => sc.key !== 'organization' || canSeeCompanyWide);
+  const visibleScopes = SCOPES;
   // Who the current viewer may PLACE on the 9 Box: admins, HR, and anyone in a
   // person's PRIMARY-manager chain (their primary manager or above). Mirrors the
   // server rule so the grid only shows a placement affordance where it will work.
@@ -60,7 +59,7 @@ export default function Organization() {
   const maps = useMemo(() => buildMaps(people), [people]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [scope, setScope] = useState<Scope>((ls.get('org.scope') as Scope) || 'individual');
+  const [scope, setScope] = useState<Scope>(() => { const s = ls.get('org.scope') as Scope; return s && s !== 'organization' ? s : 'individual'; });
   const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
   const [periodId, setPeriodId] = useState<string | null>(ls.get('org.engPeriod'));
   const { data: periodsData } = trpc.engagementAnalytics.periods.useQuery();
@@ -102,8 +101,8 @@ export default function Organization() {
   const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
   const chooseTab = (t: TabKey) => { setTab(t); ls.set('org.tab', t); };
   useEffect(() => {
-    if (scope === 'organization' && !canSeeCompanyWide) { setScope('individual'); ls.set('org.scope', 'individual'); }
-  }, [canSeeCompanyWide, scope]);
+    if (scope === 'organization') { setScope('individual'); ls.set('org.scope', 'individual'); }
+  }, [scope]);
 
   // Resizable split between the org tree (left) and the card/9-box body (right).
   const [treeW, setTreeW] = useState<number>(() => {
@@ -134,7 +133,6 @@ export default function Organization() {
 
   // In-scope people (spec §6).
   const scoped: Person[] = useMemo(() => {
-    if (scope === 'organization') return people;
     if (!selected) return [];
     if (scope === 'individual') return [selected];
     if (scope === 'directs') return directsOf(maps, selected.id);
@@ -217,7 +215,7 @@ export default function Organization() {
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
               {tab === 'ninebox' ? (
                 <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} />
-              ) : (!selected && scope !== 'organization') ? (
+              ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
