@@ -7,6 +7,14 @@ import { trpc } from '../lib/trpc';
 import SurveyForm from '../components/engagement/SurveyForm';
 import { ResultsSummary, ResultsBreakdown, ResultsDrivers } from '../components/engagement/Results';
 
+const fmtPeriodDate = (iso: string | undefined, isCurrent?: boolean) => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return isCurrent
+    ? `as of ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+
 const TABS = ['Summary', 'Breakdown', 'Drivers', 'Take Survey'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -44,7 +52,7 @@ export default function EngagementSurvey() {
               onChange={(e) => setPeriodId(e.target.value)}
             >
               {[...data.periods].reverse().map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
+                <option key={p.id} value={p.id}>{p.label} · {fmtPeriodDate(p.periodDate, p.isCurrent)}</option>
               ))}
             </select>
           </div>

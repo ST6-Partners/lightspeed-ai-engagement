@@ -14,6 +14,13 @@ type Results = inferRouterOutputs<AppRouter>['engagementAnalytics']['results'];
 export type AnalyticsData = Extract<Results, { hasData: true }>;
 
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v)}%`);
+const fmtPeriodDate = (iso: string | null | undefined, isCurrent?: boolean) => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return isCurrent
+    ? `as of ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+};
 const DRIVER_MEANING: Record<string, string> = Object.fromEntries(DRIVERS.map((d) => [d.key, d.meaning]));
 
 function toneCls(fav: number | null | undefined): string {
@@ -45,6 +52,7 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="ls-card p-5">
           <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Company engagement · {c.label}</div>
+          <div className="text-[12px] font-semibold text-ls-ink-2 mb-1">📅 {fmtPeriodDate(c.periodDate, c.isCurrent)}</div>
           <div className="flex items-end gap-2">
             <div className="text-4xl font-extrabold text-ls-blue-deep">{pct(c.favorablePct)}</div>
             <div className="mb-1"><DeltaChip delta={c.prevFavorablePct != null && c.favorablePct != null ? Math.round((c.favorablePct - c.prevFavorablePct) * 10) / 10 : null} /></div>

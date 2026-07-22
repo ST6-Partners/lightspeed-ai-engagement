@@ -159,7 +159,7 @@ export const engagementAnalyticsRouter = router({
       const respondents = new Set(responses.map((x) => x.respondentId).filter(Boolean));
       livePeriod = {
         id: 'live',
-        label: `${new Date().getFullYear()} (in progress)`,
+        label: 'Current survey',
         periodDate: new Date().toISOString().slice(0, 10),
         eligibleCount: activeEligible,
         responseCount: respondents.size || responses.length,
@@ -207,6 +207,8 @@ export const engagementAnalyticsRouter = router({
     const prevFav = prev ? favOf(prev, 'company', '', 'overall', '') : null;
     const company = {
       label: latest.label,
+      periodDate: latest.periodDate,
+      isCurrent: latest.isCurrent,
       scaleMax: latest.scaleMax,
       favorablePct: compFav,
       unfavorablePct: compUnfav,
@@ -319,7 +321,7 @@ export const engagementAnalyticsRouter = router({
       .sort((a, b) => a.periodDate.localeCompare(b.periodDate))
       .map((p) => ({ id: p.id, label: p.label }));
     const list = responses.length > 0
-      ? [...historical, { id: 'live', label: `${new Date().getFullYear()} (in progress)` }]
+      ? [...historical, { id: 'live', label: 'Current survey' }]
       : historical;
     return { periods: list, latestId: list.length ? list[list.length - 1].id : null };
   }),
