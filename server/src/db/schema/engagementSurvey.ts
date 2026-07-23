@@ -23,6 +23,7 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   eltLeader: varchar('elt_leader', { length: 200 }),            // snapshot of ELT leader this person rolls up to
   startYear: integer('start_year'),                              // snapshot of start year (for tenure banding)
   periodId: uuid('period_id'),                                   // survey period this response belongs to
+  managerPath: jsonb('manager_path').$type<string[]>().default([]),  // snapshot of manager-chain user ids (self→top) for hierarchy roll-up + manager-scoped views
   answers: jsonb('answers').$type<Record<string, number>>().notNull().default({}),
   textAnswers: jsonb('text_answers').$type<Record<string, string>>().notNull().default({}),  // free-text question answers, keyed by question id
   enpsScore: integer('enps_score'),                 // 0..10

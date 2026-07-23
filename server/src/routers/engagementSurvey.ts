@@ -93,15 +93,18 @@ export const engagementSurveyRouter = router({
         const mgr = await ctx.db.query.users.findFirst({ where: eq(users.id, me.managerId) });
         managerName = mgr?.name ?? null;
       }
-      // ELT leader = nearest ancestor up the manager chain carrying an ELT badge.
+      // Walk the manager chain once: capture the full ancestor path (user ids) for
+      // hierarchy roll-up + manager-scoped analytics, and the nearest ELT ancestor.
       let eltLeader: string | null = null;
+      const managerPath: string[] = [];
       let cursor: string | null = me?.managerId ?? null;
       const seen = new Set<string>();
       while (cursor && !seen.has(cursor)) {
         seen.add(cursor);
+        managerPath.push(cursor);
         const anc = await ctx.db.query.users.findFirst({ where: eq(users.id, cursor) });
         if (!anc) break;
-        if (anc.leaderBadge === 'ELT') { eltLeader = anc.name ?? null; break; }
+        if (!eltLeader && anc.leaderBadge === 'ELT') { eltLeader = anc.name ?? null; }
         cursor = anc.managerId ?? null;
       }
 
@@ -117,6 +120,7 @@ export const engagementSurveyRouter = router({
         eltLeader,
         startYear: me?.hireYear ?? null,
         periodId: period.id,
+        managerPath,
         answers: input.answers,
         textAnswers: input.textAnswers ?? {},
         versionId: input.versionId ?? null,

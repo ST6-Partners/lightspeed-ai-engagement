@@ -3,7 +3,7 @@
 //   survey to open its analytics. Campaign Progress (View-by) for the newest.
 //   Analytics: Summary · Engagement · Drivers · Statements · Heatmap · eNPS · Feedback,
 //   with a Groups selector (ELT Leaders / Hierarchy / Departments / Business Units).
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { trpc } from '../lib/trpc';
 import SurveyForm from '../components/engagement/SurveyForm';
 import { ResultsSummary, ResultsDrivers } from '../components/engagement/Results';
@@ -15,6 +15,28 @@ type GroupBy = 'dept' | 'mgr' | 'hier' | 'loc';
 const sel = 'px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-blue';
 const fmtDate = (iso?: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
+const selFlt = 'px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-blue w-full';
+function Flt({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold uppercase text-ls-ink-3">{label}</label>
+      <select className={selFlt} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">All</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ls-card p-3 text-center">
+      <div className="text-[11px] font-semibold uppercase text-ls-ink-3">{label}</div>
+      <div className="text-xl font-bold text-ls-blue-deep">{value}</div>
+    </div>
+  );
+}
+const prettyDriver = (k: string) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
 export default function EngagementSurvey() {
   const [view, setView] = useState<'landing' | 'analytics' | 'survey'>('landing');
   const [tab, setTab] = useState<Tab>('Summary');
@@ -23,10 +45,19 @@ export default function EngagementSurvey() {
   const [groupNote, setGroupNote] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('dept');
   const [progressPeriod, setProgressPeriod] = useState<string | undefined>(undefined);
+  const emptyFilters = { tenureBand: '', location: '', team: '', manager: '', department: '', eltLeader: '', hierarchyUnderId: '', businessUnit: '' };
+  const [flt, setFlt] = useState<Record<string, string>>(emptyFilters);
+  const [showSuppress, setShowSuppress] = useState(false);
+  const activeFilters = Object.fromEntries(Object.entries(flt).filter(([, v]) => v));
+  const anyFilter = Object.keys(activeFilters).length > 0;
 
   const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
   const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: progressPeriod, groupBy }, { enabled: view === 'landing' });
   const groups = trpc.engagementAnalytics.groups.useQuery(undefined, { enabled: view === 'analytics' });
+  const fopts = trpc.engagementAnalytics.filterOptions.useQuery(undefined, { enabled: view === 'analytics' });
+  const filtered = trpc.engagementAnalytics.filtered.useQuery(activeFilters, { enabled: view === 'analytics' });
+  const suppressed = filtered.data?.suppressed === true;
+  useEffect(() => { if (suppressed && anyFilter) setShowSuppress(true); }, [suppressed, anyFilter]);
   const data = results.data;
 
   if (view === 'survey') {
@@ -164,6 +195,51 @@ export default function EngagementSurvey() {
 
       {hasData && data && c && (
         <>
+          {/* ── Filter results (top of analytics) — 8 profile-driven filters + min-group gate ── */}
+          <div className="ls-card p-4 mt-3 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-bold text-ls-ink-1">Filter results</h2>
+              {anyFilter && <button className="text-[12px] font-semibold text-ls-blue-deep" onClick={() => setFlt(emptyFilters)}>Clear filters</button>}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Flt label="Tenure" value={flt.tenureBand} onChange={(v) => setFlt((p) => ({ ...p, tenureBand: v }))}
+                options={(fopts.data?.tenureBands ?? []).map((b) => ({ value: b, label: b === '<1' ? 'Less than 1 year' : b === '10+' ? '10+ years' : `${b.replace('-', '–')} years` }))} />
+              <Flt label="Location" value={flt.location} onChange={(v) => setFlt((p) => ({ ...p, location: v }))} options={(fopts.data?.locations ?? []).map((x) => ({ value: x, label: x }))} />
+              <Flt label="Team" value={flt.team} onChange={(v) => setFlt((p) => ({ ...p, team: v }))} options={(fopts.data?.teams ?? []).map((x) => ({ value: x, label: x }))} />
+              <Flt label="Manager" value={flt.manager} onChange={(v) => setFlt((p) => ({ ...p, manager: v }))} options={(fopts.data?.managers ?? []).map((x) => ({ value: x, label: x }))} />
+              <Flt label="Department" value={flt.department} onChange={(v) => setFlt((p) => ({ ...p, department: v }))} options={(fopts.data?.departments ?? []).map((x) => ({ value: x, label: x }))} />
+              <Flt label="ELT leader" value={flt.eltLeader} onChange={(v) => setFlt((p) => ({ ...p, eltLeader: v }))} options={(fopts.data?.eltLeaders ?? []).map((x) => ({ value: x, label: x }))} />
+              <Flt label="Hierarchy" value={flt.hierarchyUnderId} onChange={(v) => setFlt((p) => ({ ...p, hierarchyUnderId: v }))} options={(fopts.data?.hierarchies ?? []).map((h) => ({ value: h.id, label: `${h.name}’s org` }))} />
+              <Flt label="Business unit" value={flt.businessUnit} onChange={(v) => setFlt((p) => ({ ...p, businessUnit: v }))} options={(fopts.data?.businessUnits ?? []).map((x) => ({ value: x, label: x }))} />
+            </div>
+
+            {filtered.data && (
+              suppressed ? (
+                <div className="mt-4 ls-card p-4 border-l-4 border-ls-watch text-[13px] text-ls-ink-2 bg-ls-bg-2">
+                  🔒 <b>Not enough results to view.</b> This selection has fewer than {filtered.data.minGroupSize} responses, so results are hidden to protect confidentiality.
+                </div>
+              ) : (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <Stat label="Responses" value={String(filtered.data.cohortSize)} />
+                  <Stat label="Favorable" value={filtered.data.favorablePct != null ? `${filtered.data.favorablePct}%` : '—'} />
+                  <Stat label="eNPS" value={filtered.data.enps != null ? String(filtered.data.enps) : '—'} />
+                  <Stat label="Top driver" value={filtered.data.drivers?.[0] ? prettyDriver(filtered.data.drivers[0].key) : '—'} />
+                </div>
+              )
+            )}
+          </div>
+
+          {showSuppress && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSuppress(false)}>
+              <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4 text-center" onClick={(e) => e.stopPropagation()}>
+                <div className="text-3xl mb-2">🔒</div>
+                <h3 className="text-lg font-bold mb-1">Not enough results to view</h3>
+                <p className="text-sm text-ls-ink-2 mb-4">This selection has fewer than 3 responses. To keep answers confidential, results are only shown for groups of 3 or more.</p>
+                <button className="ls-btn ls-btn-primary" onClick={() => setShowSuppress(false)}>Got it</button>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-1 border-b border-ls-line mt-3 mb-4 flex-wrap">
             {TABS.map((t) => (
               <button key={t} onClick={() => setTab(t)}
@@ -182,14 +258,7 @@ export default function EngagementSurvey() {
                 <optgroup label="Business Units">{(groups.data?.businessUnits ?? []).length === 0 ? <option disabled>None configured</option> : groups.data!.businessUnits.map((n) => <option key={`bu:${n}`} value={`bu:${n}`}>{n}</option>)}</optgroup>
               </select>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Attributes</label>
-              <select className={sel} defaultValue="all" title="Filter by attribute — coming soon"><option value="all">All</option><option value="job">Job title</option><option value="tenure">Tenure</option></select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Outcomes</label>
-              <select className={sel} defaultValue="all" title="Filter by outcome — coming soon"><option value="all">All</option><option value="promoters">eNPS promoters</option></select>
-            </div>
+            {/* real attribute filters live in the Filter results bar below */}
             <div className="text-[12px] text-ls-ink-3 pb-1.5">{c.participationPct != null ? `${Math.round(c.participationPct)}%` : '—'} ({c.responseCount}{c.eligibleCount ? `/${c.eligibleCount}` : ''} participants)</div>
           </div>
           {groupNote && <div className="ls-card p-2.5 mb-4 border-l-4 border-ls-blue text-[12px] text-ls-ink-2">{groupNote}</div>}

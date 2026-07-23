@@ -10,6 +10,7 @@ import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
 import { engagementImportRows } from '../db/schema/engagementImportRows.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -70,6 +71,117 @@ function aggregate(values: number[]): Agg | null {
 interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCount: number; responseCount: number; source: string; isCurrent: boolean; scaleMax: number; }
 
 export const engagementAnalyticsRouter = router({
+  // ── Filter options for the analytics filter bar (from in-app responses + roster) ──
+  filterOptions: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.engagementSurveyResponses.findMany();
+    const uniq = (xs: (string | null | undefined)[]) =>
+      [...new Set(xs.map((x) => (x ?? '').trim()).filter(Boolean))].sort();
+    // Hierarchy roll-up options = everyone who appears as an ancestor in any
+    // response's manager path, resolved to a name.
+    const ancestorIds = new Set<string>();
+    for (const r of rows) for (const id of (r.managerPath ?? [])) ancestorIds.add(id);
+    const leaders = ancestorIds.size
+      ? await ctx.db.query.users.findMany({ columns: { id: true, name: true } })
+      : [];
+    const hierarchies = leaders
+      .filter((u) => ancestorIds.has(u.id))
+      .map((u) => ({ id: u.id, name: u.name ?? '(unnamed)' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      teams: uniq(rows.map((r) => r.team)),
+      locations: uniq(rows.map((r) => r.location)),
+      businessUnits: uniq(rows.map((r) => r.businessUnit)),
+      departments: uniq(rows.map((r) => r.department)),
+      managers: uniq(rows.map((r) => r.managerName)),
+      eltLeaders: uniq(rows.map((r) => r.eltLeader)),
+      hierarchies,
+      tenureBands: ['<1', '1-2', '2-5', '5-10', '10+'],
+    };
+  }),
+
+  // ── Filtered engagement read with min-group-size gate + manager scope ──
+  // MIN GROUP SIZE = 3: any cohort under 3 responses is suppressed ("Not enough
+  // results to view"), including filter combinations. Managers see only their own
+  // roll-up; admins / HR / ELT see everyone.
+  filtered: protectedProcedure
+    .input(z.object({
+      tenureBand: z.string().optional(),
+      location: z.string().optional(),
+      team: z.string().optional(),
+      manager: z.string().optional(),
+      department: z.string().optional(),
+      eltLeader: z.string().optional(),
+      hierarchyUnderId: z.string().optional(),
+      businessUnit: z.string().optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const MIN = 3;
+      const f = input ?? {};
+      const viewer = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+      const elevated = !!viewer && (hasMinimumRole(viewer.role as RoleTier, 'admin') || viewer.isHrAccess || viewer.leaderBadge === 'ELT');
+      const managerScoped = !!viewer && !elevated && viewer.role === 'manager';
+
+      let rows = await ctx.db.query.engagementSurveyResponses.findMany();
+
+      // Viewer scope: a plain manager only sees responses that roll up to them.
+      if (managerScoped) rows = rows.filter((r) => (r.managerPath ?? []).includes(viewer!.id));
+
+      const thisYear = new Date().getFullYear();
+      const bandOf = (startYear: number | null | undefined): string | null => {
+        if (!startYear) return null;
+        const t = thisYear - startYear;
+        if (t < 1) return '<1';
+        if (t < 2) return '1-2';
+        if (t < 5) return '2-5';
+        if (t < 10) return '5-10';
+        return '10+';
+      };
+      const eq2 = (a: string | null | undefined, b: string) => (a ?? '').trim() === b.trim();
+      if (f.team) rows = rows.filter((r) => eq2(r.team, f.team!));
+      if (f.location) rows = rows.filter((r) => eq2(r.location, f.location!));
+      if (f.businessUnit) rows = rows.filter((r) => eq2(r.businessUnit, f.businessUnit!));
+      if (f.department) rows = rows.filter((r) => eq2(r.department, f.department!));
+      if (f.manager) rows = rows.filter((r) => eq2(r.managerName, f.manager!));
+      if (f.eltLeader) rows = rows.filter((r) => eq2(r.eltLeader, f.eltLeader!));
+      if (f.tenureBand) rows = rows.filter((r) => bandOf(r.startYear) === f.tenureBand);
+      if (f.hierarchyUnderId) rows = rows.filter((r) => (r.managerPath ?? []).includes(f.hierarchyUnderId!));
+
+      const cohortSize = rows.length;
+      if (cohortSize < MIN) {
+        return { suppressed: true as const, cohortSize, minGroupSize: MIN };
+      }
+
+      // Favorability = % of Likert answers that are 4 or 5.
+      let favNum = 0, favDen = 0;
+      const perDriver = new Map<string, { fav: number; n: number }>();
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const qDriver: Record<string, string> = qbank.length
+        ? Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as string]))
+        : Q_DRIVER_FALLBACK;
+      for (const r of rows) {
+        for (const [qid, v] of Object.entries((r.answers ?? {}) as Record<string, number>)) {
+          if (typeof v !== 'number') continue;
+          favDen += 1; if (v >= 4) favNum += 1;
+          const dk = qDriver[qid]; if (dk) { const d = perDriver.get(dk) ?? { fav: 0, n: 0 }; d.n += 1; if (v >= 4) d.fav += 1; perDriver.set(dk, d); }
+        }
+      }
+      const favorablePct = favDen ? Math.round((favNum / favDen) * 1000) / 10 : null;
+
+      // eNPS = %promoters(9-10) − %detractors(0-6), over responses that answered it.
+      const enpsVals = rows.map((r) => r.enpsScore).filter((x): x is number => typeof x === 'number');
+      let enps: number | null = null;
+      if (enpsVals.length) {
+        const prom = enpsVals.filter((x) => x >= 9).length;
+        const det = enpsVals.filter((x) => x <= 6).length;
+        enps = Math.round(((prom - det) / enpsVals.length) * 100);
+      }
+      const drivers = [...perDriver.entries()]
+        .map(([key, d]) => ({ key, favorablePct: d.n ? Math.round((d.fav / d.n) * 1000) / 10 : null }))
+        .sort((a, b) => (b.favorablePct ?? 0) - (a.favorablePct ?? 0));
+
+      return { suppressed: false as const, cohortSize, minGroupSize: MIN, favorablePct, enps, drivers };
+    }),
+
   results: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
