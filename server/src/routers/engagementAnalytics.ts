@@ -675,6 +675,8 @@ export const engagementAnalyticsRouter = router({
       const allDepts = await ctx.db.query.departments.findMany();
       const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
       const deptByUser = new Map(allUsers.map((u) => [u.id, u.departmentId ? deptNameById.get(u.departmentId) ?? null : null]));
+      const headByDept = new Map<string, number>();
+      for (const u of allUsers) { if (!u.isActive) continue; const dn = u.departmentId ? deptNameById.get(u.departmentId) : null; if (dn) headByDept.set(dn, (headByDept.get(dn) ?? 0) + 1); }
       const groups = new Map<string, number[]>();
       for (const r of withE) {
         const dept = (r.department && r.department.trim()) || (r.respondentId ? deptByUser.get(r.respondentId) ?? null : null);
@@ -682,8 +684,11 @@ export const engagementAnalyticsRouter = router({
         const arr = groups.get(dept) ?? []; arr.push(r.enpsScore as number); groups.set(dept, arr);
       }
       const byGroup = [...groups.entries()].map(([name, arr]) => {
-        const p = arr.filter((s) => s >= 9).length, d = arr.filter((s) => s <= 6).length;
-        return { name, responseCount: arr.length, score: Math.round((p / arr.length - d / arr.length) * 100) };
+        const pr = arr.filter((s) => s >= 9).length, de = arr.filter((s) => s <= 6).length, pa = arr.length - pr - de;
+        const elig = headByDept.get(name) ?? null;
+        return { name, responseCount: arr.length, score: Math.round((pr / arr.length - de / arr.length) * 100),
+          promoterPct: r1((pr / arr.length) * 100), passivePct: r1((pa / arr.length) * 100), detractorPct: r1((de / arr.length) * 100),
+          eligibleCount: elig, participationPct: elig ? r1((arr.length / elig) * 100) : null };
       }).filter((g) => g.responseCount >= 4).sort((a, b) => b.score - a.score);
       return { available: true as const, score, responseCount: total, promoters: prom, passives: pas, detractors: det,
         promoterPct: r1((prom / total) * 100), passivePct: r1((pas / total) * 100), detractorPct: r1((det / total) * 100), byGroup };
@@ -739,6 +744,64 @@ export const engagementAnalyticsRouter = router({
       });
       return { total: raw.length, rows };
     }),
+
+  // ── Heatmap cells — per-department × per-question favorability (live only) ─
+  heatmapCells: protectedProcedure
+    .input(z.object({ periodId: z.string().optional() }).optional())
+    .query(async ({ ctx }) => {
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      if (responses.length === 0) return { available: false as const, columns: [] as { id: string; driver: string | null; text: string }[], rows: [] as unknown[] };
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const qDriver: Record<string, string> = qbank.length
+        ? Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as string]))
+        : (Q_DRIVER_FALLBACK as Record<string, string>);
+      const qText: Record<string, string> = Object.fromEntries(qbank.map((q) => [q.id, q.text]));
+      const allUsers = await ctx.db.query.users.findMany();
+      const allDepts = await ctx.db.query.departments.findMany();
+      const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
+      const deptByUser = new Map(allUsers.map((u) => [u.id, u.departmentId ? deptNameById.get(u.departmentId) ?? null : null]));
+
+      const cell = new Map<string, Map<string, number[]>>();
+      const deptAll = new Map<string, number[]>();
+      const respByDept = new Map<string, number>();
+      for (const r of responses) {
+        const dept = (r.department && r.department.trim()) || (r.respondentId ? deptByUser.get(r.respondentId) ?? null : null);
+        if (!dept) continue;
+        respByDept.set(dept, (respByDept.get(dept) ?? 0) + 1);
+        const ans = (r.answers ?? {}) as Record<string, number>;
+        let dm = cell.get(dept); if (!dm) { dm = new Map(); cell.set(dept, dm); }
+        for (const [qid, v] of Object.entries(ans)) {
+          if (typeof v !== 'number') continue;
+          const a = dm.get(qid) ?? []; a.push(v); dm.set(qid, a);
+          const da = deptAll.get(dept) ?? []; da.push(v); deptAll.set(dept, da);
+        }
+      }
+      const qids = qbank.length ? qbank.filter((q) => q.driver).map((q) => q.id) : Object.keys(Q_DRIVER_FALLBACK);
+      const columns = qids.map((id) => ({ id, driver: qDriver[id] ?? null, text: qText[id] ?? id }));
+      const rows = [...cell.entries()].map(([dept, dm]) => {
+        const allv = deptAll.get(dept) ?? [];
+        const mean = allv.length ? r2(allv.reduce((a, b) => a + b, 0) / allv.length) : null;
+        const score = mean != null ? scoreFromMean(mean) : null;
+        const cells: Record<string, { fav: number; unfav: number; mean: number }> = {};
+        for (const [qid, vals] of dm) { const ag = aggregate(vals); if (ag) cells[qid] = { fav: ag.favorablePct, unfav: ag.unfavorablePct, mean: ag.mean }; }
+        return { name: dept, responseCount: respByDept.get(dept) ?? 0, score, mean, cells };
+      }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      return { available: true as const, columns, rows };
+    }),
+
+  // ── Group lists for the analytics Groups selector ─────────────────────────
+  groups: protectedProcedure.query(async ({ ctx }) => {
+    const allUsers = await ctx.db.query.users.findMany();
+    const allDepts = await ctx.db.query.departments.findMany();
+    const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
+    const active = allUsers.filter((u) => u.isActive);
+    const departments = [...new Set(active.map((u) => (u.departmentId ? deptNameById.get(u.departmentId) : null)).filter(Boolean) as string[])].sort();
+    const nameById = new Map(allUsers.map((u) => [u.id, ((u.name ?? '').trim() || u.email || 'Unknown')]));
+    const managerIds = new Set(active.map((u) => u.managerId).filter(Boolean) as string[]);
+    const hierarchies = [...managerIds].map((id) => nameById.get(id) as string).filter(Boolean).sort();
+    const eltLeaders = [...managerIds].filter((id) => { const u = allUsers.find((x) => x.id === id); return !!u && !u.managerId; }).map((id) => nameById.get(id) as string).sort();
+    return { departments, eltLeaders, hierarchies, businessUnits: [] as string[] };
+  }),
 
 });
 
