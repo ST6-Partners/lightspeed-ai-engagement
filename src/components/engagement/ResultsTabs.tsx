@@ -191,10 +191,10 @@ function heatScale(t: number): string {
   const c = [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * u));
   return `#${c.map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }
-const colorFav = (f: number) => heatScale((f - 45) / 50);       // 45% red .. 95% teal
-const colorUnfav = (u: number) => heatScale(1 - u / 30);        // 0% teal .. 30%+ red
-const colorAvg = (m: number) => heatScale((m - 2) / 2);         // 2.0 red .. 4.0 teal
-const colorScore = (sc: number) => heatScale((sc - 45) / 50);   // 0-100 engagement score
+const colorFav = (f: number) => heatScale(f / 100);             // 0% red .. 50% mid .. 100% teal
+const colorUnfav = (u: number) => heatScale(1 - u / 40);        // 0% teal .. 40%+ red
+const colorAvg = (m: number) => heatScale((m - 1) / 4);         // 1.0 red .. 3.0 mid .. 5.0 teal
+const colorScore = (sc: number) => heatScale(sc / 100);         // 0-100 engagement score
 const divFav = colorFav;
 // Curated Drivers-of-Engagement columns (category pill + short label), matching the mockup.
 const CURATED_COLS: { id: string; cat: string; short: string }[] = [
