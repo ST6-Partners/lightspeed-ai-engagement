@@ -161,6 +161,21 @@ export default function EngagementSurvey() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Attributes</label>
+              <select className={sel} defaultValue="all" title="Filter by attribute — coming soon">
+                <option value="all">All</option>
+                <option value="job">Job title</option>
+                <option value="tenure">Tenure</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Outcomes</label>
+              <select className={sel} defaultValue="all" title="Filter by outcome — coming soon">
+                <option value="all">All</option>
+                <option value="promoters">eNPS promoters</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Period</label>
               <select value={periodId ?? data.selectedId} onChange={(e) => setPeriodId(e.target.value)} className={sel}>
                 {[...data.periods].reverse().map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
