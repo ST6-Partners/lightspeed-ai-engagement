@@ -48,6 +48,16 @@ export default function EngagementSurvey() {
     const periods = hasData ? [...data.periods].reverse() : [];
     return (
       <div className="max-w-4xl mx-auto">
+        {hasData && (
+          <div className="flex justify-end mb-3">
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Period</label>
+              <select value={progressPeriod ?? data.selectedId} onChange={(e) => setProgressPeriod(e.target.value)} className={sel}>
+                {[...data.periods].reverse().map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="ls-eyebrow mb-1">Engagement</div>
@@ -89,21 +99,13 @@ export default function EngagementSurvey() {
             </div>
 
             <div className="ls-card mt-5 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-ls-line flex-wrap gap-3">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-ls-line">
                 <h2 className="font-bold">Campaign Progress</h2>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Period</label>
-                    <select value={progressPeriod ?? (hasData ? data.selectedId : '')} onChange={(e) => setProgressPeriod(e.target.value)} className={sel}>
-                      {hasData && [...data.periods].reverse().map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] font-semibold uppercase text-ls-ink-3">View by</label>
-                    <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} className={sel}>
-                      <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option><option value="loc">By Locations</option>
-                    </select>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold uppercase text-ls-ink-3">View by</label>
+                  <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} className={sel}>
+                    <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option><option value="loc">By Locations</option>
+                  </select>
                 </div>
               </div>
               <div className="p-5">
