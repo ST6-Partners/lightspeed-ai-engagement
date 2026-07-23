@@ -22,9 +22,10 @@ export default function EngagementSurvey() {
   const [department, setDepartment] = useState<string>('all');
   const [groupNote, setGroupNote] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('dept');
+  const [progressPeriod, setProgressPeriod] = useState<string | undefined>(undefined);
 
   const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
-  const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: undefined, groupBy }, { enabled: view === 'landing' });
+  const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: progressPeriod, groupBy }, { enabled: view === 'landing' });
   const groups = trpc.engagementAnalytics.groups.useQuery(undefined, { enabled: view === 'analytics' });
   const data = results.data;
 
@@ -88,13 +89,21 @@ export default function EngagementSurvey() {
             </div>
 
             <div className="ls-card mt-5 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-ls-line">
-                <div><h2 className="font-bold">Campaign Progress</h2><div className="text-[11px] text-ls-ink-3 mt-0.5">{c?.label}</div></div>
-                <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-semibold uppercase text-ls-ink-3">View by</label>
-                  <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} className={sel}>
-                    <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option><option value="loc">By Locations</option>
-                  </select>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-ls-line flex-wrap gap-3">
+                <h2 className="font-bold">Campaign Progress</h2>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Period</label>
+                    <select value={progressPeriod ?? (hasData ? data.selectedId : '')} onChange={(e) => setProgressPeriod(e.target.value)} className={sel}>
+                      {hasData && [...data.periods].reverse().map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-semibold uppercase text-ls-ink-3">View by</label>
+                    <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} className={sel}>
+                      <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option><option value="loc">By Locations</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="p-5">

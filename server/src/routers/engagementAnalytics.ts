@@ -643,7 +643,7 @@ export const engagementAnalyticsRouter = router({
         for (const u of active) { const dn = u.departmentId ? deptNameById.get(u.departmentId) : null; if (dn) head.set(dn, (head.get(dn) ?? 0) + 1); }
         const resp = new Map<string, number>();
         for (const rp of responses) { const dn = (rp.department && rp.department.trim()) || (rp.respondentId ? deptByUser.get(rp.respondentId) ?? null : null); if (dn) resp.set(dn, (resp.get(dn) ?? 0) + 1); }
-        const groups: Grp[] = [...head.entries()].map(([name, people]) => { const rc = resp.get(name) ?? 0; return { name, people, responseCount: rc, responseRatePct: people ? r1((rc / people) * 100) : null }; }).sort((a, b) => (b.responseRatePct ?? 0) - (a.responseRatePct ?? 0));
+        const groups: Grp[] = [...head.entries()].map(([name, people]) => { const rc = resp.get(name) ?? 0; return { name, people, responseCount: rc, responseRatePct: people ? r1(Math.min(100, (rc / people) * 100)) : null }; }).sort((a, b) => (b.responseRatePct ?? 0) - (a.responseRatePct ?? 0));
         return { available: true as const, groupBy: 'dept' as const, periodLabel: target?.label ?? 'Current survey', partial: false as const, groups };
       }
 
@@ -689,7 +689,7 @@ export const engagementAnalyticsRouter = router({
         const elig = headByDept.get(name) ?? null;
         return { name, responseCount: arr.length, score: Math.round((pr / arr.length - de / arr.length) * 100),
           promoterPct: r1((pr / arr.length) * 100), passivePct: r1((pa / arr.length) * 100), detractorPct: r1((de / arr.length) * 100),
-          eligibleCount: elig, participationPct: elig ? r1((arr.length / elig) * 100) : null };
+          eligibleCount: elig, participationPct: elig ? r1(Math.min(100, (arr.length / elig) * 100)) : null };
       }).filter((g) => g.responseCount >= 4).sort((a, b) => b.score - a.score);
       return { available: true as const, score, responseCount: total, promoters: prom, passives: pas, detractors: det,
         promoterPct: r1((prom / total) * 100), passivePct: r1((pas / total) * 100), detractorPct: r1((det / total) * 100), byGroup };
