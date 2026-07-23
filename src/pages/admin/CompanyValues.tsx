@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X, RefreshCw } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -22,6 +23,7 @@ export default function CompanyValues() {
   const isAdmin = !!me && (RANK[(me.role as keyof typeof RANK)] ?? 0) >= RANK.admin;
 
   const { data: values, refetch, isLoading } = trpc.values.list.useQuery({ includeInactive: true });
+  const imp = trpc.values.import.useMutation({ onSuccess: () => refetch() });
   const { data: status, refetch: refetchStatus } = trpc.values.syncStatus.useQuery();
 
   const create = trpc.values.createValue.useMutation({ onSuccess: () => { resetNew(); refetch(); }, onError: (e) => alert(e.message) });
@@ -48,6 +50,8 @@ export default function CompanyValues() {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Company Values</h2>
+          <div className="my-2"><ImportButton label="Import values" hint="CSV: name, pillar, category, description"
+            onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? '', pillar: r.pillar, category: r.category, description: r.description })) })} /></div>
           <p className="text-sm text-gray-500">The values framework scored in employee performance evaluations (Engagement → Reviews). Grouped by pillar. Deactivate to retire without losing history.</p>
         </div>
         {isAdmin && status?.configured && (

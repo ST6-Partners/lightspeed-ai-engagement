@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -20,6 +21,7 @@ export default function PerformanceCriteria() {
   const isAdmin = !!me && (RANK[(me.role as keyof typeof RANK)] ?? 0) >= RANK.admin;
 
   const { data: criteria, refetch, isLoading } = trpc.performance.listCriteria.useQuery({ includeInactive: true });
+  const imp = trpc.performance.importCriteria.useMutation({ onSuccess: () => refetch() });
 
   const create = trpc.performance.createCriterion.useMutation({ onSuccess: () => { resetNew(); refetch(); }, onError: (e) => alert(e.message) });
   const update = trpc.performance.updateCriterion.useMutation({ onSuccess: () => { setEditing(null); refetch(); }, onError: (e) => alert(e.message) });
@@ -41,6 +43,8 @@ export default function PerformanceCriteria() {
     <div className="max-w-3xl">
       <div className="mb-3">
         <h2 className="text-lg font-bold text-gray-900">Performance Criteria</h2>
+        <div className="my-2"><ImportButton label="Import criteria" hint="CSV: name, definition"
+          onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? '', definition: r.definition ?? r.description })) })} /></div>
         <p className="text-sm text-gray-500">The performance framework scored in employee reviews (Engagement &rarr; Reviews, Performance tab). The companion axis to Company Values. Deactivate to retire a criterion without losing history.</p>
       </div>
 

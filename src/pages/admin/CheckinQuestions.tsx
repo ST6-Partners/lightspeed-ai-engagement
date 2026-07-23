@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Trash2, GripVertical, ListChecks } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
 
@@ -26,6 +27,7 @@ const CADENCES = [
 export default function CheckinQuestions() {
   const utils = trpc.useContext();
   const { data: questions } = trpc.checkinQuestions.list.useQuery({ includeInactive: true });
+  const imp = trpc.checkinQuestions.import.useMutation({ onSuccess: () => utils.checkinQuestions.list.invalidate() });
   const { data: settings } = trpc.checkinSettings.get.useQuery();
 
   const invalidate = () => utils.checkinQuestions.list.invalidate();
@@ -56,6 +58,8 @@ export default function CheckinQuestions() {
         <ListChecks className="text-blue-600" size={22} />
         <div>
           <h1 className="text-xl font-bold text-gray-900">Check-in Questions</h1>
+          <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, category, driver"
+            onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ text: r.text ?? r.question ?? '', category: r.category, driver: r.driver })) })} /></div>
           <p className="text-sm text-gray-500">Pick which questions the check-in asks, their type, and how often it runs.</p>
         </div>
       </div>

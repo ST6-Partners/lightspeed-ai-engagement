@@ -140,6 +140,22 @@ export const valuesRouter = router({
   // the optional ATA sync (syncFromSource) only touches 'seed'/'ATA' rows, so
   // local values and any synced values coexist without clobbering each other.
 
+  import: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ name: z.string(), pillar: z.string().optional(), category: z.string().optional(), description: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const existing = new Set((await ctx.db.query.companyValues.findMany()).filter((v) => v.active).map((v) => v.name.trim().toLowerCase()));
+      let order = existing.size * 10;
+      for (const r of input.rows) {
+        const name = (r.name ?? '').trim(); if (!name) { skipped++; continue; }
+        if (existing.has(name.toLowerCase())) { skipped++; continue; }
+        try { await ctx.db.insert(companyValues).values({ name, pillar: (r.pillar ?? '').trim() || 'General', category: r.category?.trim() || null, description: r.description?.trim() || null, sortOrder: order, source: 'local', active: true }); existing.add(name.toLowerCase()); order += 10; added++; }
+        catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors };
+    }),
+
   createValue: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

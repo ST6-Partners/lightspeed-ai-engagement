@@ -25,6 +25,22 @@ export const managerSurveyQuestionsRouter = router({
       return input?.includeInactive ? all : all.filter((q) => q.isActive);
     }),
 
+  import: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ text: z.string(), description: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const existing = new Set((await ctx.db.query.managerSurveyQuestions.findMany()).map((q) => q.text.trim().toLowerCase()));
+      let order = existing.size;
+      for (const r of input.rows) {
+        const text = (r.text ?? '').trim(); if (!text) { skipped++; continue; }
+        if (existing.has(text.toLowerCase())) { skipped++; continue; }
+        try { await ctx.db.insert(managerSurveyQuestions).values({ text, description: r.description?.trim() || null, sortOrder: order++ }); existing.add(text.toLowerCase()); added++; }
+        catch (e) { errors.push(`${text.slice(0, 40)}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors };
+    }),
+
   create: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

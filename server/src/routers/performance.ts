@@ -40,6 +40,22 @@ export const performanceRouter = router({
       return input?.includeInactive ? all : all.filter((c) => c.active);
     }),
 
+  importCriteria: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ name: z.string(), definition: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const existing = new Set((await ctx.db.query.performanceCriteria.findMany()).filter((c) => c.active).map((c) => c.name.trim().toLowerCase()));
+      let order = existing.size * 10 + 10;
+      for (const r of input.rows) {
+        const name = (r.name ?? '').trim(); if (!name) { skipped++; continue; }
+        if (existing.has(name.toLowerCase())) { skipped++; continue; }
+        try { await ctx.db.insert(performanceCriteria).values({ name, definition: r.definition?.trim() || null, sortOrder: order, source: 'local', active: true }); existing.add(name.toLowerCase()); order += 10; added++; }
+        catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors };
+    }),
+
   createCriterion: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

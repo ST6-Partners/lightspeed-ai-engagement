@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const inputCls =
   'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -14,6 +15,7 @@ interface Row { id: string; text: string; description: string | null; isActive: 
 
 export default function PeerReviewQuestions() {
   const { data: rows, refetch, isLoading } = trpc.peerReviewQuestions.list.useQuery({ includeInactive: true });
+  const imp = trpc.peerReviewQuestions.import.useMutation({ onSuccess: () => refetch() });
   const create = trpc.peerReviewQuestions.create.useMutation({ onSuccess: () => { resetNew(); refetch(); }, onError: (e) => alert(e.message) });
   const update = trpc.peerReviewQuestions.update.useMutation({ onSuccess: () => { setEditing(null); refetch(); }, onError: (e) => alert(e.message) });
   const remove = trpc.peerReviewQuestions.remove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
@@ -34,6 +36,8 @@ export default function PeerReviewQuestions() {
     <div className="max-w-4xl">
       <div className="mb-2">
         <h2 className="text-lg font-bold text-gray-900">Peer Review Questions</h2>
+        <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, description"
+          onImport={async (imported) => imp.mutateAsync({ rows: imported.map((r) => ({ text: r.text ?? r.question ?? '', description: r.description })) })} /></div>
         <p className="text-sm text-gray-500">
           The statements employees rate about a peer on the Peer Review. Order by the
           Sort field. Deactivate to remove a question from the form without affecting past responses.

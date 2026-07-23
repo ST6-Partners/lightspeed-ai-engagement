@@ -9,12 +9,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { DRIVERS } from '../../lib/engagementSurvey';
 import { Plus, Trash2, ListChecks, Save, Copy, Star } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
 
 export default function EngagementQuestions() {
   const utils = trpc.useContext();
   const { data: bank } = trpc.engagementSurveyQuestions.list.useQuery();
+  const imp = trpc.engagementSurveyQuestions.import.useMutation({ onSuccess: () => utils.engagementSurveyQuestions.list.invalidate() });
   const { data: versions } = trpc.engagementSurveyVersions.list.useQuery();
 
   const invalidateBank = () => utils.engagementSurveyQuestions.list.invalidate();
@@ -102,6 +104,8 @@ export default function EngagementQuestions() {
         <ListChecks className="text-blue-600" size={22} />
         <div>
           <h1 className="text-xl font-bold text-gray-900">Engagement Questions</h1>
+          <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, driver, section, sectionTitle"
+            onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ text: r.text ?? r.question ?? '', driver: r.driver, section: r.section, sectionTitle: r.sectiontitle })) })} /></div>
           <p className="text-sm text-gray-500">Build named survey versions (e.g. one for Marketing, one for Sales). Check the questions a version includes, then Save — that version’s Take Survey tab updates to match.</p>
         </div>
       </div>

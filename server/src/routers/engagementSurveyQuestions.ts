@@ -30,6 +30,26 @@ export const engagementSurveyQuestionsRouter = router({
     return all.filter((q) => q.isActive);
   }),
 
+  import: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ text: z.string(), driver: z.string().optional(), section: z.string().optional(), sectiontitle: z.string().optional(), sectionTitle: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const rowsAll = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const existing = new Set(rowsAll.map((q) => q.text.trim().toLowerCase()));
+      let order = rowsAll.reduce((m, q) => Math.max(m, q.sortOrder), 0) + 1;
+      for (const r of input.rows) {
+        const text = (r.text ?? '').trim(); if (!text) { skipped++; continue; }
+        if (existing.has(text.toLowerCase())) { skipped++; continue; }
+        const section = (r.section ?? '').trim() || 'custom';
+        const sectionTitle = (r.sectionTitle ?? r.sectiontitle ?? '').trim() || 'Custom Questions';
+        const id = `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        try { await ctx.db.insert(engagementSurveyQuestions).values({ id, text, driver: r.driver?.trim() || null, section, sectionTitle, sectionIntro: '', type: 'likert5', isActive: true, isCore: false, sortOrder: order++ }); existing.add(text.toLowerCase()); added++; }
+        catch (e) { errors.push(`${text.slice(0, 40)}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors };
+    }),
+
   create: protectedProcedure
     .use(requireAdmin)
     .input(z.object({
