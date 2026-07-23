@@ -14,6 +14,7 @@
 import { useState, useMemo } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X, ChevronRight, ChevronDown, Users, UserPlus, UserMinus } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const inputCls =
   'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -30,6 +31,7 @@ export default function Departments() {
   const update = trpc.departments.update.useMutation({ onSuccess: () => { setEditing(null); utils.departments.list.invalidate(); } });
   const remove = trpc.departments.remove.useMutation({ onSuccess: () => utils.departments.list.invalidate(), onError: (e) => alert(e.message) });
   const moveEmp = trpc.auth.updateUser.useMutation({ onSuccess: () => utils.auth.listUsers.invalidate(), onError: (e) => alert(e.message) });
+  const importDepts = trpc.departments.import.useMutation({ onSuccess: () => utils.departments.list.invalidate() });
 
   const [nName, setNName] = useState('');
   const [nDesc, setNDesc] = useState('');
@@ -106,12 +108,16 @@ export default function Departments() {
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-2">
-        <h2 className="text-lg font-bold text-gray-900">Departments &amp; Teams</h2>
-        <p className="text-sm text-gray-500">
-          The managed list of departments (used by Job Titles, PIP, and the Exit Survey) and the people on each team.
-          Each person is on one team at a time. Expand a department to see and edit its members.
-        </p>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Departments &amp; Teams</h2>
+          <p className="text-sm text-gray-500">
+            The managed list of departments (used by Job Titles, PIP, and the Exit Survey) and the people on each team.
+            Each person is on one team at a time. Expand a department to see and edit its members.
+          </p>
+        </div>
+        <ImportButton label="Import departments" hint="CSV columns: name, description"
+          onImport={async (rows) => importDepts.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? r.department ?? '', description: r.description })) })} />
       </div>
 
       {/* Add department */}

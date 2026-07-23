@@ -29,6 +29,30 @@ export const departmentsRouter = router({
       return input?.includeInactive ? all : all.filter((d) => d.isActive);
     }),
 
+  // Bulk CSV import (admin). Rows: { name, description? }. Upsert by name —
+  // existing names are skipped, not overwritten.
+  import: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      rows: z.array(z.object({ name: z.string(), description: z.string().optional() })).max(5000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const existing = new Set((await ctx.db.query.departments.findMany()).map((d) => d.name.trim().toLowerCase()));
+      let order = existing.size;
+      for (const r of input.rows) {
+        const name = (r.name ?? '').trim();
+        if (!name) { skipped++; continue; }
+        if (existing.has(name.toLowerCase())) { skipped++; continue; }
+        try {
+          await ctx.db.insert(departments).values({ name, description: r.description?.trim() || null, sortOrder: order++ });
+          existing.add(name.toLowerCase()); added++;
+        } catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      if (added > 0) await auditChange(ctx.db, ctx.user.id, ctx.user.id, 'departments', 'create');
+      return { added, skipped, errors };
+    }),
+
   create: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

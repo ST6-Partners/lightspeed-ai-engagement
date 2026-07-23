@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const inputCls =
   'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -18,6 +19,7 @@ export default function JobTitles() {
   const create = trpc.jobTitles.create.useMutation({ onSuccess: () => { resetNew(); refetch(); } });
   const update = trpc.jobTitles.update.useMutation({ onSuccess: () => { setEditing(null); refetch(); } });
   const remove = trpc.jobTitles.remove.useMutation({ onSuccess: () => refetch(), onError: (e) => alert(e.message) });
+  const importTitles = trpc.jobTitles.import.useMutation({ onSuccess: () => refetch() });
 
   const [nTitle, setNTitle] = useState('');
   const [nLevel, setNLevel] = useState('');
@@ -31,13 +33,17 @@ export default function JobTitles() {
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-2">
-        <h2 className="text-lg font-bold text-gray-900">Job Titles</h2>
-        <p className="text-sm text-gray-500">
-          The managed list of titles / levels used by the PIP “Role / Level”, the Employees directory,
-          and the Exit Survey. Titles are department-agnostic — a person’s department is set on their
-          employee record, not here. Separate from a user’s permission role. Deactivate to retire.
-        </p>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Job Titles</h2>
+          <p className="text-sm text-gray-500">
+            The managed list of titles / levels used by the PIP “Role / Level”, the Employees directory,
+            and the Exit Survey. Titles are department-agnostic — a person’s department is set on their
+            employee record, not here. Separate from a user’s permission role. Deactivate to retire.
+          </p>
+        </div>
+        <ImportButton label="Import titles" hint="CSV columns: title, level"
+          onImport={async (rows) => importTitles.mutateAsync({ rows: rows.map((r) => ({ title: r.title ?? r.name ?? '', level: r.level })) })} />
       </div>
 
       {/* Add row */}
