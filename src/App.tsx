@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Entities from './pages/Entities';
@@ -15,8 +15,6 @@ import OkrAnalytics from './pages/OkrAnalytics';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
-import ManagerSurvey from './pages/ManagerSurvey';
-import PeerReview from './pages/PeerReview';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import Metrics from './pages/Metrics';
@@ -52,8 +50,8 @@ export default function App() {
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
         <Route path="/engagement-survey" element={<EngagementSurvey />} />
-        <Route path="/manager-survey" element={<ManagerSurvey />} />
-        <Route path="/peer-review" element={<PeerReview />} />
+        <Route path="/manager-survey" element={<Navigate to="/reviews?tab=manager" replace />} />
+        <Route path="/peer-review" element={<Navigate to="/reviews?tab=peer" replace />} />
         {/* Core Data */}
         <Route path="/core-data">
           <Route index element={<CoreData />} />
