@@ -127,9 +127,12 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
   const flow = data.company.trend.filter((t) => t.favorablePct != null).map((t) => ({ label: t.label, ...bandsFromFav(t.favorablePct as number) }));
   const present = new Set(data.departments.map((d) => d.name));
   const extra = ((data.departmentRoster ?? []).filter((r) => !present.has(r.name)).map((r) => ({ name: r.name, favorablePct: null, mean: null, responseCount: 0, eligibleCount: r.headcount, participationPct: null, prevFavorablePct: null, delta: null, vsCompany: null, byDriver: [] }))) as unknown as AnalyticsData['departments'];
-  const depts = [...data.departments, ...extra];
+  const cmp = data.company;
+  const allRow = ({ name: 'All participants', favorablePct: cmp.favorablePct, mean: cmp.mean, responseCount: cmp.responseCount, eligibleCount: cmp.eligibleCount, participationPct: cmp.participationPct, prevFavorablePct: cmp.prevFavorablePct, delta: (cmp.favorablePct != null && cmp.prevFavorablePct != null) ? Math.round((cmp.favorablePct - cmp.prevFavorablePct) * 10) / 10 : null, vsCompany: null, byDriver: [] }) as unknown as AnalyticsData['departments'][number];
+  const depts = [allRow, ...data.departments, ...extra];
   const scoreBasis = data.departmentBasis === 'score';
   const vals = data.departments.map((d) => d.favorablePct ?? 0);
+  const fmtScore = (v: number) => String(+v.toFixed(2));
   return (
     <div className="space-y-4">
       <div className="ls-card p-5">
@@ -157,12 +160,13 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
             <div className="col-span-3">Group name</div><div className="col-span-2 text-center">Score</div><div className="col-span-1 text-center">Change</div><div className="col-span-2 text-center">Response rate</div><div className="col-span-1 text-center">Percentile</div><div className="col-span-3">Distribution</div>
           </div>
           {depts.map((d) => {
-            const p = percentileOf(d.favorablePct ?? 0, vals);
+            const isAll = d.name === 'All participants';
+            const p = isAll ? 50 : percentileOf(d.favorablePct ?? 0, vals);
             const bar = d.favorablePct ?? 0;
             return (
-              <div key={d.name} className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b border-ls-line last:border-0">
+              <div key={d.name} className={`grid grid-cols-12 gap-2 px-4 py-3 items-center border-b border-ls-line last:border-0 ${isAll ? 'bg-ls-bg-2/40' : ''}`}>
                 <div className="col-span-3 font-semibold text-[13px]">{d.name}</div>
-                <div className="col-span-2 text-center text-[13px] tabular-nums">{d.favorablePct == null ? '—' : scoreBasis ? d.favorablePct.toFixed(1) : `${Math.round(d.favorablePct)}%`}</div>
+                <div className="col-span-2 text-center text-[13px] tabular-nums">{d.favorablePct == null ? '—' : scoreBasis ? fmtScore(d.favorablePct) : `${Math.round(d.favorablePct)}%`}</div>
                 <div className="col-span-1 text-center text-[13px]">{d.delta == null ? <span className="text-ls-ink-3">—</span> : <span style={{ color: d.delta >= 0 ? '#5F8C1A' : '#C2615A' }} className="font-semibold">{d.delta >= 0 ? '▲' : '▼'}{Math.abs(d.delta).toFixed(1)}</span>}</div>
                 <div className="col-span-2 text-center text-[13px] tabular-nums">{d.participationPct != null ? `${Math.round(d.participationPct)}%` : '—'}</div>
                 <div className="col-span-1 text-center text-[13px] tabular-nums">{ord(p)}</div>
@@ -180,12 +184,22 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
 const divFav = (f: number) => f >= 88 ? '#5FB8C9' : f >= 80 ? '#96CFDA' : f >= 70 ? '#CFE8ED' : f >= 60 ? '#F4D7D2' : f >= 50 ? '#EBB1A9' : '#E0897E';
 const divAvg = (m: number) => m >= 3.6 ? '#5FB8C9' : m >= 3.4 ? '#96CFDA' : m >= 3.1 ? '#CFE8ED' : m >= 2.9 ? '#EFF3F4' : m >= 2.6 ? '#F4D7D2' : m >= 2.3 ? '#EBB1A9' : '#E0897E';
 const divUnfav = (u: number) => u <= 3 ? '#5FB8C9' : u <= 6 ? '#96CFDA' : u <= 10 ? '#CFE8ED' : u <= 15 ? '#F4D7D2' : u <= 22 ? '#EBB1A9' : '#E0897E';
-// A curated, readable set of statements (not all 66) for the "Drivers of Engagement" view.
-const CURATED = ['lead_2', 'lead_4', 'work_32', 'work_21', 'lead_3', 'work_33', 'lead_7', 'lead_1', 'lead_9'];
+// Curated Drivers-of-Engagement columns (category pill + short label), matching the mockup.
+const CURATED_COLS: { id: string; cat: string; short: string }[] = [
+  { id: 'lead_2', cat: 'Fairness', short: 'Rewards match my effort' },
+  { id: 'lead_4', cat: 'Fairness', short: 'Fair people decisions' },
+  { id: 'work_32', cat: 'Utilization', short: 'Using my skills fully' },
+  { id: 'work_21', cat: 'Goal Support', short: 'Fewer work distractions' },
+  { id: 'lead_3', cat: 'Leader Availability', short: 'Leaders connect with people' },
+  { id: 'work_33', cat: 'Prof. Dev.', short: 'Can grow my influence' },
+  { id: 'lead_7', cat: 'Fairness', short: 'Fair rewards for performance' },
+  { id: 'lead_1', cat: 'Leader Integrity', short: 'Leaders keep commitments' },
+  { id: 'lead_9', cat: 'Leader Integrity', short: 'Can depend on leadership' },
+];
 type HCell = { fav: number; unfav: number; mean: number };
 export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
   const [metric, setMetric] = useState<'fav' | 'avg' | 'unfav'>('fav');
-  const [view, setView] = useState<'drivers' | 'engagement' | 'mgreff'>('drivers');
+  const [view, setView] = useState<'drivers' | 'engagement'>('drivers');
   const [grouping, setGrouping] = useState<'dept' | 'mgr' | 'hier'>('dept');
   const hm = trpc.engagementAnalytics.heatmapCells.useQuery();
   if (hm.isLoading) return <div className="ls-card p-6 text-center text-[13px] text-ls-ink-3">Loading heatmap…</div>;
@@ -214,32 +228,23 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
   const rows = d.rows as Row[];
   const allCols = d.columns as Col[];
   const colById = new Map(allCols.map((c) => [c.id, c]));
-  const twoTier = view !== 'engagement';
 
-  // flat columns + (for two-tier) driver group headers
-  let flatCols: { id: string; text: string; driver: string | null }[] = [];
-  const groupsHdr: { driver: string | null; count: number }[] = [];
+  // display columns
+  type Disp = { id: string; cat?: string; short?: string; label?: string; driver: string | null };
+  let cols: Disp[] = [];
   if (view === 'engagement') {
     const present = new Set(allCols.map((c) => c.driver).filter(Boolean) as string[]);
-    flatCols = DRIVERS.map((x) => x.key).filter((k) => present.has(k)).map((k) => ({ id: `drv:${k}`, text: dlabel(k), driver: k }));
+    cols = DRIVERS.map((x) => x.key).filter((k) => present.has(k)).map((k) => ({ id: `drv:${k}`, label: dlabel(k), driver: k }));
   } else {
-    const ids = view === 'mgreff' ? allCols.filter((c) => c.driver === 'manager_effectiveness').map((c) => c.id) : CURATED.filter((id) => colById.has(id));
-    flatCols = ids.map((id) => { const c = colById.get(id)!; return { id: c.id, text: c.text, driver: c.driver }; });
-    for (const c of flatCols) { const last = groupsHdr[groupsHdr.length - 1]; if (last && last.driver === c.driver) last.count++; else groupsHdr.push({ driver: c.driver, count: 1 }); }
+    cols = CURATED_COLS.filter((c) => colById.has(c.id)).map((c) => ({ id: c.id, cat: c.cat, short: c.short, driver: colById.get(c.id)!.driver }));
   }
-  const cellFor = (r: Row, col: { id: string; driver: string | null }): HCell | undefined => {
+  const cellFor = (r: Row, col: Disp): HCell | undefined => {
     if (view !== 'engagement') return r.cells[col.id];
     const qs = allCols.filter((c) => c.driver === col.driver).map((c) => r.cells[c.id]).filter(Boolean) as HCell[];
     if (!qs.length) return undefined;
     const avg = (f: (c: HCell) => number) => qs.reduce((a, c) => a + f(c), 0) / qs.length;
     return { fav: avg((c) => c.fav), unfav: avg((c) => c.unfav), mean: avg((c) => c.mean) };
   };
-  const shorten = (t: string) => t.length > 38 ? t.slice(0, 36) + '…' : t;
-  const cornerSelect = (
-    <select value={grouping} onChange={(e) => setGrouping(e.target.value as typeof grouping)} className="px-2.5 py-1.5 border border-ls-line rounded-md text-[13px] font-semibold bg-white">
-      <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option>
-    </select>
-  );
 
   return (
     <div>
@@ -249,7 +254,6 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
           <select value={view} onChange={(e) => setView(e.target.value as typeof view)} className="px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white">
             <option value="drivers">Drivers of Engagement</option>
             <option value="engagement">Engagement</option>
-            <option value="mgreff">Manager Effectiveness Survey</option>
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -263,22 +267,21 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
       <div className="ls-card overflow-auto">
         <table className="border-separate text-[12px]" style={{ borderSpacing: 5 }}>
           <thead>
-            {twoTier ? (
-              <>
-                <tr>
-                  <th rowSpan={2} className="text-left px-2 py-1 align-bottom sticky left-0 bg-white min-w-[200px] border-b-2 border-ls-line">{cornerSelect}</th>
-                  <th rowSpan={2} className="px-2 py-2 align-bottom text-center border-b-2 border-ls-line">Engagement<br />Score</th>
-                  {groupsHdr.map((g, i) => <th key={i} colSpan={g.count} className="px-2 py-1 text-center border-b border-ls-line text-[11px] font-bold text-ls-ink">{g.driver ? dlabel(g.driver) : '—'}</th>)}
-                </tr>
-                <tr>{flatCols.map((c) => <th key={c.id} className="px-1.5 py-1 align-bottom text-center min-w-[96px] border-b-2 border-ls-line"><div className="text-[10px] font-medium text-ls-ink-3 leading-tight">{shorten(c.text)}</div></th>)}</tr>
-              </>
-            ) : (
-              <tr>
-                <th className="text-left px-2 py-1 align-bottom sticky left-0 bg-white min-w-[200px] border-b-2 border-ls-line">{cornerSelect}</th>
-                <th className="px-2 py-2 align-bottom text-center border-b-2 border-ls-line">Engagement<br />Score</th>
-                {flatCols.map((c) => <th key={c.id} className="px-1.5 py-2 align-bottom text-center min-w-[92px] border-b-2 border-ls-line"><div className="text-[10px] font-semibold text-ls-ink-2 leading-tight">{c.text}</div></th>)}
-              </tr>
-            )}
+            <tr>
+              <th className="text-left px-2 py-2 align-bottom sticky left-0 bg-white min-w-[200px] border-b-2 border-ls-line">
+                <select value={grouping} onChange={(e) => setGrouping(e.target.value as typeof grouping)} className="px-2.5 py-1.5 border border-ls-line rounded-md text-[13px] font-semibold bg-white">
+                  <option value="dept">By Departments</option><option value="mgr">By Managers</option><option value="hier">By Hierarchy</option>
+                </select>
+              </th>
+              <th className="px-2 py-2 align-bottom text-center border-b-2 border-ls-line">Engagement<br />Score</th>
+              {cols.map((c) => (
+                <th key={c.id} className="px-1.5 py-2 align-bottom text-center min-w-[100px] border-b-2 border-ls-line">
+                  {view === 'drivers'
+                    ? <><span className="ls-chip bg-ls-blue-50 text-ls-blue-deep">{c.cat}</span><div className="text-[10px] font-medium text-ls-ink-3 mt-1 leading-tight">{c.short}</div></>
+                    : <div className="text-[10px] font-semibold text-ls-ink-2 leading-tight">{c.label}</div>}
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
@@ -288,15 +291,16 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
                   <div className="text-[11px] text-ls-ink-3">Score: {r.mean != null ? r.mean.toFixed(2) : '—'} ({r.responseCount})</div>
                 </td>
                 <td className="text-center align-middle font-extrabold tabular-nums" style={{ color: divFav(r.score ?? 0) }}>{r.score == null ? '—' : `${r.score}`}</td>
-                {flatCols.map((c) => {
+                {cols.map((c) => {
                   const cell = cellFor(r, c);
                   if (!cell) return <td key={c.id}><div className="rounded-md py-2.5 text-center text-ls-ink-3 bg-ls-bg-2">—</div></td>;
                   const disp = metric === 'fav' ? `${Math.round(cell.fav)}%` : metric === 'unfav' ? `${Math.round(cell.unfav)}%` : cell.mean.toFixed(2);
                   const color = metric === 'fav' ? divFav(cell.fav) : metric === 'unfav' ? divUnfav(cell.unfav) : divAvg(cell.mean);
+                  const lbl = view === 'drivers' ? `${c.cat} · ${c.short}` : c.label;
                   return (
                     <td key={c.id}>
-                      <Tip content={<span>{r.name} · {c.driver ? dlabel(c.driver) : ''}<br />{c.text}<br />{Math.round(cell.fav)}% fav · {Math.round(cell.unfav)}% unfav · avg {cell.mean.toFixed(2)}/5</span>}>
-                        <span className="block rounded-md py-2.5 min-w-[84px] text-center font-bold" style={{ background: color, color: '#0b3a44' }}>{disp}</span>
+                      <Tip content={<span>{r.name} · {lbl}<br />{Math.round(cell.fav)}% fav · {Math.round(cell.unfav)}% unfav · avg {cell.mean.toFixed(2)}/5</span>}>
+                        <span className="block rounded-md py-2.5 min-w-[88px] text-center font-bold" style={{ background: color, color: '#0b3a44' }}>{disp}</span>
                       </Tip>
                     </td>
                   );
