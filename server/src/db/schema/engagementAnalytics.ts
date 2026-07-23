@@ -19,6 +19,11 @@ export const surveyPeriods = pgTable('survey_periods', {
   source: varchar('source', { length: 16 }).notNull().default('import'), // 'import' | 'live'
   scaleMax: integer('scale_max').notNull().default(5), // response-scale points: 15Five imports = 4, in-app = 5. Favorability % is the safe cross-scale comparison metric.
   isCurrent: boolean('is_current').notNull().default(false),
+  // Admin-managed survey window (AIE 2026-07-23). Set by HR/ELT only.
+  // The survey is takeable only while status='open' AND now is within [releaseAt, closeAt].
+  releaseAt: timestamp('release_at', { withTimezone: true }),
+  closeAt: timestamp('close_at', { withTimezone: true }),
+  status: varchar('status', { length: 16 }).notNull().default('draft'), // 'draft' | 'open' | 'closed'
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -21,6 +21,8 @@ export default function SurveyForm() {
   const [showGaps, setShowGaps] = useState(false);
 
   const { data: versions } = trpc.engagementSurveyVersions.list.useQuery();
+  const { data: period } = trpc.engagementSurvey.currentPeriod.useQuery();
+  const { data: myStatus } = trpc.engagementSurvey.myPeriodStatus.useQuery();
   const [versionId, setVersionId] = useState<string | undefined>(undefined);
   const effectiveVersionId = versionId ?? versions?.find((v) => v.isDefault)?.id ?? versions?.[0]?.id;
   const { data: versionData } = trpc.engagementSurveyVersions.getQuestions.useQuery(
@@ -77,6 +79,29 @@ export default function SurveyForm() {
         </p>
       </div>
     );
+  }
+
+  // ── Survey window / once-per-period gates ──
+  const fmt = (d: Date | string | null | undefined) =>
+    d ? new Date(d).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const locked = (title: string, body: string) => (
+    <div className="ls-card p-8 text-center border-l-4 border-ls-watch">
+      <div className="text-3xl mb-2">🔒</div>
+      <h2 className="text-xl font-bold mb-1">{title}</h2>
+      <p className="text-sm text-ls-ink-2 max-w-lg mx-auto">{body}</p>
+    </div>
+  );
+  if (myStatus?.completed) {
+    return locked('You’ve already completed this survey', 'Thanks — you can take it again when the next survey period opens.');
+  }
+  if (period && !period.exists) {
+    return locked('No survey is scheduled right now', 'Your HR or leadership team will open the next engagement survey period soon.');
+  }
+  if (period && period.exists && period.beforeRelease) {
+    return locked('The survey isn’t open yet', `This period opens ${fmt(period.releaseAt)}. Please check back then.`);
+  }
+  if (period && period.exists && (period.afterClose || !period.isOpen)) {
+    return locked('The survey is closed', period.closeAt ? `This period closed ${fmt(period.closeAt)}.` : 'This survey period is not currently open.');
   }
 
 

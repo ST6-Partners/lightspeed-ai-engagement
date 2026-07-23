@@ -6,7 +6,7 @@
 // `respondent_id` is nullable and set null on user delete.
 // ============================================================
 import {
-  pgTable, uuid, varchar, integer, text, jsonb, timestamp,
+  pgTable, uuid, varchar, integer, text, jsonb, timestamp, primaryKey,
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 
@@ -34,3 +34,18 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+
+// ============================================================
+// SURVEY COMPLETIONS — once-per-period ledger (AIE 2026-07-23).
+// Records WHO has completed a given period so the app can enforce "one response
+// per person per period" and show a per-user done state. Kept SEPARATE from the
+// confidential answers in engagement_survey_responses — this table never stores
+// any answer content, only (period, user, when). This is how completion is
+// tracked without attaching identity to the answers themselves.
+// ============================================================
+export const engagementSurveyCompletions = pgTable('engagement_survey_completions', {
+  periodId: uuid('period_id').notNull(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({ pk: primaryKey({ columns: [t.periodId, t.userId] }) }));

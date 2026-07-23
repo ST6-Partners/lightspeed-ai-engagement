@@ -4,14 +4,44 @@
 // promoted to columns. Responses are confidential; list/stats are for the
 // aggregate People-team read, not per-person attribution.
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
+import type { DrizzleClient } from '../db.js';
+import { engagementSurveyResponses, engagementSurveyCompletions } from '../db/schema/engagementSurvey.js';
+import { surveyPeriods } from '../db/schema/engagementAnalytics.js';
 import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
+import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
 
 const answersSchema = z.record(z.string(), z.number().int().min(1).max(5));
+
+type PeriodRow = typeof surveyPeriods.$inferSelect;
+
+// The survey is takeable only while a live period is 'open' AND now is inside
+// its release/close window (either bound may be null = unbounded on that side).
+function isWithinWindow(p: PeriodRow, now = new Date()): boolean {
+  if (p.status !== 'open') return false;
+  if (p.releaseAt && now < p.releaseAt) return false;
+  if (p.closeAt && now > p.closeAt) return false;
+  return true;
+}
+
+// The single active in-app survey period (admin-managed).
+function currentLivePeriod(db: DrizzleClient) {
+  return db.query.surveyPeriods.findFirst({
+    where: and(eq(surveyPeriods.source, 'live'), eq(surveyPeriods.isCurrent, true)),
+  });
+}
+
+// Period management is limited to HR or ELT (admins/sysadmins, HR-access, or an
+// ELT leadership badge). Managers cannot set release/close dates.
+async function assertHrOrElt(db: DrizzleClient, userId: string) {
+  const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const ok = !!u && (hasMinimumRole(u.role as RoleTier, 'admin') || u.isHrAccess || u.leaderBadge === 'ELT');
+  if (!ok) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only HR or ELT can manage survey periods.' });
+}
 
 export const engagementSurveyRouter = router({
   // Store one completed submission. Attributed to the signed-in user for
@@ -23,9 +53,25 @@ export const engagementSurveyRouter = router({
       versionId: z.string().uuid().optional(),
       enpsScore: z.number().int().min(0).max(10).optional(),
       enpsReason: z.string().max(4000).optional(),
-      periodId: z.string().uuid().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // ── Period gate: the survey must be open, and each person may submit once
+      // per period. Completion is tracked in a separate ledger (below) so the
+      // answers themselves stay unattributed. ──
+      const period = await currentLivePeriod(ctx.db);
+      if (!period || !isWithinWindow(period)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'The engagement survey is not open right now.' });
+      }
+      const already = await ctx.db.query.engagementSurveyCompletions.findFirst({
+        where: and(
+          eq(engagementSurveyCompletions.periodId, period.id),
+          eq(engagementSurveyCompletions.userId, ctx.user.id),
+        ),
+      });
+      if (already) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'You have already completed this period\u2019s survey.' });
+      }
+
       // Identity + org attributes come from the signed-in user's PROFILE — the
       // survey never asks "who are you". We snapshot the profile attributes onto
       // the response so later profile/org changes don't rewrite historical results.
@@ -70,7 +116,7 @@ export const engagementSurveyRouter = router({
         managerName,
         eltLeader,
         startYear: me?.hireYear ?? null,
-        periodId: input.periodId ?? null,
+        periodId: period.id,
         answers: input.answers,
         textAnswers: input.textAnswers ?? {},
         versionId: input.versionId ?? null,
@@ -78,7 +124,101 @@ export const engagementSurveyRouter = router({
         enpsReason: input.enpsReason?.trim() || null,
         status: 'complete',
       }).returning();
+
+      // Once-per-period ledger — records WHO finished, separate from the
+      // confidential answers (no answer content stored here).
+      await ctx.db.insert(engagementSurveyCompletions)
+        .values({ periodId: period.id, userId: ctx.user.id })
+        .onConflictDoNothing();
       return row;
+    }),
+
+  // Current live period + open state (drives the take-survey gate UI).
+  currentPeriod: protectedProcedure.query(async ({ ctx }) => {
+    const period = await currentLivePeriod(ctx.db);
+    if (!period) return { exists: false as const };
+    const now = new Date();
+    return {
+      exists: true as const,
+      id: period.id,
+      label: period.label,
+      status: period.status,
+      releaseAt: period.releaseAt,
+      closeAt: period.closeAt,
+      isOpen: isWithinWindow(period, now),
+      beforeRelease: !!period.releaseAt && now < period.releaseAt,
+      afterClose: !!period.closeAt && now > period.closeAt,
+    };
+  }),
+
+  // Has THIS user already completed the current period?
+  myPeriodStatus: protectedProcedure.query(async ({ ctx }) => {
+    const period = await currentLivePeriod(ctx.db);
+    if (!period) return { hasPeriod: false, completed: false };
+    const done = await ctx.db.query.engagementSurveyCompletions.findFirst({
+      where: and(
+        eq(engagementSurveyCompletions.periodId, period.id),
+        eq(engagementSurveyCompletions.userId, ctx.user.id),
+      ),
+    });
+    return { hasPeriod: true, completed: !!done, periodId: period.id };
+  }),
+
+  // ── Admin (HR/ELT only): manage the survey period window ──
+  adminListPeriods: protectedProcedure.query(async ({ ctx }) => {
+    await assertHrOrElt(ctx.db, ctx.user.id);
+    return ctx.db.query.surveyPeriods.findMany({ orderBy: [desc(surveyPeriods.createdAt)] });
+  }),
+
+  adminCreatePeriod: protectedProcedure
+    .input(z.object({
+      label: z.string().min(1).max(80),
+      releaseAt: z.string().optional().nullable(),
+      closeAt: z.string().optional().nullable(),
+      status: z.enum(['draft', 'open', 'closed']).default('open'),
+      makeCurrent: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertHrOrElt(ctx.db, ctx.user.id);
+      if (input.makeCurrent) {
+        await ctx.db.update(surveyPeriods).set({ isCurrent: false }).where(eq(surveyPeriods.source, 'live'));
+      }
+      const [row] = await ctx.db.insert(surveyPeriods).values({
+        label: input.label,
+        periodDate: new Date().toISOString().slice(0, 10),
+        source: 'live',
+        isCurrent: input.makeCurrent,
+        status: input.status,
+        releaseAt: input.releaseAt ? new Date(input.releaseAt) : null,
+        closeAt: input.closeAt ? new Date(input.closeAt) : null,
+      }).returning();
+      return row;
+    }),
+
+  adminUpdatePeriod: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      label: z.string().min(1).max(80).optional(),
+      releaseAt: z.string().optional().nullable(),
+      closeAt: z.string().optional().nullable(),
+      status: z.enum(['draft', 'open', 'closed']).optional(),
+      makeCurrent: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertHrOrElt(ctx.db, ctx.user.id);
+      const updates: Record<string, unknown> = {};
+      if (input.label !== undefined) updates.label = input.label;
+      if (input.releaseAt !== undefined) updates.releaseAt = input.releaseAt ? new Date(input.releaseAt) : null;
+      if (input.closeAt !== undefined) updates.closeAt = input.closeAt ? new Date(input.closeAt) : null;
+      if (input.status !== undefined) updates.status = input.status;
+      if (input.makeCurrent) {
+        await ctx.db.update(surveyPeriods).set({ isCurrent: false }).where(eq(surveyPeriods.source, 'live'));
+        updates.isCurrent = true;
+      }
+      if (Object.keys(updates).length) {
+        await ctx.db.update(surveyPeriods).set(updates).where(eq(surveyPeriods.id, input.id));
+      }
+      return { success: true };
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {

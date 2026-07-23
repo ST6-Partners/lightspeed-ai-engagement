@@ -24,6 +24,7 @@ import {
   SatisfactionDashboard,
   ReleaseNotesAdmin,
   EmailTestPanel,
+  SurveyPeriods,
 } from './admin';
 
 import Access from './settings/Access';
@@ -93,6 +94,7 @@ const ANALYTICS_TABS = [
 ];
 
 const CONFIG_TABS = [
+  { id: 'surveyperiods', label: 'Survey Periods' },
   { id: 'archived', label: 'Archived Items' },
 ];
 
@@ -245,6 +247,7 @@ export default function AdminSettings() {
         {activeSection === 'feedback' && showAnalytics && <FeedbackPanel />}
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
+        {activeSection === 'surveyperiods' && showConfig && <SurveyPeriods />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}
         {activeSection === 'activeusers' && showSystem && <ActiveUsers />}
