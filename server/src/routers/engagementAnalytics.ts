@@ -609,4 +609,136 @@ export const engagementAnalyticsRouter = router({
       return { kind: 'live' as const, periodLabel: target.label, rows };
     }),
 
+  // ── Campaign Progress (landing) — per-group participation/response ────────
+  campaignProgress: protectedProcedure
+    .input(z.object({ periodId: z.string().optional(), groupBy: z.enum(['dept', 'mgr', 'hier', 'loc']).default('dept') }))
+    .query(async ({ ctx, input }) => {
+      type Grp = { name: string; people: number; responseCount: number; responseRatePct: number | null };
+      if (input.groupBy === 'loc') {
+        return { available: false as const, groupBy: 'loc' as const, reason: 'no-location-field', periodLabel: '', partial: false as const, groups: [] as Grp[] };
+      }
+      const allUsers = await ctx.db.query.users.findMany();
+      const allDepts = await ctx.db.query.departments.findMany();
+      const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
+      const active = allUsers.filter((u) => u.isActive);
+      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const hist = periodRows.map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate })).sort((a, b) => a.periodDate.localeCompare(b.periodDate));
+      const live = responses.length > 0 ? { id: 'live', label: 'Current survey', periodDate: new Date().toISOString().slice(0, 10) } : null;
+      const periods = live ? [...hist, live] : hist;
+      const target = (input.periodId && periods.find((p) => p.id === input.periodId)) || periods[periods.length - 1] || null;
+
+      if (input.groupBy === 'dept') {
+        if (target && target.id !== 'live') {
+          const metricRows = await ctx.db.query.surveyMetrics.findMany();
+          const groups: Grp[] = metricRows
+            .filter((m) => m.periodId === target.id && m.scope === 'department' && m.dimension === 'overall')
+            .map((m) => ({ name: m.department ?? '', people: m.eligibleCount ?? 0, responseCount: m.responseCount, responseRatePct: m.eligibleCount ? r1((m.responseCount / m.eligibleCount) * 100) : null }))
+            .sort((a, b) => (b.responseRatePct ?? 0) - (a.responseRatePct ?? 0));
+          return { available: true as const, groupBy: 'dept' as const, periodLabel: target.label, partial: false as const, groups };
+        }
+        const deptByUser = new Map(active.map((u) => [u.id, u.departmentId ? deptNameById.get(u.departmentId) ?? null : null]));
+        const head = new Map<string, number>();
+        for (const u of active) { const dn = u.departmentId ? deptNameById.get(u.departmentId) : null; if (dn) head.set(dn, (head.get(dn) ?? 0) + 1); }
+        const resp = new Map<string, number>();
+        for (const rp of responses) { const dn = (rp.department && rp.department.trim()) || (rp.respondentId ? deptByUser.get(rp.respondentId) ?? null : null); if (dn) resp.set(dn, (resp.get(dn) ?? 0) + 1); }
+        const groups: Grp[] = [...head.entries()].map(([name, people]) => { const rc = resp.get(name) ?? 0; return { name, people, responseCount: rc, responseRatePct: people ? r1((rc / people) * 100) : null }; }).sort((a, b) => (b.responseRatePct ?? 0) - (a.responseRatePct ?? 0));
+        return { available: true as const, groupBy: 'dept' as const, periodLabel: target?.label ?? 'Current survey', partial: false as const, groups };
+      }
+
+      const nameById = new Map(allUsers.map((u) => [u.id, (`${u.name ?? ''}`.trim() || u.email || 'Unknown')]));
+      if (input.groupBy === 'mgr') {
+        const head = new Map<string, number>();
+        for (const u of active) { if (!u.managerId) continue; const mn = nameById.get(u.managerId) ?? 'Unknown'; head.set(mn, (head.get(mn) ?? 0) + 1); }
+        const groups: Grp[] = [...head.entries()].map(([name, people]) => ({ name: `${name}'s team`, people, responseCount: 0, responseRatePct: null })).sort((a, b) => b.people - a.people);
+        return { available: true as const, groupBy: 'mgr' as const, partial: true as const, periodLabel: target?.label ?? '', groups };
+      }
+      const reports = new Map<string, number>();
+      for (const u of active) { if (!u.managerId) continue; const mn = nameById.get(u.managerId) ?? 'Unknown'; reports.set(mn, (reports.get(mn) ?? 0) + 1); }
+      const groups: Grp[] = [...reports.entries()].map(([name, people]) => ({ name: `${name}'s hierarchy`, people, responseCount: 0, responseRatePct: null })).sort((a, b) => b.people - a.people).slice(0, 12);
+      return { available: true as const, groupBy: 'hier' as const, partial: true as const, periodLabel: target?.label ?? '', groups };
+    }),
+
+  // ── eNPS (live responses only — imported periods carry no eNPS) ───────────
+  enps: protectedProcedure
+    .input(z.object({ periodId: z.string().optional() }).optional())
+    .query(async ({ ctx }) => {
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const withE = responses.filter((r) => r.enpsScore != null);
+      if (withE.length === 0) return { available: false as const };
+      const total = withE.length;
+      const prom = withE.filter((r) => (r.enpsScore as number) >= 9).length;
+      const det = withE.filter((r) => (r.enpsScore as number) <= 6).length;
+      const pas = total - prom - det;
+      const score = Math.round((prom / total - det / total) * 100);
+      const allUsers = await ctx.db.query.users.findMany();
+      const allDepts = await ctx.db.query.departments.findMany();
+      const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
+      const deptByUser = new Map(allUsers.map((u) => [u.id, u.departmentId ? deptNameById.get(u.departmentId) ?? null : null]));
+      const groups = new Map<string, number[]>();
+      for (const r of withE) {
+        const dept = (r.department && r.department.trim()) || (r.respondentId ? deptByUser.get(r.respondentId) ?? null : null);
+        if (!dept) continue;
+        const arr = groups.get(dept) ?? []; arr.push(r.enpsScore as number); groups.set(dept, arr);
+      }
+      const byGroup = [...groups.entries()].map(([name, arr]) => {
+        const p = arr.filter((s) => s >= 9).length, d = arr.filter((s) => s <= 6).length;
+        return { name, responseCount: arr.length, score: Math.round((p / arr.length - d / arr.length) * 100) };
+      }).filter((g) => g.responseCount >= 4).sort((a, b) => b.score - a.score);
+      return { available: true as const, score, responseCount: total, promoters: prom, passives: pas, detractors: det,
+        promoterPct: r1((prom / total) * 100), passivePct: r1((pas / total) * 100), detractorPct: r1((det / total) * 100), byGroup };
+    }),
+
+  // ── Feedback (free-text) with AI sentiment (live responses only) ──────────
+  feedback: protectedProcedure
+    .input(z.object({ periodId: z.string().optional() }).optional())
+    .query(async ({ ctx }) => {
+      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const qDriver: Record<string, string> = Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as string]));
+      const qText: Record<string, string> = Object.fromEntries(qbank.map((q) => [q.id, q.text]));
+      type Row = { id: string; driver: string | null; question: string; text: string; department: string | null; type: string; sentiment: string };
+      const raw: Omit<Row, 'sentiment'>[] = [];
+      for (const r of responses) {
+        const ta = (r.textAnswers ?? {}) as Record<string, string>;
+        for (const [qid, txt] of Object.entries(ta)) {
+          if (!txt || !txt.trim()) continue;
+          raw.push({ id: `${r.id}|${qid}`, driver: qDriver[qid] ?? null, question: qText[qid] ?? qid, text: txt.trim(), department: r.department ?? null, type: 'Custom' });
+        }
+        if (r.enpsReason && r.enpsReason.trim()) {
+          raw.push({ id: `${r.id}|enps`, driver: null, question: 'What was the primary reason for your eNPS answer?', text: r.enpsReason.trim(), department: r.department ?? null, type: 'eNPS' });
+        }
+      }
+      if (raw.length === 0) return { total: 0, rows: [] as Row[] };
+      const capped = raw.slice(0, 80);
+      const heur = (t: string): string => {
+        const s = t.toLowerCase();
+        const neg = /\b(not|no|lack|poor|hard|difficult|frustrat|bad|worse|leav|burn|overworked|underpaid|unfair|struggl|concern|issue)\b/.test(s);
+        const pos = /\b(great|love|good|excellent|happy|support|appreciate|enjoy|amazing|best|positive|fantastic)\b/.test(s);
+        return neg && pos ? 'mixed' : neg ? 'negative' : pos ? 'positive' : 'neutral';
+      };
+      let sentiments: Record<string, string> = {};
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (apiKey) {
+        try {
+          const anthropic = createAnthropic({ apiKey });
+          const listing = capped.map((r, i) => `${i}. ${r.text.slice(0, 300)}`).join('\n');
+          const res = await generateText({
+            model: anthropic('claude-sonnet-4-6'),
+            system: 'Classify each employee survey free-text comment as exactly one of: positive, negative, mixed, neutral. Return ONLY a JSON object mapping the index (as a string) to the label. No prose, no code fences.',
+            prompt: listing, maxOutputTokens: 1500,
+          });
+          const t = res.text; const j = t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1);
+          sentiments = JSON.parse(j);
+        } catch { /* heuristic fallback */ }
+      }
+      const valid = new Set(['positive', 'negative', 'mixed', 'neutral']);
+      const rows: Row[] = capped.map((r, i) => {
+        const s = String(sentiments[String(i)] ?? '').toLowerCase();
+        return { ...r, sentiment: valid.has(s) ? s : heur(r.text) };
+      });
+      return { total: raw.length, rows };
+    }),
+
 });
+

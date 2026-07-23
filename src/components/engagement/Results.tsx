@@ -23,6 +23,12 @@ const fmtPeriodDate = (iso: string | null | undefined, isCurrent?: boolean) => {
     : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 };
 const DRIVER_MEANING: Record<string, string> = Object.fromEntries(DRIVERS.map((d) => [d.key, d.meaning]));
+function percentileOf(val: number, arr: number[]): number {
+  const clean = arr.filter((x) => x != null);
+  if (clean.length <= 1) return 50;
+  const below = clean.filter((x) => x < val).length;
+  return Math.round((below / (clean.length - 1)) * 100);
+}
 
 function toneCls(fav: number | null | undefined): string {
   if (fav == null) return 'bg-ls-bg-2 text-ls-ink-3';
@@ -62,13 +68,13 @@ export function ResultsSummary({ data }: { data: AnalyticsData }) {
     <div className="space-y-5">
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="ls-card p-5">
-          <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Company engagement · {c.label}</div>
-          <div className="text-[12px] font-semibold text-ls-ink-2 mb-1">📅 {fmtPeriodDate(c.periodDate, c.isCurrent)}</div>
-          <div className="flex items-end gap-2">
-            <div className="text-4xl font-extrabold text-ls-blue-deep">{pct(c.favorablePct)}</div>
-            <div className="mb-1"><DeltaChip delta={c.prevFavorablePct != null && c.favorablePct != null ? Math.round((c.favorablePct - c.prevFavorablePct) * 10) / 10 : null} /></div>
+          <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Engagement favorability · {c.label}</div>
+          <div className="text-4xl font-extrabold" style={{ color: '#1a9db0' }}>{pct(c.favorablePct)}</div>
+          <div className="text-[12px] text-ls-ink-3 mt-1">Engagement index {c.score ?? '—'}/100{c.mean != null ? ` · mean ${c.mean.toFixed(2)} / ${c.scaleMax}` : ''}</div>
+          <div className="h-2 rounded-full my-2.5" style={{ background: 'linear-gradient(90deg,#C2615A,#C77A15,#84BD00,#00AFD7)', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: -3, left: `${Math.max(0, Math.min(100, c.favorablePct ?? 0))}%`, width: 2, height: 14, background: '#041E42' }} />
           </div>
-          <div className="text-[12px] text-ls-ink-3 mt-1">favorable{c.mean != null ? ` · avg response ${c.mean.toFixed(2)} / ${c.scaleMax}` : ''}</div>
+          <div className="text-[12px] flex items-center gap-2"><DeltaChip delta={c.prevFavorablePct != null && c.favorablePct != null ? Math.round((c.favorablePct - c.prevFavorablePct) * 10) / 10 : null} />{c.prevFavorablePct != null && <span className="text-ls-ink-3">vs prior ({Math.round(c.prevFavorablePct)}%)</span>}</div>
         </div>
         <div className="ls-card p-5">
           <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-1">Participation</div>
@@ -228,6 +234,8 @@ export function ResultsBreakdown({ data }: { data: AnalyticsData }) {
 
 // ---------------- DRIVERS ----------------
 export function ResultsDrivers({ data }: { data: AnalyticsData }) {
+  const favs = data.drivers.map((d) => d.favorablePct ?? 0);
+  const total = data.company.responseCount;
   const byDriver = new Map<string, typeof data.questions>();
   for (const q of data.questions) {
     if (!q.driver) continue;
@@ -256,10 +264,10 @@ export function ResultsDrivers({ data }: { data: AnalyticsData }) {
                   </div>
                   <p className="text-[12.5px] text-ls-ink-3 mt-1">{DRIVER_MEANING[dr.key]}</p>
                   {/* favorable / neutral / unfavorable split */}
-                  <div className="flex h-2.5 rounded-full overflow-hidden mt-3 bg-ls-bg-2">
-                    <div className="h-full bg-ls-thrive" style={{ width: `${fav}%` }} title={`Favorable ${Math.round(fav)}%`} />
-                    <div className="h-full bg-ls-line" style={{ width: `${neutral}%` }} title={`Neutral ${Math.round(neutral)}%`} />
-                    <div className="h-full bg-ls-risk" style={{ width: `${unfav}%` }} title={`Unfavorable ${Math.round(unfav)}%`} />
+                  <div className="flex h-2.5 rounded-full overflow-hidden mt-3 bg-ls-bg-2" title={`Of ${total} responses — Favorable ${Math.round((fav/100)*total)} (${Math.round(fav)}%), Neutral ${total - Math.round((fav/100)*total) - Math.round((unfav/100)*total)} (${Math.round(neutral)}%), Unfavorable ${Math.round((unfav/100)*total)} (${Math.round(unfav)}%)`}>
+                    <div className="h-full bg-ls-thrive" style={{ width: `${fav}%` }} />
+                    <div className="h-full bg-ls-line" style={{ width: `${neutral}%` }} />
+                    <div className="h-full bg-ls-risk" style={{ width: `${unfav}%` }} />
                   </div>
                   <div className="flex gap-4 text-[11px] text-ls-ink-3 mt-1">
                     <span>◼ Favorable {Math.round(fav)}%</span>
@@ -267,14 +275,20 @@ export function ResultsDrivers({ data }: { data: AnalyticsData }) {
                     <span>◼ Unfavorable {Math.round(unfav)}%</span>
                   </div>
                 </div>
-                <div style={{ width: 180, height: 70 }}>
-                  <ResponsiveContainer>
-                    <LineChart data={trend} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
-                      <YAxis domain={[0, 100]} hide />
-                      <Tooltip formatter={(v) => [`${v}%`, 'Favorable']} labelStyle={{ fontSize: 11 }} />
-                      <Line type="monotone" dataKey="favorable" stroke="#4FA9D6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="text-right shrink-0">
+                  <div style={{ width: 180, height: 54 }}>
+                    <ResponsiveContainer>
+                      <LineChart data={trend} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+                        <YAxis domain={[0, 100]} hide />
+                        <Tooltip formatter={(v) => [`${v}%`, 'Favorable']} labelStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="favorable" stroke="#4FA9D6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex gap-4 justify-end mt-1">
+                    <div><div className="text-xl font-extrabold text-ls-ink leading-none">{percentileOf(dr.favorablePct ?? 0, favs)}<span className="text-[11px]">th</span></div><div className="text-[10px] uppercase tracking-wide text-ls-ink-3">Percentile</div></div>
+                    <div><div className="text-xl font-extrabold text-ls-ink leading-none">{dr.mean != null ? dr.mean.toFixed(2) : '—'}<span className="text-[11px]">/5</span></div><div className="text-[10px] uppercase tracking-wide text-ls-ink-3">Avg response</div></div>
+                  </div>
                 </div>
               </div>
               {qs.length > 0 && (
