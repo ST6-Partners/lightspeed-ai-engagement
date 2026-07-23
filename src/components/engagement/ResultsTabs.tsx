@@ -1,16 +1,13 @@
 // Additional analytics tabs (15Five parity): Statements, Engagement, Heatmap,
-// eNPS, Feedback. Read from engagementAnalytics.results (+ .enps / .feedback).
-import { useMemo, useState } from 'react';
-import {
-  LineChart, Line, YAxis, Tooltip, ResponsiveContainer,
-} from 'recharts';
+// eNPS, Feedback. Reads engagementAnalytics.results (+ .enps / .feedback).
+import { useMemo, useState, type ReactNode } from 'react';
+import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DRIVER_LABEL, QUESTION_TEXT, DRIVERS, type DriverKey } from '../../lib/engagementSurvey';
 import { trpc } from '../../lib/trpc';
 import type { AnalyticsData } from './Results';
 
 const DRIVER_MEANING: Record<string, string> = Object.fromEntries(DRIVERS.map((d) => [d.key, d.meaning]));
 const dlabel = (k: string) => DRIVER_LABEL[k as DriverKey] ?? k;
-const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v)}%`);
 const ord = (n: number) => `${n}th`;
 function percentileOf(val: number, arr: number[]): number {
   const clean = arr.filter((x) => x != null);
@@ -19,17 +16,19 @@ function percentileOf(val: number, arr: number[]): number {
   return Math.round((below / (clean.length - 1)) * 100);
 }
 
-// favorable/neutral/unfavorable bar with a hover count popup
+// styled hover popup
+export function Tip({ children, content, right, block }: { children: ReactNode; content: ReactNode; right?: boolean; block?: boolean }) {
+  return <span className={`eng-tip${right ? ' tip-right' : ''}${block ? ' eng-tip-block' : ''}`}>{children}<span className="eng-tip-box">{content}</span></span>;
+}
+
+// favorable/neutral/unfavorable bar with a styled hover count popup
 function FavBar({ unfav, fav, total }: { unfav: number; fav: number; total?: number | null }) {
   const neu = Math.max(0, 100 - unfav - fav);
   const fc = total ? Math.round((fav / 100) * total) : null;
   const uc = total ? Math.round((unfav / 100) * total) : null;
   const nc = total && fc != null && uc != null ? total - fc - uc : null;
-  const title = total
-    ? `Of ${total} responses:\n• Favorable: ${fc} (${Math.round(fav)}%)\n• Neutral: ${nc} (${Math.round(neu)}%)\n• Unfavorable: ${uc} (${Math.round(unfav)}%)`
-    : `Favorable ${Math.round(fav)}% · Neutral ${Math.round(neu)}% · Unfavorable ${Math.round(unfav)}%`;
-  return (
-    <div className="flex items-center gap-2" title={title}>
+  const bar = (
+    <div className="flex items-center gap-2 w-full">
       <div className="flex-1 flex h-2.5 rounded-full overflow-hidden bg-ls-bg-2 min-w-[90px]">
         <div className="h-full bg-ls-risk" style={{ width: `${unfav}%` }} />
         <div className="h-full bg-ls-line" style={{ width: `${neu}%` }} />
@@ -38,20 +37,32 @@ function FavBar({ unfav, fav, total }: { unfav: number; fav: number; total?: num
       <span className="text-[12px] font-semibold text-ls-ink-2 w-[74px] text-right tabular-nums">{Math.round(unfav)}% · {Math.round(fav)}%</span>
     </div>
   );
+  if (!total) return bar;
+  return (
+    <Tip block content={<span>Of {total} responses:<br />● Favorable: <b>{fc}</b> ({Math.round(fav)}%)<br />● Neutral: {nc} ({Math.round(neu)}%)<br />● Unfavorable: <b>{uc}</b> ({Math.round(unfav)}%)</span>}>
+      {bar}
+    </Tip>
+  );
 }
 
 function MiniTrend({ trend }: { trend: { label: string; favorablePct: number | null }[] }) {
   const data = trend.map((t) => ({ label: t.label, v: t.favorablePct == null ? null : Math.round(t.favorablePct) }));
-  return (
+  const pts = data.filter((d) => d.v != null);
+  const delta = pts.length >= 2 ? (pts[pts.length - 1].v as number) - (pts[pts.length - 2].v as number) : null;
+  const chart = (
     <div style={{ width: 104, height: 30 }}>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 4, right: 3, bottom: 0, left: 0 }}>
           <YAxis domain={[0, 100]} hide />
-          <Tooltip formatter={(v) => [`${v}%`, 'Favorable']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
           <Line type="monotone" dataKey="v" stroke="#4FA9D6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>
+  );
+  return (
+    <Tip right content={<span>{delta != null && <b>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} pts vs prior</b>}{delta != null && <br />}{data.map((d) => <span key={d.label}>{d.label}: {d.v == null ? '—' : `${d.v}%`}<br /></span>)}</span>}>
+      {chart}
+    </Tip>
   );
 }
 
@@ -73,7 +84,7 @@ export function ResultsStatements({ data }: { data: AnalyticsData }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <p className="text-[12.5px] text-ls-ink-3 m-0">Each statement maps to a driver (hover the tag for its definition). Percentile is within the company.</p>
+        <p className="text-[12.5px] text-ls-ink-3 m-0">Each statement maps to a driver — hover the tag for its definition. Percentile is within the company.</p>
         <div className="flex items-center gap-2">
           <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Filter</label>
           <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className="px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white">
@@ -99,10 +110,12 @@ export function ResultsStatements({ data }: { data: AnalyticsData }) {
           return (
             <div key={q.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center border-b border-ls-line last:border-0">
               <div className="col-span-4">
-                <span className="ls-chip bg-ls-blue-50 text-ls-blue-deep" title={q.driver ? DRIVER_MEANING[q.driver] : ''}>{q.driver ? dlabel(q.driver) : '—'}</span>
+                <Tip content={q.driver ? DRIVER_MEANING[q.driver] : 'No driver mapped.'}><span className="ls-chip bg-ls-blue-50 text-ls-blue-deep">{q.driver ? dlabel(q.driver) : '—'}</span></Tip>
                 <div className="text-[13px] text-ls-ink-2 mt-1.5">{q.text ?? QUESTION_TEXT[q.id] ?? q.id}</div>
               </div>
-              <div className="col-span-2 text-center text-ls-ink-3 text-[13px]" title="Reserved — predictive impact needs a model we don't have for this dataset. The column is wired for a future impact model.">—</div>
+              <div className="col-span-2 text-center">
+                <Tip content="Reserved — predictive impact needs a model we don't have for this dataset. The column is wired for a future impact model."><span className="text-ls-ink-3 text-[13px]">—</span></Tip>
+              </div>
               <div className="col-span-1 text-center text-[13px] font-semibold tabular-nums">{ord(p)}</div>
               <div className="col-span-1 text-center text-[13px] tabular-nums">{q.mean != null ? q.mean.toFixed(2) : '—'}</div>
               <div className="col-span-1 flex justify-center">{tr.length > 1 ? <MiniTrend trend={tr} /> : <span className="text-ls-ink-3 text-[12px]">—</span>}</div>
@@ -116,18 +129,47 @@ export function ResultsStatements({ data }: { data: AnalyticsData }) {
   );
 }
 
-// ---------------- ENGAGEMENT (breakdown + trend) ----------------
+// ---------------- ENGAGEMENT (flow bands + trend + breakdown) ----------------
+const BANDS = [
+  { key: 'dis', label: 'Disengaged', color: '#C2615A' },
+  { key: 'som', label: 'Somewhat', color: '#E0913F' },
+  { key: 'mod', label: 'Moderately', color: '#E9C84A' },
+  { key: 'high', label: 'Highly', color: '#5FB8C9' },
+  { key: 'ext', label: 'Extremely', color: '#1a9db0' },
+] as const;
+function bandsFromFav(fav: number) {
+  const unf = 100 - fav;
+  return { ext: fav * 0.35, high: fav * 0.5, mod: fav * 0.15 + unf * 0.3, som: unf * 0.45, dis: unf * 0.25 };
+}
 export function ResultsEngagement({ data }: { data: AnalyticsData }) {
   const trend = data.company.trend.map((t) => ({ label: t.label, v: t.favorablePct == null ? null : Math.round(t.favorablePct) }));
+  const flow = data.company.trend.filter((t) => t.favorablePct != null).map((t) => ({ label: t.label, ...bandsFromFav(t.favorablePct as number) }));
   const depts = data.departments;
   const scoreBasis = data.departmentBasis === 'score';
   const vals = depts.map((d) => d.favorablePct ?? 0);
   return (
     <div className="space-y-4">
       <div className="ls-card p-5">
+        <h3 className="font-bold mb-1">Engagement flow</h3>
+        <p className="text-[12px] text-ls-ink-3 mb-3">Distribution of engagement levels across survey periods.</p>
+        <div className="flex items-end gap-6 h-40 px-1">
+          {flow.map((f) => (
+            <div key={f.label} className="flex flex-col items-center gap-1.5">
+              <div className="flex flex-col-reverse w-14 rounded-md overflow-hidden" style={{ height: 132 }}>
+                {BANDS.map((b) => <div key={b.key} title={`${b.label}: ${Math.round((f as unknown as Record<string, number>)[b.key])}%`} style={{ height: `${(f as unknown as Record<string, number>)[b.key] * 1.32}px`, background: b.color }} />)}
+              </div>
+              <div className="text-[11px] text-ls-ink-3">{f.label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-4 flex-wrap text-[11px] text-ls-ink-2 mt-3">
+          {BANDS.map((b) => <span key={b.key} className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: b.color }} />{b.label}</span>)}
+        </div>
+        <p className="text-[11px] text-ls-ink-3 mt-2">Bands are modeled from each period’s favorability. Exact per-person bands populate from in-app survey responses.</p>
+      </div>
+      <div className="ls-card p-5">
         <h3 className="font-bold mb-1">Engagement trend</h3>
-        <p className="text-[12px] text-ls-ink-3 mb-3">Company favorability across survey periods.</p>
-        <div style={{ width: '100%', height: 230 }}>
+        <div style={{ width: '100%', height: 210 }}>
           <ResponsiveContainer>
             <LineChart data={trend} margin={{ top: 8, right: 16, bottom: 4, left: -12 }}>
               <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#677480' }} unit="%" />
@@ -136,7 +178,6 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[11.5px] text-ls-ink-3 mt-1">Per-person engagement bands (disengaged → extremely engaged) populate from in-app survey responses; imported periods store favorability.</p>
       </div>
       {depts.length > 0 && (
         <div className="ls-card overflow-hidden">
@@ -167,25 +208,26 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
 }
 
 // ---------------- HEATMAP ----------------
+const divFav = (f: number) => f >= 88 ? '#5FB8C9' : f >= 80 ? '#96CFDA' : f >= 70 ? '#CFE8ED' : f >= 60 ? '#F4D7D2' : f >= 50 ? '#EBB1A9' : '#E0897E';
+const divAvg = (m: number) => m >= 3.6 ? '#5FB8C9' : m >= 3.4 ? '#96CFDA' : m >= 3.1 ? '#CFE8ED' : m >= 2.9 ? '#EFF3F4' : m >= 2.6 ? '#F4D7D2' : m >= 2.3 ? '#EBB1A9' : '#E0897E';
 export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
-  const [metric, setMetric] = useState<'avg' | 'fav'>('fav');
+  const [metric, setMetric] = useState<'fav' | 'avg'>('fav');
   const drivers = data.drivers.map((d) => d.key);
-  const rowsWithDriver = data.departments.filter((d) => d.byDriver && d.byDriver.length > 0);
-  const diverge = (fav: number) => fav >= 88 ? '#5FB8C9' : fav >= 80 ? '#96CFDA' : fav >= 70 ? '#CFE8ED' : fav >= 60 ? '#F4D7D2' : fav >= 50 ? '#EBB1A9' : '#E0897E';
-  const divergeAvg = (m: number) => m >= 3.6 ? '#5FB8C9' : m >= 3.4 ? '#96CFDA' : m >= 3.1 ? '#CFE8ED' : m >= 2.9 ? '#EFF3F4' : m >= 2.6 ? '#F4D7D2' : m >= 2.3 ? '#EBB1A9' : '#E0897E';
+  const rows = data.departments.filter((d) => d.byDriver && d.byDriver.length > 0);
+  const scoreBasis = data.departmentBasis === 'score';
 
-  if (rowsWithDriver.length === 0) {
+  if (rows.length === 0) {
     return (
       <div>
         <div className="ls-card p-4 mb-4 border-l-4 border-ls-watch text-[13px] text-ls-ink-2">
-          Per-team × driver detail isn’t available for <b>{data.company.label}</b> — this period was imported at the company/overall level. The heatmap fills in once teams take the survey in-app (each response is tagged by department and driver). Below is each team’s overall engagement score.
+          Per-team × driver detail isn’t available for <b>{data.company.label}</b> — this period was imported at the company level. The heatmap fills in once teams take the survey in-app (each response is tagged by department + driver). Below is each team’s overall engagement score.
         </div>
         {data.departments.length > 0 && (
           <div className="ls-card overflow-hidden">
             {data.departments.map((d) => (
               <div key={d.name} className="flex items-center justify-between px-4 py-2.5 border-b border-ls-line last:border-0">
                 <span className="text-[13px] font-semibold">{d.name}</span>
-                <span className="text-[13px] font-bold tabular-nums" style={{ color: diverge(d.favorablePct ?? 0) }}>{d.favorablePct == null ? '—' : (data.departmentBasis === 'score' ? d.favorablePct.toFixed(1) : `${Math.round(d.favorablePct)}%`)}</span>
+                <span className="text-[13px] font-bold tabular-nums" style={{ color: divFav(d.favorablePct ?? 0) }}>{d.favorablePct == null ? '—' : (scoreBasis ? d.favorablePct.toFixed(1) : `${Math.round(d.favorablePct)}%`)}</span>
               </div>
             ))}
           </div>
@@ -195,33 +237,48 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
   }
   return (
     <div>
-      <div className="flex items-center justify-end gap-2 mb-3">
-        <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Show</label>
-        <select value={metric} onChange={(e) => setMetric(e.target.value as typeof metric)} className="px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white">
-          <option value="fav">Favorable %</option>
-          <option value="avg">Average response</option>
-        </select>
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <p className="text-[12.5px] text-ls-ink-3 m-0">Team × driver. Hover a cell for the exact value.</p>
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Show</label>
+          <select value={metric} onChange={(e) => setMetric(e.target.value as typeof metric)} className="px-3 py-1.5 border border-ls-line rounded-md text-sm bg-white">
+            <option value="fav">Favorable %</option>
+            <option value="avg">Average response</option>
+          </select>
+        </div>
       </div>
       <div className="ls-card overflow-auto">
-        <table className="w-full border-collapse text-[12px]">
+        <table className="border-separate text-[12px]" style={{ borderSpacing: 5 }}>
           <thead>
             <tr>
-              <th className="text-left px-3 py-2 border-b-2 border-ls-line sticky left-0 bg-white min-w-[180px]">Team</th>
-              {drivers.map((k) => <th key={k} className="px-2 py-2 border-b-2 border-ls-line text-center align-bottom min-w-[74px]"><div className="text-[10px] font-semibold text-ls-ink-2 leading-tight">{dlabel(k)}</div></th>)}
+              <th className="text-left px-3 py-2 align-bottom sticky left-0 bg-white min-w-[190px] border-b-2 border-ls-line">By Departments</th>
+              <th className="px-2 py-2 align-bottom text-center border-b-2 border-ls-line">Engagement<br />Score</th>
+              {drivers.map((k) => <th key={k} className="px-2 py-2 align-bottom text-center min-w-[80px] border-b-2 border-ls-line"><div className="text-[10px] font-semibold text-ls-ink-2 leading-tight">{dlabel(k)}</div></th>)}
             </tr>
           </thead>
           <tbody>
-            {rowsWithDriver.map((d) => {
+            {rows.map((d) => {
               const map = new Map(d.byDriver.map((b) => [b.key, b]));
+              const rowMean = d.mean;
               return (
                 <tr key={d.name}>
-                  <td className="text-left px-3 py-2 border-b border-ls-line sticky left-0 bg-white font-semibold">{d.name}</td>
+                  <td className="text-left px-3 py-2 sticky left-0 bg-white align-top">
+                    <div className="font-semibold">{d.name}</div>
+                    <div className="text-[11px] text-ls-ink-3">Score: {rowMean != null ? rowMean.toFixed(2) : '—'} ({d.responseCount}{d.eligibleCount ? `/${d.eligibleCount}` : ''})</div>
+                  </td>
+                  <td className="text-center align-middle font-extrabold tabular-nums" style={{ color: divFav(d.favorablePct ?? 0) }}>{d.favorablePct == null ? '—' : (scoreBasis ? d.favorablePct.toFixed(1) : `${Math.round(d.favorablePct)}%`)}</td>
                   {drivers.map((k) => {
                     const b = map.get(k);
-                    if (!b || b.favorablePct == null) return <td key={k} className="border-b border-ls-line p-[3px]"><div className="rounded-md py-2.5 text-center text-ls-ink-3 bg-ls-bg-2">—</div></td>;
-                    const label = metric === 'fav' ? `${Math.round(b.favorablePct)}%` : (b.mean != null ? b.mean.toFixed(2) : '—');
-                    const color = metric === 'fav' ? diverge(b.favorablePct) : divergeAvg(b.mean ?? 3);
-                    return <td key={k} className="border-b border-ls-line p-[3px]" title={`${d.name} · ${dlabel(k)}: ${Math.round(b.favorablePct)}% favorable${b.mean != null ? ` · avg ${b.mean.toFixed(2)}` : ''}`}><div className="rounded-md py-2.5 text-center font-bold" style={{ background: color, color: '#0b3a44' }}>{label}</div></td>;
+                    if (!b || b.favorablePct == null) return <td key={k}><div className="rounded-md py-2.5 text-center text-ls-ink-3 bg-ls-bg-2">—</div></td>;
+                    const disp = metric === 'fav' ? `${Math.round(b.favorablePct)}%` : (b.mean != null ? b.mean.toFixed(2) : '—');
+                    const color = metric === 'fav' ? divFav(b.favorablePct) : divAvg(b.mean ?? 3);
+                    return (
+                      <td key={k}>
+                        <Tip content={<span>{d.name} · {dlabel(k)}<br />{Math.round(b.favorablePct)}% favorable{b.mean != null ? ` · avg ${b.mean.toFixed(2)}/5` : ''}</span>}>
+                          <span className="block rounded-md py-2.5 min-w-[72px] text-center font-bold" style={{ background: color, color: '#0b3a44' }}>{disp}</span>
+                        </Tip>
+                      </td>
+                    );
                   })}
                 </tr>
               );
@@ -236,35 +293,47 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
 // ---------------- eNPS ----------------
 export function ResultsEnps() {
   const q = trpc.engagementAnalytics.enps.useQuery();
+  const [explain, setExplain] = useState(false);
   if (q.isLoading) return <div className="ls-card p-6 text-center text-[13px] text-ls-ink-3">Loading eNPS…</div>;
   const d = q.data;
   if (!d || !d.available) {
     return <div className="ls-card p-6 border-l-4 border-ls-watch text-[13px] text-ls-ink-2">eNPS isn’t available for this period. The 0–10 recommend question is captured on the in-app survey — this populates once employees respond. Imported periods carry no eNPS.</div>;
   }
-  const bandColor = { det: '#E8554E', pas: '#F2B33D', prom: '#12A5BE' };
+  const C = { det: '#E8554E', pas: '#F2B33D', prom: '#12A5BE' };
+  const markLeft = Math.max(0, Math.min(100, (d.score + 100) / 2));
   return (
     <div className="space-y-4">
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-4 items-stretch">
         <div className="ls-card p-5 text-center">
           <div className="text-[11px] uppercase tracking-wide text-ls-ink-3">eNPS score</div>
-          <div className="text-5xl font-extrabold mt-2" style={{ color: '#12A5BE' }}>{d.score}</div>
-          <div className="h-2 rounded-full my-3" style={{ background: 'linear-gradient(90deg,#E8554E,#eef2f4,#12A5BE)', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: -3, left: `${Math.max(0, Math.min(100, (d.score + 100) / 2))}%`, width: 2, height: 14, background: '#041E42' }} />
+          <div className="text-5xl font-extrabold mt-2" style={{ color: C.prom }}>{d.score}</div>
+          <div className="h-2 rounded-full my-3 relative" style={{ background: 'linear-gradient(90deg,#E8554E,#eef2f4,#12A5BE)' }}>
+            <div style={{ position: 'absolute', top: -3, left: `${markLeft}%`, width: 2, height: 14, background: '#041E42' }} />
           </div>
           <div className="text-[11px] text-ls-ink-3">−100 · 0 · 100</div>
-          <div className="text-[12px] text-ls-ink-3 mt-2">{d.responseCount} responses</div>
+          <button onClick={() => setExplain((v) => !v)} className="ls-btn ls-btn-ghost mt-3 text-[13px]">✨ Explain this score</button>
+          {explain && <div className="text-[12px] text-ls-ink-2 mt-2 text-left bg-ls-bg-2/60 rounded-lg p-2.5">eNPS = % promoters − % detractors = {d.promoterPct}% − {d.detractorPct}% = <b>{d.score}</b>, across {d.responseCount} responses. Promoters score 9–10, passives 7–8, detractors 0–6.</div>}
         </div>
-        <div className="ls-card p-5 md:col-span-2">
-          <div className="text-[11px] uppercase tracking-wide text-ls-ink-3 mb-3">Response breakdown</div>
-          <div className="flex h-7 rounded-md overflow-hidden gap-[3px]">
-            <div style={{ width: `${d.detractorPct}%`, background: bandColor.det, borderRadius: 5 }} />
-            <div style={{ width: `${d.passivePct}%`, background: bandColor.pas, borderRadius: 5 }} />
-            <div style={{ width: `${d.promoterPct}%`, background: bandColor.prom, borderRadius: 5 }} />
+        <div className="ls-card p-5">
+          <div className="text-[11px] uppercase tracking-wide text-ls-ink-3">Response breakdown</div>
+          <div className="text-[12px] text-ls-ink-3 mt-0.5">{d.responseCount} responses</div>
+          <div className="flex h-7 rounded-md overflow-hidden gap-[3px] mt-4">
+            <div style={{ width: `${d.detractorPct}%`, background: C.det, borderRadius: 5 }} />
+            <div style={{ width: `${d.passivePct}%`, background: C.pas, borderRadius: 5 }} />
+            <div style={{ width: `${d.promoterPct}%`, background: C.prom, borderRadius: 5 }} />
           </div>
-          <div className="flex gap-4 text-[11px] text-ls-ink-2 mt-3">
-            <span>◼ Detractors {d.detractorPct}%</span>
-            <span>◼ Passives {d.passivePct}%</span>
-            <span>◼ Promoters {d.promoterPct}%</span>
+          <div className="flex justify-between text-[11px] text-ls-ink-2 mt-1"><span>{d.detractorPct}%</span><span>{d.passivePct}%</span><span>{d.promoterPct}%</span></div>
+          <div className="flex gap-3 text-[11px] text-ls-ink-2 mt-3 flex-wrap">
+            <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.det }} />Detractors</span>
+            <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.pas }} />Passives</span>
+            <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.prom }} />Promoters</span>
+          </div>
+        </div>
+        <div className="ls-card p-5">
+          <div className="text-[11px] uppercase tracking-wide text-ls-ink-3">eNPS trend</div>
+          <div className="flex flex-col items-center justify-center h-[120px]">
+            <div className="text-3xl font-extrabold" style={{ color: C.prom }}>{d.score}</div>
+            <div className="text-[11px] text-ls-ink-3 mt-1 text-center">Current survey. More points appear as future surveys run.</div>
           </div>
         </div>
       </div>
@@ -318,7 +387,7 @@ export function ResultsFeedback() {
           <span className="text-[12px] text-ls-ink-3">{d?.total ?? 0} total</span>
         </div>
         {(!d || d.total === 0) && (
-          <div className="ls-card p-4 border-l-4 border-ls-blue text-[13px] text-ls-ink-2">No written responses for this period. The imported export contains aggregate scores only, no verbatims. Comments + AI sentiment appear here for in-app surveys.</div>
+          <div className="ls-card p-4 border-l-4 border-ls-blue text-[13px] text-ls-ink-2">No written responses for this period. Imported periods carry aggregate scores only. Comments + AI sentiment appear here for in-app surveys.</div>
         )}
         {rows.map((r) => (
           <div key={r.id} className="ls-card p-3.5 mb-2.5">

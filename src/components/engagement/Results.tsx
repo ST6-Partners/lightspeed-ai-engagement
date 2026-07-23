@@ -10,6 +10,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../../server/src/router';
 import { DRIVERS, DRIVER_LABEL, QUESTION_TEXT, type DriverKey } from '../../lib/engagementSurvey';
 import { trpc } from '../../lib/trpc';
+import { Tip } from './ResultsTabs';
 
 type Results = inferRouterOutputs<AppRouter>['engagementAnalytics']['results'];
 export type AnalyticsData = Extract<Results, { hasData: true }>;
@@ -258,16 +259,20 @@ export function ResultsDrivers({ data }: { data: AnalyticsData }) {
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-[16rem]">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-[15px]">{DRIVER_LABEL[dr.key as DriverKey] ?? dr.key}</h3>
+                    <Tip content={DRIVER_MEANING[dr.key]}><h3 className="font-bold text-[15px]">{DRIVER_LABEL[dr.key as DriverKey] ?? dr.key}</h3></Tip>
                     <span className={`ls-chip ${toneCls(dr.favorablePct)}`}>{pct(dr.favorablePct)} favorable</span>
                     <DeltaChip delta={dr.delta} />
                   </div>
                   <p className="text-[12.5px] text-ls-ink-3 mt-1">{DRIVER_MEANING[dr.key]}</p>
                   {/* favorable / neutral / unfavorable split */}
-                  <div className="flex h-2.5 rounded-full overflow-hidden mt-3 bg-ls-bg-2" title={`Of ${total} responses — Favorable ${Math.round((fav/100)*total)} (${Math.round(fav)}%), Neutral ${total - Math.round((fav/100)*total) - Math.round((unfav/100)*total)} (${Math.round(neutral)}%), Unfavorable ${Math.round((unfav/100)*total)} (${Math.round(unfav)}%)`}>
-                    <div className="h-full bg-ls-thrive" style={{ width: `${fav}%` }} />
-                    <div className="h-full bg-ls-line" style={{ width: `${neutral}%` }} />
-                    <div className="h-full bg-ls-risk" style={{ width: `${unfav}%` }} />
+                  <div className="mt-3">
+                    <Tip block content={<span>Of {total} responses:<br/>● Favorable: <b>{Math.round((fav / 100) * total)}</b> ({Math.round(fav)}%)<br/>● Neutral: {total - Math.round((fav / 100) * total) - Math.round((unfav / 100) * total)} ({Math.round(neutral)}%)<br/>● Unfavorable: <b>{Math.round((unfav / 100) * total)}</b> ({Math.round(unfav)}%)</span>}>
+                      <span className="flex h-2.5 rounded-full overflow-hidden bg-ls-bg-2 w-full">
+                        <span className="bg-ls-thrive" style={{ width: `${fav}%` }} />
+                        <span className="bg-ls-line" style={{ width: `${neutral}%` }} />
+                        <span className="bg-ls-risk" style={{ width: `${unfav}%` }} />
+                      </span>
+                    </Tip>
                   </div>
                   <div className="flex gap-4 text-[11px] text-ls-ink-3 mt-1">
                     <span>◼ Favorable {Math.round(fav)}%</span>
