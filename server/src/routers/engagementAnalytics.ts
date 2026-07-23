@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
+import { TRPCError } from '@trpc/server';
 
 type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
@@ -803,5 +804,70 @@ export const engagementAnalyticsRouter = router({
     return { departments, eltLeaders, hierarchies, businessUnits: [] as string[] };
   }),
 
-});
 
+  // Bulk CSV import of historical survey results (admin). One CSV where each row
+  // is an aggregate metric with its period columns. Groups rows by period label,
+  // upserts the survey_period (source='import'), then inserts survey_metrics.
+  // Columns: period, perioddate, scalemax?, scope (company|department), department?,
+  // dimension (overall|driver|question), metrickey?, mean?, favorablepct?,
+  // unfavorablepct?, responsecount?, eligiblecount?.
+  importHistorical: protectedProcedure
+    .input(z.object({
+      rows: z.array(z.record(z.string(), z.string())).max(20000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+      let periodsCreated = 0; let metricsAdded = 0; let skipped = 0; const errors: string[] = [];
+      const num = (v: string | undefined) => { const n = Number((v ?? '').trim()); return (v ?? '').trim() !== '' && !Number.isNaN(n) ? n : null; };
+      const int = (v: string | undefined) => { const n = num(v); return n == null ? null : Math.round(n); };
+
+      // Group rows by period label.
+      const byPeriod = new Map<string, Record<string, string>[]>();
+      for (const r of input.rows) {
+        const label = (r.period ?? r.periodlabel ?? '').trim();
+        if (!label) { skipped++; continue; }
+        (byPeriod.get(label) ?? byPeriod.set(label, []).get(label)!).push(r);
+      }
+
+      const existingPeriods = await ctx.db.query.surveyPeriods.findMany();
+      const periodIdByLabel = new Map(existingPeriods.map((p) => [p.label.trim().toLowerCase(), p.id]));
+
+      for (const [label, rows] of byPeriod.entries()) {
+        let periodId = periodIdByLabel.get(label.toLowerCase()) ?? null;
+        if (!periodId) {
+          const first = rows[0];
+          const periodDate = (first.perioddate ?? first.perioddate ?? '').trim() || new Date().toISOString().slice(0, 10);
+          try {
+            const [pr] = await ctx.db.insert(surveyPeriods).values({
+              label, periodDate,
+              eligibleCount: int(first.eligiblecount) ?? 0,
+              responseCount: int(first.responsecount) ?? 0,
+              source: 'import',
+              scaleMax: int(first.scalemax) ?? 5,
+              isCurrent: false,
+            }).returning();
+            periodId = pr.id; periodIdByLabel.set(label.toLowerCase(), pr.id); periodsCreated++;
+          } catch (e) { errors.push(`period "${label}": ${e instanceof Error ? e.message : 'create failed'}`); continue; }
+        }
+        for (const r of rows) {
+          const scope = (r.scope ?? 'company').trim().toLowerCase() === 'department' ? 'department' : 'company';
+          const dimension = ['overall', 'driver', 'question'].includes((r.dimension ?? '').trim().toLowerCase()) ? (r.dimension ?? '').trim().toLowerCase() : 'overall';
+          try {
+            await ctx.db.insert(surveyMetrics).values({
+              periodId: periodId!, scope, department: scope === 'department' ? (r.department?.trim() || null) : null,
+              dimension, metricKey: (r.metrickey ?? '').trim() || null,
+              mean: num(r.mean) != null ? String(num(r.mean)) : null,
+              favorablePct: num(r.favorablepct) != null ? String(num(r.favorablepct)) : null,
+              unfavorablePct: num(r.unfavorablepct) != null ? String(num(r.unfavorablepct)) : null,
+              responseCount: int(r.responsecount) ?? 0,
+              eligibleCount: int(r.eligiblecount),
+            });
+            metricsAdded++;
+          } catch (e) { errors.push(`${label}/${scope}/${dimension}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+        }
+      }
+      return { periodsCreated, metricsAdded, skipped, errors: errors.slice(0, 50) };
+    }),
+
+});

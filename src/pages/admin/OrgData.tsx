@@ -3,6 +3,7 @@
 // read-only consumers of these (except 9 Box, which also rates inline).
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
+import ImportButton from '../../components/ImportButton';
 
 const SECTIONS = ['Priorities', 'Engagement', '9 Box'] as const;
 type Section = typeof SECTIONS[number];
@@ -46,6 +47,7 @@ function PrioritiesAdmin() {
   const { data: rows = [] } = trpc.orgScreen.prioritiesList.useQuery({});
   const create = trpc.orgScreen.prioritiesCreate.useMutation({ onSuccess: () => utils.orgScreen.prioritiesList.invalidate() });
   const remove = trpc.orgScreen.prioritiesRemove.useMutation({ onSuccess: () => utils.orgScreen.prioritiesList.invalidate() });
+  const impPri = trpc.orgScreen.importPriorities.useMutation({ onSuccess: () => utils.orgScreen.prioritiesList.invalidate() });
   const [userId, setUserId] = useState('');
   const [itemType, setItemType] = useState<'objective' | 'key_result' | 'task' | 'ktbr'>('ktbr');
   const [okrNodeId, setOkrNodeId] = useState('');
@@ -80,6 +82,10 @@ function PrioritiesAdmin() {
           )}
           <button className={btnCls} disabled={!userId || create.isLoading} onClick={add}>+ Add</button>
         </div>
+        <div className="mt-3 border-t pt-3">
+          <ImportButton label="Import priorities" hint="CSV columns: email, label"
+            onImport={async (r) => impPri.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', label: x.label ?? x.priority ?? '' })) })} />
+        </div>
       </div>
       <SimpleTable
         cols={['Employee', 'Type', 'Item', '']}
@@ -99,6 +105,8 @@ function EngagementAdmin() {
   const { data: rows = [] } = trpc.orgScreen.engagementList.useQuery({});
   const upsert = trpc.orgScreen.engagementUpsert.useMutation({ onSuccess: () => utils.orgScreen.engagementList.invalidate() });
   const remove = trpc.orgScreen.engagementRemove.useMutation({ onSuccess: () => utils.orgScreen.engagementList.invalidate() });
+  const impEng = trpc.orgScreen.importEngagement.useMutation({ onSuccess: () => utils.orgScreen.engagementList.invalidate() });
+  const impHist = trpc.engagementAnalytics.importHistorical.useMutation();
   const [userId, setUserId] = useState('');
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
   const [score, setScore] = useState('75');
@@ -115,6 +123,12 @@ function EngagementAdmin() {
           <input type="number" min={0} max={100} className={`${inputCls} w-24`} value={score} onChange={(e) => setScore(e.target.value)} placeholder="Score" />
           <button className={btnCls} disabled={!userId || upsert.isLoading}
             onClick={() => userId && upsert.mutate({ userId, asOf, score: Number(score) })}>+ Save</button>
+        </div>
+        <div className="mt-3 border-t pt-3 flex flex-wrap gap-4">
+          <ImportButton label="Import snapshots" hint="CSV columns: email, asOf, score"
+            onImport={async (r) => impEng.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', asOf: x.asof, score: x.score })) })} />
+          <ImportButton label="Import historical results" hint="CSV: period, periodDate, scope, department, dimension, metricKey, mean, favorablePct, responseCount"
+            onImport={async (r) => { const res = await impHist.mutateAsync({ rows: r }); return { added: res.metricsAdded, skipped: res.skipped, errors: res.errors }; }} />
         </div>
       </div>
       <SimpleTable
@@ -133,10 +147,15 @@ function NineBoxAdmin() {
   const { nameById } = useEmployees();
   const { data: rows = [] } = trpc.orgScreen.nineboxList.useQuery({});
   const remove = trpc.orgScreen.nineboxRemove.useMutation({ onSuccess: () => utils.orgScreen.nineboxList.invalidate() });
+  const impNb = trpc.orgScreen.importNinebox.useMutation({ onSuccess: () => utils.orgScreen.nineboxList.invalidate() });
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
         Rate people inline on the Organization screen → 9 Box tab. This is a backstop list for review/cleanup.
+      </div>
+      <div className={cardCls}>
+        <ImportButton label="Import 9-box ratings" hint="CSV columns: email, box (1-9), note"
+          onImport={async (r) => impNb.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', box: x.box, note: x.note })) })} />
       </div>
       <SimpleTable
         cols={['Employee', 'Box', 'Rated', '']}

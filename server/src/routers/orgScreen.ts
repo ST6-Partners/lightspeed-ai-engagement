@@ -314,6 +314,58 @@ export const orgScreenRouter = router({
       return { ok: true };
     }),
 
+  // ---- CSV imports (admin). All resolve the employee by email. ----
+  importPriorities: protectedProcedure.use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ email: z.string(), label: z.string() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const idByEmail = new Map((await ctx.db.query.users.findMany()).map((u) => [u.email.toLowerCase(), u.id]));
+      let order = 0;
+      for (const r of input.rows) {
+        const email = (r.email ?? '').trim().toLowerCase(); const label = (r.label ?? '').trim();
+        if (!email || !label) { skipped++; continue; }
+        const uid = idByEmail.get(email); if (!uid) { skipped++; errors.push(`${email}: no matching employee`); continue; }
+        try { await ctx.db.insert(priorities).values({ userId: uid, itemType: 'ktbr', ktbrLabel: label, sortOrder: order++ }); added++; }
+        catch (e) { errors.push(`${email}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors: errors.slice(0, 50) };
+    }),
+  importEngagement: protectedProcedure.use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ email: z.string(), asof: z.string().optional(), asOf: z.string().optional(), score: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let updated = 0; let skipped = 0; const errors: string[] = [];
+      const idByEmail = new Map((await ctx.db.query.users.findMany()).map((u) => [u.email.toLowerCase(), u.id]));
+      const today = new Date().toISOString().slice(0, 10);
+      for (const r of input.rows) {
+        const email = (r.email ?? '').trim().toLowerCase(); if (!email) { skipped++; continue; }
+        const uid = idByEmail.get(email); if (!uid) { skipped++; errors.push(`${email}: no matching employee`); continue; }
+        const asOf = (r.asOf ?? r.asof ?? '').trim() || today;
+        const raw = (r.score ?? '').trim();
+        const score = raw !== '' && !Number.isNaN(Number(raw)) ? Math.max(0, Math.min(100, Math.round(Number(raw)))) : null;
+        try {
+          const ex = await ctx.db.query.engagementSnapshots.findFirst({ where: and(eq(engagementSnapshots.userId, uid), eq(engagementSnapshots.asOf, asOf)) });
+          if (ex) { await ctx.db.update(engagementSnapshots).set({ score }).where(and(eq(engagementSnapshots.userId, uid), eq(engagementSnapshots.asOf, asOf))); updated++; }
+          else { await ctx.db.insert(engagementSnapshots).values({ userId: uid, asOf, score, drivers: [] }); added++; }
+        } catch (e) { errors.push(`${email}: ${e instanceof Error ? e.message : 'write failed'}`); }
+      }
+      return { added, updated, skipped, errors: errors.slice(0, 50) };
+    }),
+  importNinebox: protectedProcedure.use(requireAdmin)
+    .input(z.object({ rows: z.array(z.object({ email: z.string(), box: z.string().optional(), note: z.string().optional() })).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let skipped = 0; const errors: string[] = [];
+      const idByEmail = new Map((await ctx.db.query.users.findMany()).map((u) => [u.email.toLowerCase(), u.id]));
+      for (const r of input.rows) {
+        const email = (r.email ?? '').trim().toLowerCase(); if (!email) { skipped++; continue; }
+        const uid = idByEmail.get(email); if (!uid) { skipped++; errors.push(`${email}: no matching employee`); continue; }
+        const box = Math.round(Number(r.box));
+        if (!Number.isFinite(box) || box < 1 || box > 9) { skipped++; errors.push(`${email}: box must be 1-9`); continue; }
+        try { await ctx.db.insert(nineBoxRatings).values({ userId: uid, box, note: r.note?.trim() || null, ratedBy: ctx.user.id }); added++; }
+        catch (e) { errors.push(`${email}: ${e instanceof Error ? e.message : 'insert failed'}`); }
+      }
+      return { added, skipped, errors: errors.slice(0, 50) };
+    }),
+
   // Engagement snapshots
   engagementList: protectedProcedure.use(requireAdmin)
     .input(z.object({ userId: z.string().uuid().optional() }).optional())
