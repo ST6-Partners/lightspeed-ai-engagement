@@ -6,14 +6,18 @@
 // 2026-07-21 (bf).
 // ============================================================
 
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { HeartHandshake } from 'lucide-react';
 import Pips from './Pips';
 import CoachingPlans from './CoachingPlans';
 import ExitSurvey from './ExitSurvey';
 
 export default function Development() {
-  const [tab, setTab] = useState<'pip' | 'coaching' | 'exit'>('coaching');
+  // Tab is URL-addressable (?tab=pip|exit) so the sidebar dropdown can deep-link.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const param = searchParams.get('tab');
+  const tab: 'pip' | 'coaching' | 'exit' = param === 'pip' || param === 'exit' ? param : 'coaching';
+  const setTab = (next: 'pip' | 'coaching' | 'exit') => setSearchParams(next === 'coaching' ? {} : { tab: next });
   const tabs: Array<['pip' | 'coaching' | 'exit', string]> = [
     ['coaching', 'Coaching Plans'], ['pip', 'PIP'], ['exit', 'Exit Survey'],
   ];

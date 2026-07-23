@@ -48,7 +48,11 @@ const navGroups: NavGroup[] = [
         { path: '/reviews?tab=manager', label: 'Manager Review' },
         { path: '/reviews?tab=peer', label: 'Peer Review' },
       ] },
-      { path: '/development', label: 'Development', icon: HeartHandshake },
+      { path: '/development', label: 'Development', icon: HeartHandshake, children: [
+        { path: '/development?tab=coaching', label: 'Coaching Plans' },
+        { path: '/development?tab=pip', label: 'PIP' },
+        { path: '/development?tab=exit', label: 'Exit Survey' },
+      ] },
       { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
     ],
   },
@@ -149,7 +153,9 @@ export default function Layout() {
     const cur = location.pathname;
     if (query) {
       const want = new URLSearchParams(query).get('tab');
-      const have = new URLSearchParams(location.search).get('tab') ?? 'reviews';
+      // Default tab when the URL has no ?tab= (first sub-tab of each dropdown).
+      const TAB_DEFAULT: Record<string, string> = { '/reviews': 'reviews', '/development': 'coaching' };
+      const have = new URLSearchParams(location.search).get('tab') ?? (TAB_DEFAULT[pathOnly] ?? '');
       return cur === pathOnly && have === want;
     }
     return cur === pathOnly || cur.startsWith(pathOnly + '/');
