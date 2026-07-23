@@ -181,9 +181,21 @@ export function ResultsEngagement({ data }: { data: AnalyticsData }) {
 }
 
 // ---------------- HEATMAP ----------------
-const divFav = (f: number) => f >= 88 ? '#5FB8C9' : f >= 80 ? '#96CFDA' : f >= 70 ? '#CFE8ED' : f >= 60 ? '#F4D7D2' : f >= 50 ? '#EBB1A9' : '#E0897E';
-const divAvg = (m: number) => m >= 3.6 ? '#5FB8C9' : m >= 3.4 ? '#96CFDA' : m >= 3.1 ? '#CFE8ED' : m >= 2.9 ? '#EFF3F4' : m >= 2.6 ? '#F4D7D2' : m >= 2.3 ? '#EBB1A9' : '#E0897E';
-const divUnfav = (u: number) => u <= 3 ? '#5FB8C9' : u <= 6 ? '#96CFDA' : u <= 10 ? '#CFE8ED' : u <= 15 ? '#F4D7D2' : u <= 22 ? '#EBB1A9' : '#E0897E';
+// Continuous diverging scale: red (low) -> light -> teal (high), so the box
+// color maps monotonically to the number shown.
+const _RED = [224, 137, 126], _MID = [239, 243, 244], _TEAL = [95, 184, 201];
+function heatScale(t: number): string {
+  t = Math.max(0, Math.min(1, t));
+  const [a, b] = t < 0.5 ? [_RED, _MID] : [_MID, _TEAL];
+  const u = t < 0.5 ? t * 2 : (t - 0.5) * 2;
+  const c = [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * u));
+  return `#${c.map((x) => x.toString(16).padStart(2, '0')).join('')}`;
+}
+const colorFav = (f: number) => heatScale((f - 45) / 50);       // 45% red .. 95% teal
+const colorUnfav = (u: number) => heatScale(1 - u / 30);        // 0% teal .. 30%+ red
+const colorAvg = (m: number) => heatScale((m - 2) / 2);         // 2.0 red .. 4.0 teal
+const colorScore = (sc: number) => heatScale((sc - 45) / 50);   // 0-100 engagement score
+const divFav = colorFav;
 // Curated Drivers-of-Engagement columns (category pill + short label), matching the mockup.
 const CURATED_COLS: { id: string; cat: string; short: string }[] = [
   { id: 'lead_2', cat: 'Fairness', short: 'Rewards match my effort' },
@@ -290,12 +302,12 @@ export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
                   <div className="font-semibold">{r.name}</div>
                   <div className="text-[11px] text-ls-ink-3">Score: {r.mean != null ? r.mean.toFixed(2) : '—'} ({r.responseCount})</div>
                 </td>
-                <td className="text-center align-middle font-extrabold tabular-nums" style={{ color: divFav(r.score ?? 0) }}>{r.score == null ? '—' : `${r.score}`}</td>
+                <td className="text-center align-middle font-extrabold tabular-nums" style={{ color: colorScore(r.score ?? 0) }}>{r.score == null ? '—' : `${r.score}`}</td>
                 {cols.map((c) => {
                   const cell = cellFor(r, c);
                   if (!cell) return <td key={c.id}><div className="rounded-md py-2.5 text-center text-ls-ink-3 bg-ls-bg-2">—</div></td>;
                   const disp = metric === 'fav' ? `${Math.round(cell.fav)}%` : metric === 'unfav' ? `${Math.round(cell.unfav)}%` : cell.mean.toFixed(2);
-                  const color = metric === 'fav' ? divFav(cell.fav) : metric === 'unfav' ? divUnfav(cell.unfav) : divAvg(cell.mean);
+                  const color = metric === 'fav' ? colorFav(cell.fav) : metric === 'unfav' ? colorUnfav(cell.unfav) : colorAvg(cell.mean);
                   const lbl = view === 'drivers' ? `${c.cat} · ${c.short}` : c.label;
                   return (
                     <td key={c.id}>
