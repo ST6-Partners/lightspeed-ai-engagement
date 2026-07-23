@@ -45,7 +45,8 @@ export default function EngagementSurvey() {
 
   // ---------------- LANDING ----------------
   if (view === 'landing') {
-    const periods = hasData ? [...data.periods].reverse() : [];
+    const curId = progressPeriod ?? (hasData ? data.selectedId : undefined);
+    const cur = hasData ? (data.periods.find((p) => p.id === curId) ?? data.periods[data.periods.length - 1]) : null;
     return (
       <div className="max-w-4xl mx-auto">
         {hasData && (
@@ -74,29 +75,24 @@ export default function EngagementSurvey() {
 
         {hasData && (
           <>
-            <div className="space-y-3">
-              {periods.map((p) => {
-                const part = p.eligibleCount ? Math.round((p.responseCount / p.eligibleCount) * 100) : null;
-                return (
-                  <div key={p.id} className="ls-card p-5 cursor-pointer hover:border-ls-blue transition-colors" onClick={() => openPeriod(p.id)}>
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div>
-                        <div className="flex items-center gap-2.5">
-                          <h2 className="font-bold text-lg">{p.label} Engagement Survey</h2>
-                          <span className={`ls-chip ${p.isCurrent ? 'bg-ls-thrive-bg text-ls-thrive' : 'bg-ls-bg-2 text-ls-ink-2'}`}>{p.isCurrent ? 'Active' : 'Closed'}</span>
-                        </div>
-                        <div className="text-[12px] text-ls-ink-3 mt-1.5">{p.isCurrent ? 'In progress' : 'Ended'} {fmtDate(p.periodDate)} · {p.eligibleCount || '—'} participants</div>
-                      </div>
-                      <button className="ls-btn ls-btn-primary">Open analytics →</button>
+            {cur && (
+              <div className="ls-card p-5 cursor-pointer hover:border-ls-blue transition-colors" onClick={() => openPeriod(cur.id)}>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="font-bold text-lg">{cur.label} Engagement Survey</h2>
+                      <span className={`ls-chip ${cur.isCurrent ? 'bg-ls-thrive-bg text-ls-thrive' : 'bg-ls-bg-2 text-ls-ink-2'}`}>{cur.isCurrent ? 'Active' : 'Closed'}</span>
                     </div>
-                    <div className="mt-4">
-                      <div className="flex justify-between text-[12px] mb-1.5"><b>Response rate</b><span className="text-ls-ink-3">{part != null ? `${part}%` : '—'} ({p.responseCount}{p.eligibleCount ? ` / ${p.eligibleCount}` : ''} people)</span></div>
-                      <div className="h-3 rounded-full bg-ls-bg-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${part ?? 0}%`, background: '#84BD00' }} /></div>
-                    </div>
+                    <div className="text-[12px] text-ls-ink-3 mt-1.5">{cur.isCurrent ? 'In progress' : 'Ended'} {fmtDate(cur.periodDate)} · {cur.eligibleCount || '—'} participants</div>
                   </div>
-                );
-              })}
-            </div>
+                  <button className="ls-btn ls-btn-primary">Open analytics →</button>
+                </div>
+                <div className="mt-4">
+                  <div className="flex justify-between text-[12px] mb-1.5"><b>Response rate</b><span className="text-ls-ink-3">{cur.eligibleCount ? `${Math.round((cur.responseCount / cur.eligibleCount) * 100)}%` : '—'} ({cur.responseCount}{cur.eligibleCount ? ` / ${cur.eligibleCount}` : ''} people)</span></div>
+                  <div className="h-3 rounded-full bg-ls-bg-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${cur.eligibleCount ? Math.round((cur.responseCount / cur.eligibleCount) * 100) : 0}%`, background: '#84BD00' }} /></div>
+                </div>
+              </div>
+            )}
 
             <div className="ls-card mt-5 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-ls-line">
