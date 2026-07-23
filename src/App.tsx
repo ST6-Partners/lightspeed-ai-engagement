@@ -19,6 +19,7 @@ import PeerReview from './pages/PeerReview';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import Metrics from './pages/Metrics';
+import ManagerBrief from './pages/ManagerBrief';
 import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import Development from './pages/Development';
@@ -67,7 +68,8 @@ export default function App() {
             <Route path="assessments" element={<Assessments />} />
           </Route>
         </Route>
-        {/* Metrics (manager+) */}
+        {/* Insights (manager+) */}
+        <Route path="/manager-brief" element={<ManagerBrief />} />
         <Route path="/metrics" element={<Metrics />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
