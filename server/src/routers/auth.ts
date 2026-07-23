@@ -366,6 +366,13 @@ export const authRouter = router({
         manager: z.string().optional(),
         leaderbadge: z.string().optional(),
         leaderBadge: z.string().optional(),
+        team: z.string().optional(),
+        location: z.string().optional(),
+        businessunit: z.string().optional(),
+        businessUnit: z.string().optional(),
+        startdate: z.string().optional(),
+        startDate: z.string().optional(),
+        start_date: z.string().optional(),
       })).max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -383,8 +390,21 @@ export const authRouter = router({
       const idByEmail = new Map(allUsers.map((u) => [u.email.toLowerCase(), u.id]));
       const idByName = new Map(allUsers.filter((u) => u.name).map((u) => [u.name!.trim().toLowerCase(), u.id]));
 
+      const parseStart = (v?: string): { y: number | null; m: number | null; d: number | null } => {
+        const raw = (v ?? '').trim();
+        if (!raw) return { y: null, m: null, d: null };
+        if (/^\d{4}$/.test(raw)) return { y: Number(raw), m: null, d: null };
+        let mm = raw.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+        if (mm) return { y: +mm[1], m: +mm[2], d: mm[3] ? +mm[3] : null };
+        mm = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (mm) return { y: +mm[3], m: +mm[1], d: +mm[2] };
+        const dt = new Date(raw);
+        if (!isNaN(dt.getTime())) return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+        return { y: null, m: null, d: null };
+      };
       const norm = input.rows.map((r) => {
         const roleRaw = (r.role ?? '').trim().toLowerCase();
+        const start = parseStart(r.startDate ?? r.startdate ?? r.start_date);
         const badgeRaw = (r.leaderBadge ?? r.leaderbadge ?? '').trim().toUpperCase();
         const titleRaw = (r.title ?? '').trim();
         const deptRaw = (r.department ?? '').trim();
@@ -398,6 +418,11 @@ export const authRouter = router({
           managerRef: r.manager?.trim() || '',
           badgeProvided: !!badgeRaw,
           leaderBadge: BADGES.has(badgeRaw) ? badgeRaw : null,
+          team: (r.team ?? '').trim() || null,
+          location: (r.location ?? '').trim() || null,
+          businessUnit: (r.businessUnit ?? r.businessunit ?? '').trim() || null,
+          hireYear: start.y, hireMonth: start.m, hireDay: start.d,
+          startProvided: !!(r.startDate ?? r.startdate ?? r.start_date)?.trim(),
         };
       });
 
@@ -415,6 +440,10 @@ export const authRouter = router({
             if (r.titleRaw) upd.jobTitleId = r.jobTitleId;
             if (r.deptRaw) upd.departmentId = r.departmentId;
             if (r.badgeProvided) upd.leaderBadge = r.leaderBadge;
+            if (r.team !== null) upd.team = r.team;
+            if (r.location !== null) upd.location = r.location;
+            if (r.businessUnit !== null) upd.businessUnit = r.businessUnit;
+            if (r.startProvided) { upd.hireYear = r.hireYear; upd.hireMonth = r.hireMonth; upd.hireDay = r.hireDay; }
             await ctx.db.update(users).set(upd).where(eq(users.id, existingId));
             updated++;
           } else {
@@ -422,6 +451,8 @@ export const authRouter = router({
               sub: `local:${r.email}`, email: r.email, name: r.name || null, role: r.role,
               jobTitleId: r.jobTitleId, departmentId: r.departmentId,
               leaderBadge: r.leaderBadge as 'ELT' | 'SLT' | 'ST6' | null,
+              team: r.team, location: r.location, businessUnit: r.businessUnit,
+              hireYear: r.hireYear, hireMonth: r.hireMonth, hireDay: r.hireDay,
               isActive: true, passwordHash: null,
             }).returning();
             idByEmail.set(r.email, u.id);

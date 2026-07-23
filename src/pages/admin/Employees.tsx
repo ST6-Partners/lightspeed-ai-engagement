@@ -123,8 +123,8 @@ export default function Employees() {
           <h2 className="text-lg font-bold text-gray-900">Employees</h2>
           <p className="text-sm text-gray-500">The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and app role here. Title and Department come from the Core Data lookups.</p>
         </div>
-        <ImportButton label="Import employees" hint="CSV: email, name, role, title, department, manager, leaderBadge"
-          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, leaderBadge: r.leaderbadge })) })} />
+        <ImportButton label="Import employees" hint="CSV: email, name, role, title, department, manager, leaderBadge, team, location, businessUnit, startDate"
+          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
