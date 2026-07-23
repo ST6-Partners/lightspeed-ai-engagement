@@ -23,13 +23,6 @@ type NavGroup = { label: string | null; items: NavItem[] };
 // Information architecture per DD-002
 const navGroups: NavGroup[] = [
   {
-    label: null,
-    items: [
-      { path: '/', label: 'Home', icon: Home },
-      { path: '/chat', label: 'AI Assistant', icon: Bot },
-    ],
-  },
-  {
     label: 'Planning',
     items: [
       { path: '/organization', label: 'Organization', icon: Users },
@@ -315,6 +308,15 @@ export default function Layout() {
           <div />
           <div className="flex items-center gap-2">
             <WhatsNew />
+            <Link
+              to="/chat"
+              title="AI Assistant"
+              className={`p-2 rounded-lg transition-colors ${
+                isActive('/chat') ? 'text-ls-active bg-ls-bg-2' : 'text-ls-ink-3 hover:text-ls-ink-2 hover:bg-ls-bg-2'
+              }`}
+            >
+              <Bot className="w-5 h-5" />
+            </Link>
             <NotificationBell />
             <button
               onClick={() => setShowFeedback(true)}
