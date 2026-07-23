@@ -15,6 +15,8 @@ import { eq, and, isNull, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { users, userManagers } from '../db/schema/core.js';
+import { jobTitles } from '../db/schema/jobTitles.js';
+import { departments } from '../db/schema/departments.js';
 import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
@@ -346,6 +348,108 @@ export const authRouter = router({
   // sub follows register()'s local-identity convention. A temp password is
   // optional — omit it and the record is directory-only until an admin sets one
   // via resetUserPassword (the existing recovery path).
+  // Bulk CSV import of employees (admin). Columns: email (required), name, role,
+  // title, department, manager (email or name), leaderBadge. Two passes so a
+  // manager listed later in the file still resolves. Existing users (by email)
+  // are updated — but ONLY for columns the CSV actually provides, so partial
+  // files never wipe roles/assignments. New users are created as local accounts
+  // with no password (they set one via the normal reset flow).
+  importUsers: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      rows: z.array(z.object({
+        email: z.string(),
+        name: z.string().optional(),
+        role: z.string().optional(),
+        title: z.string().optional(),
+        department: z.string().optional(),
+        manager: z.string().optional(),
+        leaderbadge: z.string().optional(),
+        leaderBadge: z.string().optional(),
+      })).max(5000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      let added = 0; let updated = 0; let skipped = 0; const errors: string[] = [];
+      const ROLES = new Set(['user', 'manager', 'admin', 'sysadmin']);
+      const BADGES = new Set(['ELT', 'SLT', 'ST6']);
+
+      const [allUsers, allTitles, allDepts] = await Promise.all([
+        ctx.db.query.users.findMany(),
+        ctx.db.query.jobTitles.findMany(),
+        ctx.db.query.departments.findMany(),
+      ]);
+      const titleId = new Map(allTitles.map((t) => [t.title.trim().toLowerCase(), t.id]));
+      const deptId = new Map(allDepts.map((d) => [d.name.trim().toLowerCase(), d.id]));
+      const idByEmail = new Map(allUsers.map((u) => [u.email.toLowerCase(), u.id]));
+      const idByName = new Map(allUsers.filter((u) => u.name).map((u) => [u.name!.trim().toLowerCase(), u.id]));
+
+      const norm = input.rows.map((r) => {
+        const roleRaw = (r.role ?? '').trim().toLowerCase();
+        const badgeRaw = (r.leaderBadge ?? r.leaderbadge ?? '').trim().toUpperCase();
+        const titleRaw = (r.title ?? '').trim();
+        const deptRaw = (r.department ?? '').trim();
+        return {
+          email: (r.email ?? '').trim().toLowerCase(),
+          name: r.name?.trim() || '',
+          roleProvided: !!roleRaw,
+          role: ROLES.has(roleRaw) ? roleRaw : 'user',
+          titleRaw, jobTitleId: titleRaw ? (titleId.get(titleRaw.toLowerCase()) ?? null) : null,
+          deptRaw, departmentId: deptRaw ? (deptId.get(deptRaw.toLowerCase()) ?? null) : null,
+          managerRef: r.manager?.trim() || '',
+          badgeProvided: !!badgeRaw,
+          leaderBadge: BADGES.has(badgeRaw) ? badgeRaw : null,
+        };
+      });
+
+      // Pass 1 — create/update users (no manager yet).
+      for (const r of norm) {
+        if (!r.email || !r.email.includes('@')) { skipped++; if (r.email) errors.push(`${r.email}: invalid email`); continue; }
+        if (r.titleRaw && !r.jobTitleId) errors.push(`${r.email}: unknown title "${r.titleRaw}"`);
+        if (r.deptRaw && !r.departmentId) errors.push(`${r.email}: unknown department "${r.deptRaw}"`);
+        try {
+          const existingId = idByEmail.get(r.email);
+          if (existingId) {
+            const upd: Record<string, unknown> = { updatedAt: new Date() };
+            if (r.name) upd.name = r.name;
+            if (r.roleProvided) upd.role = r.role;
+            if (r.titleRaw) upd.jobTitleId = r.jobTitleId;
+            if (r.deptRaw) upd.departmentId = r.departmentId;
+            if (r.badgeProvided) upd.leaderBadge = r.leaderBadge;
+            await ctx.db.update(users).set(upd).where(eq(users.id, existingId));
+            updated++;
+          } else {
+            const [u] = await ctx.db.insert(users).values({
+              sub: `local:${r.email}`, email: r.email, name: r.name || null, role: r.role,
+              jobTitleId: r.jobTitleId, departmentId: r.departmentId,
+              leaderBadge: r.leaderBadge as 'ELT' | 'SLT' | 'ST6' | null,
+              isActive: true, passwordHash: null,
+            }).returning();
+            idByEmail.set(r.email, u.id);
+            if (r.name) idByName.set(r.name.toLowerCase(), u.id);
+            added++;
+          }
+        } catch (e) { errors.push(`${r.email}: ${e instanceof Error ? e.message : 'write failed'}`); }
+      }
+
+      // Pass 2 — resolve managers by email (preferred) or name.
+      for (const r of norm) {
+        if (!r.managerRef) continue;
+        const uid = idByEmail.get(r.email);
+        if (!uid) continue;
+        const ref = r.managerRef.toLowerCase();
+        const mid = idByEmail.get(ref) ?? idByName.get(ref) ?? null;
+        if (!mid) { errors.push(`${r.email}: manager "${r.managerRef}" not found`); continue; }
+        if (mid === uid) continue;
+        try {
+          await ctx.db.update(users).set({ managerId: mid, updatedAt: new Date() }).where(eq(users.id, uid));
+          await ctx.db.delete(userManagers).where(eq(userManagers.userId, uid));
+          await ctx.db.insert(userManagers).values({ userId: uid, managerId: mid });
+        } catch { errors.push(`${r.email}: manager link failed`); }
+      }
+
+      return { added, updated, skipped, errors: errors.slice(0, 50) };
+    }),
+
   createUser: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

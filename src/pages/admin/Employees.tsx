@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Search, Info, UserPlus, X, Trash2 } from 'lucide-react';
+import ImportButton from '../../components/ImportButton';
 
 const ROLE_OPTIONS = ['user', 'manager', 'admin', 'sysadmin'] as const;
 const ROLE_COLORS: Record<string, string> = {
@@ -22,6 +23,7 @@ export default function Employees() {
   const updateMutation = trpc.auth.updateUser.useMutation({
     onSuccess: () => utils.auth.listUsers.invalidate(),
   });
+  const importEmployees = trpc.auth.importUsers.useMutation({ onSuccess: () => utils.auth.listUsers.invalidate() });
   const set = (id: string, patch: Record<string, unknown>) => updateMutation.mutate({ id, ...patch } as any);
 
   // ── Add Employee (admin create) ──────────────────────────────
@@ -116,9 +118,13 @@ export default function Employees() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-gray-900">Employees</h2>
-        <p className="text-sm text-gray-500">The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and app role here. Title and Department come from the Core Data lookups.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Employees</h2>
+          <p className="text-sm text-gray-500">The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and app role here. Title and Department come from the Core Data lookups.</p>
+        </div>
+        <ImportButton label="Import employees" hint="CSV: email, name, role, title, department, manager, leaderBadge"
+          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, leaderBadge: r.leaderbadge })) })} />
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
