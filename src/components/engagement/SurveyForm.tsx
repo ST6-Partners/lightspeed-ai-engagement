@@ -11,13 +11,10 @@ type TextAns = Record<string, string>;
 
 const selectCls =
   'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
-const labelCls = 'block text-xs font-medium text-gray-500 uppercase mb-1';
 
 export default function SurveyForm() {
   const [answers, setAnswers] = useState<Likert>({});
   const [textAnswers, setTextAnswers] = useState<TextAns>({});
-  const [jobTitleId, setJobTitleId] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
   const [enpsScore, setEnpsScore] = useState<number | null>(null);
   const [enpsReason, setEnpsReason] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -29,8 +26,6 @@ export default function SurveyForm() {
   const { data: versionData } = trpc.engagementSurveyVersions.getQuestions.useQuery(
     { versionId: effectiveVersionId }, { enabled: !!effectiveVersionId });
   const questions = versionData?.questions;
-  const { data: titles } = trpc.jobTitles.list.useQuery();
-  const { data: depts } = trpc.departments.list.useQuery();
 
   const submit = trpc.engagementSurvey.submit.useMutation({
     onSuccess: () => { setSubmitted(true); window.scrollTo({ top: 0, behavior: 'smooth' }); },
@@ -53,8 +48,7 @@ export default function SurveyForm() {
     () => likertIds.filter((id) => typeof answers[id] === 'number').length,
     [likertIds, answers],
   );
-  const aboutComplete = !!jobTitleId && !!departmentId;
-  const complete = aboutComplete && likertCount > 0 && answeredCount === likertCount && enpsScore != null;
+  const complete = likertCount > 0 && answeredCount === likertCount && enpsScore != null;
   const set = (id: string, v: number) => setAnswers((p) => ({ ...p, [id]: v }));
   const missing = (id: string) => showGaps && typeof answers[id] !== 'number';
 
@@ -68,8 +62,6 @@ export default function SurveyForm() {
       answers,
       versionId: effectiveVersionId,
       textAnswers: Object.keys(textAnswers).length ? textAnswers : undefined,
-      jobTitle: (titles ?? []).find((t) => t.id === jobTitleId)?.title ?? undefined,
-      department: (depts ?? []).find((d) => d.id === departmentId)?.name ?? undefined,
       enpsScore: enpsScore ?? undefined,
       enpsReason: enpsReason.trim() || undefined,
     });
@@ -87,7 +79,6 @@ export default function SurveyForm() {
     );
   }
 
-  const gapCls = (empty: boolean) => (showGaps && empty ? ' border-ls-risk ring-1 ring-ls-risk' : '');
 
   return (
     <div>
@@ -95,7 +86,7 @@ export default function SurveyForm() {
         Rate how strongly you agree or disagree with each statement. Your responses are anonymous. Takes ~6 minutes.
       </p>
       <div className="ls-card p-3 mb-5 text-[13px] text-ls-ink-2">
-        ℹ️ This survey is <b>anonymous</b> — your name is not recorded. Only your job title and department are saved, so results can be organized by role and team, and always reported in aggregate.
+        ℹ️ This survey is <b>anonymous</b> — your name is not recorded. Your role, team, and department come from your profile (they aren't asked here), so results can be organized and are always reported in aggregate.
       </div>
 
       {(versions?.length ?? 0) > 1 && (
@@ -110,32 +101,6 @@ export default function SurveyForm() {
           <span className="text-[12px] text-ls-ink-3">{questions?.length ?? 0} questions</span>
         </div>
       )}
-
-      {/* About you */}
-      <div className="ls-card p-5 mb-6">
-        <h3 className="text-lg font-bold text-ls-blue-deep mb-1">About you</h3>
-        <p className="text-[13px] text-ls-ink-3 mb-3">So results can be organized by role and team. Your responses stay anonymous — no name is collected.</p>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Job Title</label>
-            <select className={selectCls + gapCls(!jobTitleId)} value={jobTitleId} onChange={(e) => setJobTitleId(e.target.value)}>
-              <option value="">Select your title…</option>
-              {(titles ?? []).map((t) => (
-                <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Department</label>
-            <select className={selectCls + gapCls(!departmentId)} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-              <option value="">Select your department…</option>
-              {(depts ?? []).map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
 
       <div className="ls-card p-4 mb-5 sticky top-2 z-10">
         <div className="flex items-center justify-between mb-2">
@@ -227,7 +192,7 @@ export default function SurveyForm() {
         </button>
         {!complete && showGaps && (
           <span className="ls-chip bg-ls-watch-bg text-ls-watch">
-            {aboutComplete ? 'Please answer every required question' : 'Please select your title and department'}
+            Please answer every required question
           </span>
         )}
         {submit.isError && <span className="ls-chip bg-ls-risk-bg text-ls-risk">Something went wrong — try again</span>}

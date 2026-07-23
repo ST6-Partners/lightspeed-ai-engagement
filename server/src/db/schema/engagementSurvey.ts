@@ -15,7 +15,14 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   respondentId: uuid('respondent_id').references(() => users.id, { onDelete: 'set null' }),
   respondentName: varchar('respondent_name', { length: 200 }),   // selected from the employee directory
   jobTitle: varchar('job_title', { length: 200 }),               // selected job title (denormalized)
-  department: varchar('department', { length: 160 }),            // selected department (denormalized) — used to organize results
+  department: varchar('department', { length: 160 }),            // snapshot of respondent's department (from profile) — organizes results
+  team: varchar('team', { length: 160 }),                        // snapshot of team (from profile)
+  location: varchar('location', { length: 160 }),               // snapshot of location (from profile)
+  businessUnit: varchar('business_unit', { length: 160 }),      // snapshot of business unit (from profile)
+  managerName: varchar('manager_name', { length: 200 }),        // snapshot of primary manager's name (for manager roll-up)
+  eltLeader: varchar('elt_leader', { length: 200 }),            // snapshot of ELT leader this person rolls up to
+  startYear: integer('start_year'),                              // snapshot of start year (for tenure banding)
+  periodId: uuid('period_id'),                                   // survey period this response belongs to
   answers: jsonb('answers').$type<Record<string, number>>().notNull().default({}),
   textAnswers: jsonb('text_answers').$type<Record<string, string>>().notNull().default({}),  // free-text question answers, keyed by question id
   enpsScore: integer('enps_score'),                 // 0..10

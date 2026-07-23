@@ -35,6 +35,15 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 255 }),
   avatarUrl: text('avatar_url'),
   title: varchar('title', { length: 255 }),
+  // Org placement (admin-managed via employee upload; not self-editable). AIE 2026-07-23.
+  team: varchar('team', { length: 160 }),
+  location: varchar('location', { length: 160 }),
+  businessUnit: varchar('business_unit', { length: 160 }),
+  // Start date — YEAR required on entry; month/day optional. Stored as parts so a
+  // year-only start is representable. Tenure (and its filter bands) derive from these.
+  hireYear: integer('hire_year'),
+  hireMonth: integer('hire_month'),
+  hireDay: integer('hire_day'),
   // Employee directory fields (Core Data → Employees). Managed lookups:
   jobTitleId: uuid('job_title_id').references(() => jobTitles.id, { onDelete: 'set null' }),
   departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
