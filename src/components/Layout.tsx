@@ -75,9 +75,11 @@ const navGroups: NavGroup[] = [
   {
     label: 'Insights',
     items: [
-      { path: '/manager-brief', label: 'Manager Brief', icon: Sparkles, minRole: 'manager' },
-      { path: '/metrics', label: 'Metrics', icon: BarChart3, minRole: 'manager' },
-      { path: '/manager-effectiveness', label: 'Manager Effectiveness', icon: UserCheck, minRole: 'manager' },
+      { path: '/insights', label: 'Insights Dashboard', icon: BarChart3, minRole: 'manager', children: [
+        { path: '/insights?tab=brief', label: 'Manager Brief' },
+        { path: '/insights?tab=metrics', label: 'Metrics' },
+        { path: '/insights?tab=effectiveness', label: 'Manager Effectiveness' },
+      ] },
     ],
   },
   { label: 'System', items: [{ path: '/admin/settings', label: 'Admin', icon: Settings }] },
