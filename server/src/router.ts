@@ -48,6 +48,7 @@ import { oneOnOneRouter } from './routers/oneOnOne.js';
 import { accessRouter } from './routers/access.js';
 import { metricsRouter } from './routers/metrics.js';
 import { managerEffectivenessRouter } from './routers/managerEffectiveness.js';
+import { actionsRouter } from './routers/actions.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -77,6 +78,7 @@ export const appRouter = router({
   access: accessRouter,
   metrics: metricsRouter,
   managerEffectiveness: managerEffectivenessRouter,
+  actions: actionsRouter,
   exitSurvey: exitSurveyRouter,
   departments: departmentsRouter,
   engagementSurvey: engagementSurveyRouter,

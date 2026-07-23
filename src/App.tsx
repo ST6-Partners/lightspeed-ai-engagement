@@ -21,6 +21,7 @@ import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import Metrics from './pages/Metrics';
 import ManagerEffectiveness from './pages/ManagerEffectiveness';
+import ManagerBrief from './pages/ManagerBrief';
 import Reviews from './pages/Reviews';
 import CoachingPlans from './pages/CoachingPlans';
 import Development from './pages/Development';
@@ -70,7 +71,8 @@ export default function App() {
             <Route path="assessments" element={<Assessments />} />
           </Route>
         </Route>
-        {/* Metrics (manager+) */}
+        {/* Insights (manager+) */}
+        <Route path="/manager-brief" element={<ManagerBrief />} />
         <Route path="/metrics" element={<Metrics />} />
         <Route path="/manager-effectiveness" element={<ManagerEffectiveness />} />
         {/* Documents */}

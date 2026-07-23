@@ -40,6 +40,9 @@ export const actionItems = pgTable('action_items', {
   employeeId: uuid('employee_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   text: text('text').notNull(),
+  // Priority tier for the Manager Brief actions surface (additive; the 1:1
+  // action-items UI ignores it and treats everything as unprioritised).
+  priority: varchar('priority', { length: 8 }).notNull().default('medium'),
   dueDate: date('due_date'),
   inWeeklyPlan: boolean('in_weekly_plan').notNull().default(false),
   done: boolean('done').notNull().default(false),
