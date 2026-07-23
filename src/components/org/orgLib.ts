@@ -15,16 +15,16 @@ export type TabKey = 'priorities' | 'okrs' | 'engagement' | 'assessments' | 'rev
 
 // Spec §12 tokens (carried verbatim where precise).
 export const TOKENS = {
-  bg: '#f8f9fa', panel: '#fff', border: '#dee2e6', borderSoft: '#e5e7eb',
-  selBg: '#dbeafe', selBar: '#2563eb', hover: '#f1f5f9',
-  tierFill: '#1e3a5f', tabUnderline: '#3b82f6', activeText: '#1a1a2e', idle: '#6b7280',
-  barTrack: '#eef0f2', badgeGrey: '#6b7280',
+  bg: '#F6F9FA', panel: '#fff', border: '#E3E8EB', borderSoft: '#E3E8EB',
+  selBg: '#EAF4FA', selBar: '#4FA9D6', hover: '#EEF3F5',
+  tierFill: '#28323A', tabUnderline: '#4FA9D6', activeText: '#2E3942', idle: '#51606A',
+  barTrack: '#EEF3F5', badgeGrey: '#8A969E',
 };
 
 export const TIER_BADGE: Record<string, { bg: string; fg: string }> = {
-  ELT: { bg: '#fef3c7', fg: '#92400e' },
-  SLT: { bg: '#dbeafe', fg: '#1e40af' },
-  ST6: { bg: '#f3e8ff', fg: '#6b21a8' },
+  ELT: { bg: '#EDE7F8', fg: '#6E4AA0' },
+  SLT: { bg: '#EAF4FA', fg: '#2E89B8' },
+  ST6: { bg: '#E6F4EF', fg: '#22795E' },
 };
 
 export type TreeMaps = {
@@ -112,3 +112,15 @@ export const INSIGHT_COLORS: Record<string, string> = {
   blue: '#4285f4', green: '#34a853', yellow: '#ffd400', red: '#ea4335',
 };
 export const INSIGHT_ORDER = ['blue', 'green', 'yellow', 'red'];
+
+
+// Deterministic monogram avatar helpers (visual only — Org screen redesign).
+const AVATAR_PALETTE = ['#2E89B8','#4FA9D6','#2E9E7B','#7A54B0','#C99300','#C2615A','#4C6EF5','#12897E','#B5603D','#5B7A8C'];
+export function personInitials(name: string): string {
+  const p = (name || '').trim().split(/\s+/);
+  return ((p[0]?.[0] ?? '') + (p[p.length - 1]?.[0] ?? '')).toUpperCase();
+}
+export function personColor(name: string): string {
+  let h = 0; for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}

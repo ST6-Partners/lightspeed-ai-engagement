@@ -1,4 +1,4 @@
-import { Person, TabKey, TIER_BADGE, TOKENS } from './orgLib';
+import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor } from './orgLib';
 import PrioritiesTab from './PrioritiesTab';
 import OkrsTab from './OkrsTab';
 import EngagementTab from './EngagementTab';
@@ -10,10 +10,16 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod }: { pe
   return (
     <div className="rounded-lg p-3" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
       <div className="flex items-start justify-between mb-2">
-        <div className="min-w-0">
-          <div className="font-semibold text-[13.5px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
-          <div className="text-[11px] truncate" style={{ color: TOKENS.idle }}>
-            {person.title ?? '—'}{person.dept ? ` · ${person.dept}` : ''}
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="shrink-0 rounded-full flex items-center justify-center"
+            style={{ width: 32, height: 32, background: personColor(person.name), color: '#fff', fontSize: 12, fontWeight: 700 }}>
+            {personInitials(person.name)}
+          </span>
+          <div className="min-w-0">
+            <div className="font-semibold text-[13.5px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
+            <div className="text-[11px] truncate" style={{ color: TOKENS.idle }}>
+              {person.title ?? '—'}{person.dept ? ` · ${person.dept}` : ''}
+            </div>
           </div>
         </div>
         {badge && (

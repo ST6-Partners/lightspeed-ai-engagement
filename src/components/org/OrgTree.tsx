@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { Person, TreeMaps, TIER_BADGE, TOKENS, descendantCount } from './orgLib';
+import { Person, TreeMaps, TIER_BADGE, TOKENS, descendantCount, personInitials, personColor } from './orgLib';
 
 type Tier = 'collapse' | 'l2' | 'l3' | null;
 
@@ -82,6 +82,10 @@ export default function OrgTree({
           onClick={(e) => { if (hasKids) { e.stopPropagation(); toggle(p.id); } }}
         >
           {hasKids ? (isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />) : null}
+        </span>
+        <span className="shrink-0 mr-2 rounded-full flex items-center justify-center"
+          style={{ width: 24, height: 24, background: personColor(p.name), color: '#fff', fontSize: 10, fontWeight: 700 }}>
+          {personInitials(p.name)}
         </span>
         {badge && (
           <span className="shrink-0 mr-1.5 rounded px-1 text-[9px] font-bold"

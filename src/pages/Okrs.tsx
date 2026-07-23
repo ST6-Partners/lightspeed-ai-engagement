@@ -485,7 +485,15 @@ export default function Okrs() {
             </div>
             )}
           </div>
-          <h2 className="text-lg font-bold mb-4">{sel.title}</h2>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="shrink-0 rounded-full flex items-center justify-center"
+              style={{ width: 72, height: 72, background: `conic-gradient(var(--ls-blue-deep, #2E89B8) ${progressOf(sel)}%, #EEF3F5 0)` }}>
+              <div className="rounded-full bg-white flex items-center justify-center" style={{ width: 54, height: 54 }}>
+                <span className="text-[17px] font-extrabold leading-none tabular-nums">{Math.round(progressOf(sel))}%</span>
+              </div>
+            </div>
+            <h2 className="text-lg font-bold">{sel.title}</h2>
+          </div>
           <div className="mb-4">
             <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-1.5">Progress{childrenOf(sel.id).length > 0 ? ' (rolled up)' : ''}</div>
             <ProgressBar pct={progressOf(sel)} />
