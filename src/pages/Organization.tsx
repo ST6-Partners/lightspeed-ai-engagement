@@ -2,6 +2,8 @@
 // Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { trpc } from '../lib/trpc';
+import { Printer } from 'lucide-react';
+import { openPrintDoc, escapeHtml } from '../lib/printDoc';
 import OrgTree from '../components/org/OrgTree';
 import PersonCard from '../components/org/PersonCard';
 import NineBox from '../components/org/NineBox';
@@ -131,6 +133,49 @@ export default function Organization() {
 
   const selected = selectedId ? maps.byId.get(selectedId) ?? null : null;
 
+  // Export a one-page talent profile (directory + org context) for the selected
+  // person. Uses data already loaded from the org tree — no extra fetch.
+  const exportTalentProfile = () => {
+    if (!selected) return;
+    const mgr = selected.managerId ? maps.byId.get(selected.managerId) ?? null : null;
+    const directs = directsOf(maps, selected.id);
+    const orgSize = descendantsOf(maps, selected.id).length;
+    // Manager chain from the top down to (not including) this person.
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cur = selected.managerId;
+    while (cur && !seen.has(cur)) { seen.add(cur); const m = maps.byId.get(cur); if (m) chain.unshift(m.name); cur = m?.managerId ?? null; }
+
+    const kv = (k: string, v: string | null | undefined) =>
+      `<div><span class="k">${escapeHtml(k)}:</span> ${escapeHtml(v ?? '—')}</div>`;
+    const directsHtml = directs.length
+      ? `<ul>${directs.map((d) => `<li>${escapeHtml(d.name)}${d.title ? ` — ${escapeHtml(d.title)}` : ''}</li>`).join('')}</ul>`
+      : '<p class="muted">No direct reports.</p>';
+
+    const body = `
+      <h2>Profile</h2>
+      <div class="kv">
+        ${kv('Name', selected.name)}${kv('Title', selected.title)}
+        ${kv('Department', selected.dept)}${kv('Manager', mgr?.name)}
+        ${kv('Leadership tier', selected.leaderBadge)}${kv('App role', selected.role)}
+      </div>
+      <h2>Org Context</h2>
+      <div class="kv">
+        ${kv('Direct reports', String(directs.length))}${kv('Total org (below)', String(orgSize))}
+        ${kv('Reporting line', chain.length ? chain.join(' › ') : '—')}
+      </div>
+      <h2>Direct Reports</h2>
+      ${directsHtml}
+    `;
+    openPrintDoc({
+      docTitle: `Talent Profile — ${selected.name}`,
+      heading: 'Talent Profile',
+      meta: `${escapeHtml(selected.name)}${selected.title ? ` · ${escapeHtml(selected.title)}` : ''}${selected.dept ? ` · ${escapeHtml(selected.dept)}` : ''}`,
+      bodyHtml: body,
+      footer: 'Confidential — for calibration / succession planning.',
+    });
+  };
+
   // In-scope people (spec §6).
   const scoped: Person[] = useMemo(() => {
     if (!selected) return [];
@@ -166,7 +211,7 @@ export default function Organization() {
             style={{ width: 6, cursor: 'col-resize', background: dragging ? TOKENS.selBar : 'transparent' }} />
           <div className="flex-1 flex flex-col min-w-0">
             {/* Scope header */}
-            <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}` }}>
+            <div className="flex items-center justify-between gap-2" style={{ padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}` }}>
               <div className="inline-flex rounded-lg p-0.5" style={{ background: '#eef0f2' }}>
                 {visibleScopes.map((s) => (
                   <button key={s.key} onClick={() => chooseScope(s.key)}
@@ -176,6 +221,14 @@ export default function Organization() {
                   </button>
                 ))}
               </div>
+              {selected && (
+                <button onClick={exportTalentProfile}
+                  className="inline-flex items-center gap-1 text-[12px] font-medium rounded-md px-2.5 py-1.5"
+                  style={{ color: TOKENS.activeText, border: `1px solid ${TOKENS.border}`, background: '#fff' }}
+                  title={`Export a talent profile PDF for ${selected.name}`}>
+                  <Printer size={14} /> Export talent profile
+                </button>
+              )}
             </div>
             {/* Tab strip */}
             <div className="flex items-center justify-between" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>

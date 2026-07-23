@@ -18,9 +18,10 @@ import { fmtDate, fmtDateTime } from '../lib/date';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import { openPrintDoc, escapeHtml, paras } from '../lib/printDoc';
 import ManagerSurvey from './ManagerSurvey';
 import PeerReview from './PeerReview';
-import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck, ChevronRight, ChevronDown, Archive, RotateCcw, Lock } from 'lucide-react';
+import { Star, Plus, Trash2, ArrowLeft, CheckCircle2, Circle, ArrowRight, ShieldCheck, ChevronRight, ChevronDown, Archive, RotateCcw, Lock, Printer } from 'lucide-react';
 
 const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 const band = (n: number | null) =>
@@ -278,6 +279,7 @@ function ValuesTab({ employeeId, employeeName, canEdit, values, periodLabel, mod
     <ValuesEvaluationForm
       key={editingId ?? 'new'}
       employeeId={employeeId}
+      employeeName={employeeName}
       editingId={editingId}
       newPeriodLabel={periodLabel}
       values={values ?? []}
@@ -326,8 +328,8 @@ function ValuesEvaluationList({ employeeName, rows, loading, canEdit, onOpen }: 
   );
 }
 
-function ValuesEvaluationForm({ employeeId, editingId, newPeriodLabel, values, pillars, onDone, onCancel }: {
-  employeeId: string; editingId: string | null; newPeriodLabel: string; values: any[]; pillars: string[];
+function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, values, pillars, onDone, onCancel }: {
+  employeeId: string; employeeName: string; editingId: string | null; newPeriodLabel: string; values: any[]; pillars: string[];
   onDone: () => void; onCancel: () => void;
 }) {
   const existing = trpc.values.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
@@ -374,10 +376,15 @@ function ValuesEvaluationForm({ employeeId, editingId, newPeriodLabel, values, p
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <button onClick={onCancel} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"><ArrowLeft size={15} /> Back</button>
-        {editingId && (
-          <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
-            className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
-        )}
+        <div className="flex items-center gap-4">
+          <button onClick={() => exportReviewPdf({ instrument: 'Values', employeeName, period: displayPeriod, status, overallNotes,
+            items: values.map((v: any) => ({ group: v.pillar, label: v.name, description: v.description, score: scores[v.id], note: notes[v.id] })) })}
+            className="inline-flex items-center gap-1 text-sm text-ls-blue-deep hover:underline"><Printer size={14} /> Export to PDF</button>
+          {editingId && (
+            <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
+              className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -479,6 +486,7 @@ function PerformanceTab({ employeeId, employeeName, canEdit, periodLabel, mode, 
     <PerformanceEvaluationForm
       key={editingId ?? 'new'}
       employeeId={employeeId}
+      employeeName={employeeName}
       editingId={editingId}
       newPeriodLabel={periodLabel}
       criteria={criteria.data ?? []}
@@ -526,8 +534,8 @@ function PerformanceEvaluationList({ employeeName, rows, loading, canEdit, onOpe
   );
 }
 
-function PerformanceEvaluationForm({ employeeId, editingId, newPeriodLabel, criteria, onDone, onCancel }: {
-  employeeId: string; editingId: string | null; newPeriodLabel: string; criteria: any[];
+function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, criteria, onDone, onCancel }: {
+  employeeId: string; employeeName: string; editingId: string | null; newPeriodLabel: string; criteria: any[];
   onDone: () => void; onCancel: () => void;
 }) {
   const existing = trpc.performance.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
@@ -574,10 +582,15 @@ function PerformanceEvaluationForm({ employeeId, editingId, newPeriodLabel, crit
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <button onClick={onCancel} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"><ArrowLeft size={15} /> Back</button>
-        {editingId && (
-          <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
-            className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
-        )}
+        <div className="flex items-center gap-4">
+          <button onClick={() => exportReviewPdf({ instrument: 'Performance', employeeName, period: displayPeriod, status, overallNotes,
+            items: criteria.map((c: any) => ({ group: null, label: c.name, description: c.description, score: scores[c.id], note: notes[c.id] })) })}
+            className="inline-flex items-center gap-1 text-sm text-ls-blue-deep hover:underline"><Printer size={14} /> Export to PDF</button>
+          {editingId && (
+            <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
+              className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -973,4 +986,38 @@ export default function Reviews() {
       {tab === 'peer' && <PeerReview />}
     </div>
   );
+}
+
+
+// --- Export a completed Values/Performance review as a clean PDF ---
+function exportReviewPdf(opts: {
+  instrument: string; employeeName: string; period: string; status: string;
+  overallNotes: string;
+  items: { group?: string | null; label: string; description?: string | null; score?: number; note?: string }[];
+}) {
+  const scored = opts.items.filter((it) => it.score != null);
+  const groups = new Map<string, typeof scored>();
+  for (const it of scored) { const g = it.group ?? ''; const a = groups.get(g) ?? []; a.push(it); groups.set(g, a); }
+  const rowsHtml = [...groups.entries()].map(([g, its]) => {
+    const head = g ? `<tr><td colspan="3" style="font-weight:700;background:#f8fafc">${escapeHtml(g)}</td></tr>` : '';
+    const body = its.map((it) => `<tr><td>${escapeHtml(it.label)}${it.description ? `<div class="muted" style="font-size:12px">${escapeHtml(it.description)}</div>` : ''}</td><td class="score">${it.score}/5</td><td>${escapeHtml(it.note ?? '')}</td></tr>`).join('');
+    return head + body;
+  }).join('');
+  const table = scored.length
+    ? `<table><thead><tr><th>Item</th><th>Score</th><th>Notes</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
+    : '<p class="muted">No scores recorded yet.</p>';
+  const avg = scored.length ? (scored.reduce((a, it) => a + (it.score ?? 0), 0) / scored.length).toFixed(1) : '—';
+  const body = `
+    <h2>${escapeHtml(opts.instrument)} Review</h2>
+    ${table}
+    <p><strong>Average:</strong> ${avg}/5 · <strong>${scored.length}</strong> scored</p>
+    ${opts.overallNotes ? `<h2>Overall Notes</h2>${paras(opts.overallNotes)}` : ''}
+  `;
+  openPrintDoc({
+    docTitle: `${opts.instrument} Review — ${opts.employeeName || 'employee'}`,
+    heading: `${opts.instrument} Review`,
+    meta: `${escapeHtml(opts.employeeName || '—')}${opts.period ? ` · ${escapeHtml(opts.period)}` : ''} · ${escapeHtml(opts.status)}`,
+    bodyHtml: body,
+    footer: 'Confidential — performance review.',
+  });
 }

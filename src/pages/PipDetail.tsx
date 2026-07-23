@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import {
-  Plus, Pencil, Trash2, ArrowLeft, Check, RotateCcw,
+  Plus, Pencil, Trash2, ArrowLeft, Check, RotateCcw, Printer,
 } from 'lucide-react';
+import { openPrintDoc, escapeHtml, paras } from '../lib/printDoc';
 import PipForm from '../components/pip/PipForm';
 import ConcernForm from '../components/pip/ConcernForm';
 import GoalForm from '../components/pip/GoalForm';
@@ -119,9 +120,15 @@ export default function PipDetail() {
             <h1 className="text-2xl font-bold">Performance Improvement Plan</h1>
             <p className="text-white/90 text-sm mt-1">{pip.employeeName ?? 'Unassigned employee'}{pip.roleLevel ? ` · ${pip.roleLevel}` : ''}</p>
           </div>
-          <span className={`flex-none px-2.5 py-1 text-xs rounded-full font-medium ${STATUS_CLASS[pip.status]}`}>
-            {STATUS_LABELS[pip.status]}
-          </span>
+          <div className="flex-none flex flex-col items-end gap-2">
+            <span className={`px-2.5 py-1 text-xs rounded-full font-medium ${STATUS_CLASS[pip.status]}`}>
+              {STATUS_LABELS[pip.status]}
+            </span>
+            <button onClick={() => exportPipPdf(pip)}
+              className="inline-flex items-center gap-1 text-xs font-medium bg-white/15 hover:bg-white/25 border border-white/30 rounded-md px-2.5 py-1.5 text-white">
+              <Printer size={14} /> Export to PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -457,4 +464,76 @@ function Field({ label, value }: { label: string; value: string | null | undefin
 
 function Empty({ children }: { children: ReactNode }) {
   return <div className="text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg p-5 text-center">{children}</div>;
+}
+
+
+// --- Export the PIP as a clean PDF (print window) ---
+function exportPipPdf(pip: PipDetailT) {
+  const kv = (k: string, v: string | null | undefined) =>
+    `<div><span class="k">${escapeHtml(k)}:</span> ${escapeHtml(v ?? '—')}</div>`;
+
+  const concerns = pip.concerns.length
+    ? pip.concerns.map((c, i) => `
+        <div class="card">
+          <div class="card-h">${i + 1}. ${escapeHtml(c.area)}</div>
+          ${c.observations ? `<div class="card-sub"><strong>Observations:</strong> ${escapeHtml(c.observations)}</div>` : ''}
+          ${c.expectation ? `<div class="card-sub"><strong>Expectation:</strong> ${escapeHtml(c.expectation)}</div>` : ''}
+          ${c.previouslyRaised ? `<div class="card-sub"><strong>Previously raised:</strong> ${escapeHtml(c.previouslyRaised)}</div>` : ''}
+        </div>`).join('')
+    : '<p class="muted">No concerns recorded.</p>';
+
+  const goals = pip.goals.length
+    ? `<table><thead><tr><th>#</th><th>Goal</th><th>Success criteria</th><th>Measurement</th><th>Status</th></tr></thead><tbody>${
+        pip.goals.map((g, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(g.title)}</td><td>${escapeHtml(g.successCriteria)}</td><td>${escapeHtml(g.measurement)}</td><td>${escapeHtml(GOAL_STATUS_LABELS[g.status])}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<p class="muted">No goals defined.</p>';
+
+  const supports = pip.supports.length
+    ? `<table><thead><tr><th>Support</th><th>Owner</th><th>Cadence</th></tr></thead><tbody>${
+        pip.supports.map((sp) => `<tr><td>${escapeHtml(sp.support)}</td><td>${escapeHtml(sp.owner)}</td><td>${escapeHtml(sp.cadence)}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<p class="muted">No support commitments.</p>';
+
+  const checkins = pip.checkins.length
+    ? `<table><thead><tr><th>Check-in</th><th>Date</th><th>Attendees</th><th>Status</th><th>Notes</th></tr></thead><tbody>${
+        pip.checkins.map((ci) => `<tr><td>${escapeHtml(ci.label)}</td><td>${ci.checkinDate ? escapeHtml(fmtDate(ci.checkinDate)) : '—'}</td><td>${escapeHtml(ci.attendees)}</td><td>${ci.status ? escapeHtml(CHECKIN_STATUS_LABELS[ci.status]) : '—'}</td><td>${escapeHtml(ci.notes)}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<p class="muted">No check-ins scheduled.</p>';
+
+  const signatures = pip.signatures.length
+    ? `<table><thead><tr><th>Role</th><th>Name</th><th>Signed</th></tr></thead><tbody>${
+        pip.signatures.map((sg) => `<tr><td>${escapeHtml(SIGNATURE_LABELS[sg.role])}</td><td>${escapeHtml(sg.signerName)}</td><td>${sg.signedAt ? escapeHtml(fmtDateTime(sg.signedAt)) : 'Not signed'}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<p class="muted">No signatures.</p>';
+
+  const outcome = (pip.status === 'completed_met' || pip.status === 'completed_not_met')
+    ? `<h2>Outcome</h2>${paras(pip.status === 'completed_met' ? pip.outcomeMet : pip.outcomeNotMet)}`
+    : '';
+
+  const body = `
+    <h2>Plan Details</h2>
+    <div class="kv">
+      ${kv('Employee', pip.employeeName)}${kv('Role / Level', pip.roleLevel)}
+      ${kv('Team / Department', pip.team)}${kv('Manager', pip.managerName)}
+      ${kv('HR Partner', pip.hrPartnerName)}${kv('Status', STATUS_LABELS[pip.status])}
+      ${kv('Plan Duration', `${pip.durationDays} days`)}${kv('Start Date', pip.startDate ? fmtDate(pip.startDate) : '—')}
+      ${kv('Mid-Point Review', pip.midpointDate ? fmtDate(pip.midpointDate) : '—')}${kv('Final Review', pip.finalReviewDate ? fmtDate(pip.finalReviewDate) : '—')}
+    </div>
+    ${pip.purpose ? `<h2>Purpose</h2>${paras(pip.purpose)}` : ''}
+    <h2>Areas of Concern</h2>${concerns}
+    <h2>Goals &amp; Expectations</h2>${goals}
+    <h2>Support &amp; Resources</h2>${supports}
+    <h2>Check-ins</h2>${checkins}
+    ${outcome}
+    ${pip.employeeComments ? `<h2>Employee Comments</h2>${paras(pip.employeeComments)}` : ''}
+    <h2>Signatures</h2>${signatures}
+  `;
+
+  openPrintDoc({
+    docTitle: `PIP — ${pip.employeeName ?? 'employee'}`,
+    heading: 'Performance Improvement Plan',
+    meta: `${escapeHtml(pip.employeeName ?? 'Unassigned')}${pip.roleLevel ? ` · ${escapeHtml(pip.roleLevel)}` : ''} · ${escapeHtml(STATUS_LABELS[pip.status])}`,
+    bodyHtml: body,
+    footer: 'Confidential · Performance Improvement Plan — for the employee record.',
+  });
 }
