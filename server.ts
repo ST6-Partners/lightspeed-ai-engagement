@@ -12,6 +12,7 @@ import { pool, db } from './server/src/db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
+import { registerMicrosoftSso } from './server/src/http/microsoftSso.js';
 import { registerBuiltInJobs } from './server/src/services/job-runner.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
@@ -85,6 +86,9 @@ async function main() {
   // express-session (connect-pg-simple) issues the session cookie; a
   // stateless HMAC bearer token covers cross-site-iframe contexts.
   app.use(getSessionMiddleware());
+
+  // Microsoft Entra SSO (domain-restricted). Inert until MS_* env vars are set.
+  registerMicrosoftSso(app);
 
   app.use('/api/feedback', feedbackApiRouter);
 

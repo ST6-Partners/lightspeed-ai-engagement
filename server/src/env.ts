@@ -15,6 +15,12 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   SESSION_SECRET: string;
   SEED_SUPER_ADMIN_EMAIL: string;
+  // Microsoft Entra SSO (optional — SSO button is inert until all are set).
+  MS_CLIENT_ID: string;
+  MS_CLIENT_SECRET: string;
+  MS_TENANT_ID: string;
+  MS_REDIRECT_URI: string;
+  MS_ALLOWED_DOMAIN: string;
 }
 
 function optional(name: string, fallback = ''): string {
@@ -35,6 +41,11 @@ export function loadEnv(): Env {
     ANTHROPIC_API_KEY: optional('ANTHROPIC_API_KEY'),
     SESSION_SECRET: optional('SESSION_SECRET', 'dev-only-session-secret-32-chars-xxxxxxxxxxxx'),
     SEED_SUPER_ADMIN_EMAIL: optional('SEED_SUPER_ADMIN_EMAIL').toLowerCase(),
+    MS_CLIENT_ID: optional('MS_CLIENT_ID'),
+    MS_CLIENT_SECRET: optional('MS_CLIENT_SECRET'),
+    MS_TENANT_ID: optional('MS_TENANT_ID'),
+    MS_REDIRECT_URI: optional('MS_REDIRECT_URI'),
+    MS_ALLOWED_DOMAIN: optional('MS_ALLOWED_DOMAIN').toLowerCase(),
   };
 }
 

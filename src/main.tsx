@@ -6,6 +6,20 @@ import { trpc, trpcClient } from './lib/trpc';
 import App from './App';
 import './styles.css';
 
+// SSO redirect returns with ?token=… — capture it into localStorage (same slot
+// as password login), then strip it from the URL so it isn't left in history.
+(() => {
+  try {
+    const u = new URL(window.location.href);
+    const t = u.searchParams.get('token');
+    if (t) {
+      localStorage.setItem('auth_token', t);
+      u.searchParams.delete('token');
+      window.history.replaceState({}, '', u.pathname + u.search + u.hash);
+    }
+  } catch { /* no-op */ }
+})();
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 5 * 60 * 1000, retry: 1 },
