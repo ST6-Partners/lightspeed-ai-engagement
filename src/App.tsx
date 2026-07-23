@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Entities from './pages/Entities';
 import Chat from './pages/Chat';
 import Login from './pages/Login';
+import Profile from './pages/Profile';
 import ResetPassword from './pages/ResetPassword';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/pips/:id" element={<PipDetail />} />
         <Route path="/exit-survey" element={<ExitSurvey />} />
         <Route path="/engagement-survey" element={<EngagementSurvey />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/manager-survey" element={<Navigate to="/reviews?tab=manager" replace />} />
         <Route path="/peer-review" element={<Navigate to="/reviews?tab=peer" replace />} />
         {/* Core Data */}

@@ -49,9 +49,11 @@ import { accessRouter } from './routers/access.js';
 import { metricsRouter } from './routers/metrics.js';
 import { managerEffectivenessRouter } from './routers/managerEffectiveness.js';
 import { actionsRouter } from './routers/actions.js';
+import { profileRouter } from './routers/profile.js';
 
 export const appRouter = router({
   auth: authRouter,
+  profile: profileRouter,
   entity: sampleEntityRouter,
   admin: adminRouter,
   changelog: changelogRouter,

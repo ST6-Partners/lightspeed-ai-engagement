@@ -291,7 +291,8 @@ export default function Layout() {
 
         {user && (
           <div className="px-3 py-3 border-t border-[#36424B]">
-            <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+            <Link to="/profile" title="Your profile"
+              className={`flex items-center ${navCollapsed ? 'justify-center' : 'gap-2.5'} rounded-lg -mx-1 px-1 py-1 hover:bg-[#36424B] transition-colors`}>
               {user.avatarUrl
                 ? <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
                 : <div className="w-8 h-8 rounded-full bg-ls-active text-white flex items-center justify-center text-xs font-bold shrink-0">
@@ -303,7 +304,7 @@ export default function Layout() {
                   <div className="text-[11px] text-[#7E8B94]">{user.role}</div>
                 </div>
               )}
-            </div>
+            </Link>
           </div>
         )}
       </aside>
