@@ -36,6 +36,8 @@ type Instrument = 'value' | 'criterion';
 type CombiRow = { itemType: Instrument; itemId: string; label: string; pillar: string | null; score: number; notes: string | null };
 type CombiFocus = { itemType: Instrument | null; itemId: string | null; title: string; coachingNote: string };
 type CombiDraft = { summaryNarrative: string; strengths: string; focusAreas: CombiFocus[]; aiGenerated: boolean };
+type ReviewStage = 'not_started' | 'in_progress' | 'scored' | 'plan_ready' | 'closed';
+type ReviewStatusRow = { employeeId: string; name: string; title: string | null; stage: ReviewStage; values: number | null; performance: number | null; planTrack: 'coaching' | 'pip' | null };
 
 const samePeriod = (a: string | null | undefined, b: string | null | undefined) => (a ?? null) === (b ?? null);
 
@@ -345,5 +347,64 @@ export const reviewSessionRouter = router({
       pip,
       planId: (plan?.id as string | null) ?? null,
     };
+  }),
+
+  // Team-wide review status for the signed-in manager's direct reports, for the
+  // active review period. Read-only. Reuses loadSessionData per report so the
+  // stage + score derivation matches the single-employee cardSummary exactly.
+  teamReviews: protectedProcedure.use(requireManager).query(async ({ ctx }) => {
+    // Active period = the active one with the highest sortOrder; fall back to
+    // the most recent overall, else null (period-less reviews still resolve).
+    const periods = await ctx.db.query.reviewPeriods.findMany();
+    const sorted = [...periods].sort((a: any, b: any) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0));
+    const activePeriod = sorted.find((p: any) => p.active) ?? sorted[0] ?? null;
+    const period: string | null = activePeriod?.label ?? null;
+
+    // Direct reports (active).
+    const team = await ctx.db.query.users.findMany({
+      where: and(eq(users.managerId, ctx.user.id), eq(users.isActive, true)),
+    });
+    if (team.length === 0) return { period, reviews: [] as ReviewStatusRow[] };
+
+    // Title lookup for display.
+    const titles = await ctx.db.query.jobTitles.findMany();
+    const titleOf = new Map<string, string>(
+      (titles as any[]).map((j) => [j.id, j.level ? `${j.title} (${j.level})` : j.title]),
+    );
+
+    const out: ReviewStatusRow[] = [];
+    for (const t of team) {
+      const { valuesReview, perfReview, rows } = await loadSessionData(ctx.db, t.id, period);
+      const avg = (type: Instrument): number | null => {
+        const xs = rows.filter((r) => r.itemType === type).map((r) => r.score);
+        return xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null;
+      };
+      const session = (await ctx.db.query.reviewSessions.findMany({ where: eq(reviewSessions.employeeId, t.id) }))
+        .find((sn: any) => samePeriod(sn.periodLabel, period)) ?? null;
+      const plan = (await ctx.db.query.coachingPlans.findMany({
+        where: eq(coachingPlans.employeeId, t.id),
+        orderBy: [desc(coachingPlans.createdAt)],
+      })).find((pl: any) => samePeriod(pl.periodLabel, period)) ?? null;
+
+      const perfFinal = perfReview?.status === 'final';
+      const started = !!valuesReview || !!perfReview;
+      let stage: ReviewStage;
+      if (session?.status === 'closed') stage = 'closed';
+      else if (plan || session?.status === 'plan_drafted') stage = 'plan_ready';
+      else if (perfFinal || session?.status === 'rearview_complete') stage = 'scored';
+      else if (started) stage = 'in_progress';
+      else stage = 'not_started';
+
+      out.push({
+        employeeId: t.id,
+        name: t.name ?? t.email,
+        title: t.jobTitleId ? (titleOf.get(t.jobTitleId) ?? null) : null,
+        stage,
+        values: avg('value'),
+        performance: avg('criterion'),
+        planTrack: (plan?.track ?? null) as 'coaching' | 'pip' | null,
+      });
+    }
+    return { period, reviews: out };
   }),
 });

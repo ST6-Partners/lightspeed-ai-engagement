@@ -13,8 +13,13 @@ import { requireManager } from '../services/permissions.js';
 import { users } from '../db/schema/core.js';
 import { weeklyCheckins, type WeeklyPriority } from '../db/schema/weeklyPlan.js';
 import { checkinResponses, type CheckinAnswer } from '../db/schema/checkins.js';
+import { reviews } from '../db/schema/reviews.js';
+import { coachingPlans } from '../db/schema/coaching.js';
+import { peerReviewResponses } from '../db/schema/peerReview.js';
 
 const managerProcedure = protectedProcedure.use(requireManager);
+
+type ActivityItem = { type: 'review' | 'checkin' | 'coaching' | 'win' | 'peer'; text: string; at: string };
 
 // Monday (ISO) of the week containing `d`, as YYYY-MM-DD. (Matches weeklyPlan.)
 function mondayOf(d = new Date()): string {
@@ -229,5 +234,61 @@ export const metricsRouter = router({
       });
 
       return { weekStart, teamSize: team.length, profiles };
+    }),
+
+  // Recent team activity for the signed-in manager's direct reports — a unified
+  // "what changed" feed synthesized by timestamp across reviews finalized,
+  // check-ins submitted, coaching plans drafted, wins logged, and peer reviews.
+  // No dedicated events table; read-only assembly over existing rows.
+  recentActivity: managerProcedure
+    .input(z.object({ days: z.number().min(1).max(30).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const days = input?.days ?? 7;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const team = await ctx.db.query.users.findMany({
+        where: and(eq(users.managerId, ctx.user.id), eq(users.isActive, true)),
+      });
+      const teamIds = team.map((t) => t.id);
+      if (teamIds.length === 0) return { items: [] as ActivityItem[] };
+      const nameOf = (id: string | null | undefined) => {
+        const u = team.find((t) => t.id === id);
+        return u ? (u.name ?? u.email) : 'A teammate';
+      };
+      const within = (d: unknown): d is Date | string => !!d && new Date(d as any) >= since;
+
+      const items: ActivityItem[] = [];
+
+      // Reviews finalized.
+      const revs = await ctx.db.query.reviews.findMany({ where: inArray(reviews.employeeId, teamIds) });
+      for (const r of revs) {
+        if (r.status === 'final' && within(r.updatedAt)) {
+          const kind = r.type === 'performance' ? 'performance' : 'values';
+          items.push({ type: 'review', text: `${nameOf(r.employeeId)}'s ${kind} review was finalized.`, at: new Date(r.updatedAt).toISOString() });
+        }
+      }
+      // Check-ins submitted.
+      const cis = await ctx.db.query.checkinResponses.findMany({ where: inArray(checkinResponses.respondentId, teamIds) });
+      for (const c of cis) {
+        if (within(c.submittedAt)) items.push({ type: 'checkin', text: `${nameOf(c.respondentId)} submitted a check-in.`, at: new Date(c.submittedAt).toISOString() });
+      }
+      // Coaching plans drafted.
+      const plans = await ctx.db.query.coachingPlans.findMany({ where: inArray(coachingPlans.employeeId, teamIds) });
+      for (const pl of plans) {
+        if (within(pl.createdAt)) items.push({ type: 'coaching', text: `Coaching plan drafted for ${nameOf(pl.employeeId)}.`, at: new Date(pl.createdAt).toISOString() });
+      }
+      // Wins logged (weekly plan with a non-empty wins note, touched in-window).
+      const wplans = await ctx.db.query.weeklyCheckins.findMany({ where: inArray(weeklyCheckins.userId, teamIds) });
+      for (const w of wplans) {
+        if (w.wins && w.wins.trim() && within(w.updatedAt)) items.push({ type: 'win', text: `${nameOf(w.userId)} logged a win: \u201c${short(w.wins.trim(), 70)}\u201d`, at: new Date(w.updatedAt).toISOString() });
+      }
+      // Peer reviews submitted (subject is a direct report).
+      const peers = await ctx.db.query.peerReviewResponses.findMany({ where: inArray(peerReviewResponses.peerId, teamIds) });
+      for (const pr of peers) {
+        if (within(pr.submittedAt)) items.push({ type: 'peer', text: `Peer review submitted for ${pr.peerName ?? nameOf(pr.peerId)}.`, at: new Date(pr.submittedAt).toISOString() });
+      }
+
+      items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+      return { items: items.slice(0, 10) };
     }),
 });
