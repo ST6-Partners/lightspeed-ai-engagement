@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { trpc } from '../../lib/trpc';
 import { Search, Info, UserPlus, X, Trash2 } from 'lucide-react';
 import ImportButton from '../../components/ImportButton';
@@ -16,6 +16,14 @@ const ROLE_COLORS: Record<string, string> = {
 // employee). Accounts are still created at sign-up; this screen curates them.
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [deptDdOpen, setDeptDdOpen] = useState(false);
+  const deptDdRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!deptDdOpen) return;
+    const onDoc = (e: MouseEvent) => { if (deptDdRef.current && !deptDdRef.current.contains(e.target as Node)) setDeptDdOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [deptDdOpen]);
   const utils = trpc.useContext();
   const { data: userList = [], isLoading } = trpc.auth.listUsers.useQuery();
   const { data: titles = [] } = trpc.jobTitles.list.useQuery();
@@ -404,23 +412,36 @@ export default function Employees() {
                 </select>
               </label>
               <div className="text-xs text-gray-600">Additional Departments
-                <div className="mt-1 max-h-40 overflow-auto rounded border border-gray-300 p-2 grid grid-cols-1 gap-y-1">
-                  {depts.filter((d: any) => d.id !== editForm.departmentId).map((d: any) => {
-                    const checked = editForm.additionalDepartmentIds.includes(d.id);
-                    return (
-                      <label key={d.id} className="flex items-center gap-1.5 text-xs text-gray-700">
-                        <input type="checkbox" checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked
-                              ? [...editForm.additionalDepartmentIds, d.id]
-                              : editForm.additionalDepartmentIds.filter((x) => x !== d.id);
-                            ef({ additionalDepartmentIds: next });
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                        <span className="truncate">{d.name}</span>
-                      </label>
-                    );
-                  })}
+                <div ref={deptDdRef} className="relative mt-1">
+                  <button type="button" onClick={() => setDeptDdOpen((o) => !o)}
+                    className="w-full text-left px-2 py-1.5 rounded border border-gray-300 text-sm bg-white flex items-center justify-between gap-2 focus:ring-2 focus:ring-blue-500">
+                    <span className="truncate">
+                      {editForm.additionalDepartmentIds.length === 0
+                        ? <span className="text-gray-400">Select teams…</span>
+                        : <span className="text-gray-700">{depts.filter((d: any) => editForm.additionalDepartmentIds.includes(d.id)).map((d: any) => d.name).join(', ')}</span>}
+                    </span>
+                    <span className="shrink-0 text-gray-400">{editForm.additionalDepartmentIds.length > 0 ? `${editForm.additionalDepartmentIds.length} ▾` : '▾'}</span>
+                  </button>
+                  {deptDdOpen && (
+                    <div className="absolute z-20 mt-1 w-full max-h-52 overflow-auto rounded border border-gray-300 bg-white shadow-lg p-2 grid grid-cols-1 gap-y-0.5">
+                      {depts.filter((d: any) => d.id !== editForm.departmentId).map((d: any) => {
+                        const checked = editForm.additionalDepartmentIds.includes(d.id);
+                        return (
+                          <label key={d.id} className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded px-1 py-1 cursor-pointer">
+                            <input type="checkbox" checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...editForm.additionalDepartmentIds, d.id]
+                                  : editForm.additionalDepartmentIds.filter((x) => x !== d.id);
+                                ef({ additionalDepartmentIds: next });
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            <span className="truncate">{d.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <span className="mt-1 block text-[11px] text-gray-400">Extra teams this person belongs to, beyond their primary department.</span>
               </div>
