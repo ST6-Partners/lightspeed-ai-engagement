@@ -88,6 +88,19 @@ export default function Organization() {
   const effectivePeriodId = periodId && engPeriodOptions.some((p) => p.id === periodId) ? periodId : (periodsData?.latestId ?? undefined);
   const choosePeriod = (id: string) => { setPeriodId(id); ls.set('org.engPeriod', id); };
 
+  // Goal-setting period selector shared by Priorities / OKRs / 9 Box (period
+  // switcher parity, 2026-07-27). Fed by okr_periods. Only OKRs are period-
+  // scoped in the data model today; Priorities / 9 Box show the same selector
+  // for consistency plus a note when a non-current period is selected.
+  const { data: goalPeriodsData } = trpc.okrPeriods.list.useQuery();
+  const goalPeriods = goalPeriodsData ?? [];
+  const [goalPeriodId, setGoalPeriodId] = useState<string | null>(ls.get('org.goalPeriod'));
+  const effectiveGoalPeriodId = goalPeriodId && goalPeriods.some((p) => p.id === goalPeriodId)
+    ? goalPeriodId
+    : (goalPeriods.find((p) => p.isCurrent)?.id ?? goalPeriods[0]?.id ?? null);
+  const goalPeriodIsCurrent = goalPeriods.find((p) => p.id === effectiveGoalPeriodId)?.isCurrent ?? true;
+  const chooseGoalPeriod = (id: string) => { setGoalPeriodId(id); ls.set('org.goalPeriod', id); };
+
   // Screen-level review-period selector (spec: person-card exec-summary,
   // 2026-07-15). Drives every card's Review tab; defaults to the latest period.
   const { data: periods } = trpc.values.listPeriods.useQuery(undefined, { enabled: tab === 'review' });
@@ -315,9 +328,22 @@ export default function Organization() {
                   </select>
                 </div>
               )}
+              {(tab === 'priorities' || tab === 'okrs' || tab === 'ninebox') && goalPeriods.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Period</span>
+                  <select value={effectiveGoalPeriodId ?? ''} onChange={(e) => chooseGoalPeriod(e.target.value)}
+                    className="text-[12px] font-medium rounded-md"
+                    style={{ color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '5px 8px' }}>
+                    {goalPeriods.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
+              {(tab === 'priorities' || tab === 'ninebox') && !goalPeriodIsCurrent && (
+                <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Not tracked by period yet — showing current.</div>
+              )}
               {tab === 'ninebox' ? (
                 <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} />
               ) : !selected ? (
@@ -331,13 +357,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>

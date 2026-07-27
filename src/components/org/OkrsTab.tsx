@@ -2,8 +2,8 @@ import { trpc } from '../../lib/trpc';
 import { Bar } from './atoms';
 import { TabState, Empty, errKind } from './atoms';
 
-export default function OkrsTab({ employeeId, name }: { employeeId: string; name: string }) {
-  const { data, isLoading, error } = trpc.okrs.byUser.useQuery({ userId: employeeId, name });
+export default function OkrsTab({ employeeId, name, periodId }: { employeeId: string; name: string; periodId?: string }) {
+  const { data, isLoading, error } = trpc.okrs.byUser.useQuery({ userId: employeeId, name, periodId });
   if (isLoading) return <TabState kind="loading" />;
   if (error) return <TabState kind={errKind(error)} />;
   if (!data?.hasData) return <Empty text="No OKRs on file" />;
