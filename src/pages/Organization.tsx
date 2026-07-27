@@ -225,7 +225,7 @@ export default function Organization() {
     return [...groups.entries()].sort((a, b) => a[0] - b[0]);
   }, [scope, selected, visible, maps]);
 
-  const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3';
+  const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3';
   const filterSelStyle: React.CSSProperties = { color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '4px 6px', borderRadius: 6 };
 
   return (

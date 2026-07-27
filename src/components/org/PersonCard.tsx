@@ -12,16 +12,16 @@ import ReviewTab from './ReviewTab';
 export default function PersonCard({ person, tab, periodId, reviewPeriod }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; managerName?: string | null; reportingLine?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
   return (
-    <div className="rounded-lg p-4" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
+    <div className="rounded-lg p-5" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-start gap-3 min-w-0">
+        <div className="flex items-start gap-3.5 min-w-0">
           <span className="shrink-0 rounded-full flex items-center justify-center"
-            style={{ width: 40, height: 40, background: personColor(person.name), color: '#fff', fontSize: 14, fontWeight: 700 }}>
+            style={{ width: 44, height: 44, background: personColor(person.name), color: '#fff', fontSize: 15, fontWeight: 700 }}>
             {personInitials(person.name)}
           </span>
           <div className="min-w-0">
-            <div className="font-semibold text-[15px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
-            <div className="text-[12px] truncate" style={{ color: TOKENS.idle }}>
+            <div className="font-semibold text-[16px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
+            <div className="text-[13px] truncate" style={{ color: TOKENS.idle }}>
               {person.title ?? '—'}{person.dept ? ` · ${person.dept}` : ''}
             </div>
           </div>
@@ -31,7 +31,7 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod }: { pe
             style={{ background: badge.bg, color: badge.fg }}>{person.leaderBadge}</span>
         )}
       </div>
-      <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 12 }}>
+      <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 14 }}>
         {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} />}
         {tab === 'engagement' && <EngagementTab employeeId={person.id} periodId={periodId} />}
