@@ -61,7 +61,7 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
+  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
@@ -76,6 +76,9 @@ export default function Employees() {
       managerId: u.managerId ?? '',
       managerIds: (u.managerIds ?? (u.managerId ? [u.managerId] : [])) as string[],
       primaryManagerId: u.managerId ?? '',
+      secondaryManagerId: u.secondaryManagerId ?? '',
+      tertiaryManagerId: u.tertiaryManagerId ?? '',
+      quaternaryManagerId: u.quaternaryManagerId ?? '',
       leaderBadge: u.leaderBadge ?? '',
       isActive: !!u.isActive, isBeta: !!u.isBeta, isHrAccess: !!u.isHrAccess,
     });
@@ -98,6 +101,9 @@ export default function Employees() {
       departmentId: editForm.departmentId || null,
       managerIds: editForm.managerIds,
       primaryManagerId: editForm.primaryManagerId || null,
+      secondaryManagerId: editForm.secondaryManagerId || null,
+      tertiaryManagerId: editForm.tertiaryManagerId || null,
+      quaternaryManagerId: editForm.quaternaryManagerId || null,
       leaderBadge: (editForm.leaderBadge || null) as any,
       isActive: editForm.isActive,
       isBeta: editForm.isBeta,
@@ -417,6 +423,27 @@ export default function Employees() {
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">— (top of tree)</option>
                   {editForm.managerIds.map((mid) => <option key={mid} value={mid}>{nameById.get(mid)}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Secondary supervisor
+                <select value={editForm.secondaryManagerId} onChange={(e) => ef({ secondaryManagerId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Tertiary supervisor
+                <select value={editForm.tertiaryManagerId} onChange={(e) => ef({ tertiaryManagerId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">Quaternary supervisor
+                <select value={editForm.quaternaryManagerId} onChange={(e) => ef({ quaternaryManagerId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
                 </select>
               </label>
               <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">

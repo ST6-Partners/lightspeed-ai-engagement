@@ -596,6 +596,20 @@
       "when": 1784836193989,
       "tag": "0083_aie_insert_new_hires",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1784836194989,
+      "tag": "0084_aie_escalation_supervisors",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1784836195989,
+      "tag": "0085_aie_seed_escalation_supervisors",
+      "breakpoints": true
     }
   ]
 }

@@ -50,6 +50,10 @@ export const users = pgTable('users', {
   jobTitleId: uuid('job_title_id').references(() => jobTitles.id, { onDelete: 'set null' }),
   departmentId: uuid('department_id').references(() => departments.id, { onDelete: 'set null' }),
   managerId: uuid('manager_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  // Ordered escalation chain above the primary manager (AIE 2026-07-27).
+  secondaryManagerId: uuid('secondary_manager_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  tertiaryManagerId: uuid('tertiary_manager_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  quaternaryManagerId: uuid('quaternary_manager_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
   // Org-screen leadership tier badge (ELT | SLT | ST6 | null). Additive for
   // the Organization tree; independent of `role` (auth tier).
   leaderBadge: varchar('leader_badge', { length: 8 }),

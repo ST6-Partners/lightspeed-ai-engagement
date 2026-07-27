@@ -211,6 +211,7 @@ export const authRouter = router({
           columns: {
             id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
             jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
+            secondaryManagerId: true, tertiaryManagerId: true, quaternaryManagerId: true,
             connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true,
             lastActiveAt: true, lastLoginAt: true,
           },
@@ -241,6 +242,9 @@ export const authRouter = router({
       isHrAccess: z.boolean().optional(),
       managerIds: z.array(z.string().uuid()).optional(),
       primaryManagerId: z.string().uuid().nullable().optional(),
+      secondaryManagerId: z.string().uuid().nullable().optional(),
+      tertiaryManagerId: z.string().uuid().nullable().optional(),
+      quaternaryManagerId: z.string().uuid().nullable().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
       isActive: z.boolean().optional(),
       isBeta: z.boolean().optional(),
