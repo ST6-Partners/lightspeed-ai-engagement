@@ -1,4 +1,4 @@
-import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor, tenureLabel } from './orgLib';
+import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor, tenureLabel, hireDateLabel } from './orgLib';
 import PrioritiesTab from './PrioritiesTab';
 import OkrsTab from './OkrsTab';
 import EngagementTab from './EngagementTab';
@@ -11,6 +11,7 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod, manage
   if (person.location) infoRows.push({ label: 'Location', value: person.location });
   if (person.businessUnit) infoRows.push({ label: 'Business Unit', value: person.businessUnit });
   if (person.eltLeader) infoRows.push({ label: 'ELT Leader', value: person.eltLeader });
+  if (person.hireYear != null) infoRows.push({ label: 'Hire date', value: hireDateLabel(person.hireYear, person.hireMonth, person.hireDay) });
   if (person.hireYear != null) infoRows.push({ label: 'Tenure', value: tenureLabel(person.hireYear) });
   if (managerName) infoRows.push({ label: 'Manager', value: managerName });
   if (reportingLine) infoRows.push({ label: 'Reports up', value: reportingLine });

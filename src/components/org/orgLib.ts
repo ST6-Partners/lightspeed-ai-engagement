@@ -151,3 +151,11 @@ export function personColor(name: string): string {
   let h = 0; for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
 }
+
+// Actual hire date (from hireYear/Month/Day parts). Year-only when parts absent.
+export function hireDateLabel(y?: number | null, m?: number | null, d?: number | null): string {
+  if (y == null) return '—';
+  if (m == null) return String(y);
+  const mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m] ?? '';
+  return d ? `${mon} ${d}, ${y}` : `${mon} ${y}`;
+}
