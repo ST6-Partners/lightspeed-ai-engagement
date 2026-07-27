@@ -193,7 +193,18 @@ function heatScale(t: number): string {
 }
 const colorFav = (f: number) => heatScale(f / 100);             // 0% red .. 50% mid .. 100% teal
 const colorUnfav = (u: number) => heatScale(1 - u / 40);        // 0% teal .. 40%+ red
-const colorAvg = (m: number) => heatScale((m - 1) / 4);         // 1.0 red .. 3.0 mid .. 5.0 teal
+// Average-response heatmap color: banded thresholds keyed to the number shown
+// (1–5 scale), per PM spec 2026-07-27. <2 red, 2–2.49 neutral, 2.5–2.99
+// light teal, exactly 3.0 teal, >3.0 darker teal.
+const _LIGHT_TEAL = '#a7d5de', _TEAL_HEX = '#5fb8c9', _DARK_TEAL = '#3f8e9e';
+const _RED_HEX = '#e0897e', _NEUTRAL_HEX = '#eff3f4';
+const colorAvg = (m: number): string => {
+  if (m < 2.0) return _RED_HEX;
+  if (m < 2.5) return _NEUTRAL_HEX;
+  if (m < 3.0) return _LIGHT_TEAL;
+  if (m <= 3.0) return _TEAL_HEX;   // exactly 3.0
+  return _DARK_TEAL;                // above 3.0
+};
 const colorScore = (sc: number) => heatScale(sc / 100);         // 0-100 engagement score
 const divFav = colorFav;
 // Curated Drivers-of-Engagement columns (category pill + short label), matching the mockup.
@@ -210,7 +221,7 @@ const CURATED_COLS: { id: string; cat: string; short: string }[] = [
 ];
 type HCell = { fav: number; unfav: number; mean: number };
 export function ResultsHeatmap({ data }: { data: AnalyticsData }) {
-  const [metric, setMetric] = useState<'fav' | 'avg' | 'unfav'>('fav');
+  const [metric, setMetric] = useState<'fav' | 'avg' | 'unfav'>('avg');
   const [view, setView] = useState<'drivers' | 'engagement'>('drivers');
   const [grouping, setGrouping] = useState<'dept' | 'mgr' | 'hier'>('dept');
   const hm = trpc.engagementAnalytics.heatmapCells.useQuery();
