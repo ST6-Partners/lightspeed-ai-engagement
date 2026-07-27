@@ -27,6 +27,14 @@ import { pips } from '../db/schema/pip.js';
 /** Minimum group size before any survey aggregate is revealed (anonymity floor). */
 export const MIN_GROUP = 4;
 
+/**
+ * Engagement-survey anonymity floor = 3 (app-wide rule: a team with fewer than 3
+ * responses is suppressed). Kept separate from MIN_GROUP so exit/manager surveys
+ * and weekly plans keep their own floor. Matches engagementAnalytics (MIN=3) and
+ * the Org engagement tab.
+ */
+export const MIN_GROUP_ENGAGEMENT = 3;
+
 export interface ChatToolCtx {
   db: DrizzleClient;
   userId: string;
@@ -258,8 +266,8 @@ export function buildChatTools(ctx: ChatToolCtx) {
           departmentBreakdown = metrics
             .filter((x) => x.periodId === latest.id && x.scope === 'department' && x.dimension === 'overall')
             .map((x) =>
-              x.responseCount < MIN_GROUP
-                ? { department: x.department, suppressed: true, reason: `fewer than ${MIN_GROUP} responses` }
+              x.responseCount < MIN_GROUP_ENGAGEMENT
+                ? { department: x.department, suppressed: true, reason: `fewer than ${MIN_GROUP_ENGAGEMENT} responses` }
                 : { department: x.department, favorablePct: num(x.favorablePct), mean: num(x.mean), responseCount: x.responseCount }
             );
         }
@@ -284,8 +292,8 @@ export function buildChatTools(ctx: ChatToolCtx) {
             mean: mean(allVals),
             departments: Array.from(byDept.entries()).map(([dept, arr]) => {
               const respCount = responses.filter((r) => (r.department || 'Unspecified') === dept).length;
-              return respCount < MIN_GROUP
-                ? { department: dept, suppressed: true, reason: `fewer than ${MIN_GROUP} respondents` }
+              return respCount < MIN_GROUP_ENGAGEMENT
+                ? { department: dept, suppressed: true, reason: `fewer than ${MIN_GROUP_ENGAGEMENT} respondents` }
                 : { department: dept, favorablePct: favPct(arr), mean: mean(arr), respondents: respCount };
             }),
           };

@@ -37,7 +37,7 @@ function TeamView({ d }: { d: any }) {
     return (
       <div>
         <Scope text={`${d.name} · ${d.headcount} people`} />
-        <Empty text="Not enough responses to show results without identifying individuals (needs at least 4)." />
+        <Empty text="Not enough responses to show results without identifying individuals (needs at least 3)." />
       </div>
     );
   }
@@ -75,7 +75,7 @@ function TeamView({ d }: { d: any }) {
 
 // Engagement is an anonymous, confidential survey. Individual per-person
 // results are intentionally NOT surfaced here — only team-level aggregates
-// (suppressed below the 4-response threshold). The former Team/Person toggle
+// (suppressed below the 3-response threshold). The former Team/Person toggle
 // and PersonView were removed 2026-07-22 (Brooke) for confidentiality.
 export default function EngagementTab({ employeeId, periodId }: { employeeId: string; periodId?: string }) {
   const { data, isLoading, error } = trpc.engagementAnalytics.personCard.useQuery({ userId: employeeId, periodId });

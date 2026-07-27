@@ -489,7 +489,9 @@ export const engagementAnalyticsRouter = router({
   personCard: protectedProcedure
     .input(z.object({ userId: z.string().uuid(), periodId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const SUPPRESS_MIN = 4;
+      // Engagement anonymity floor = 3, matching the breakdown path (MIN=3) and
+      // the app-wide rule: a team with fewer than 3 responses is suppressed.
+      const SUPPRESS_MIN = 3;
       const viewerRole = (ctx.user?.role ?? 'user') as RoleTier;
       const canSeeIndividual = hasMinimumRole(viewerRole, 'admin');
 
