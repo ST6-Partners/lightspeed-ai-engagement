@@ -1,31 +1,27 @@
-import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor, tenureLabel, hireDateLabel } from './orgLib';
+import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor } from './orgLib';
 import PrioritiesTab from './PrioritiesTab';
 import OkrsTab from './OkrsTab';
 import EngagementTab from './EngagementTab';
 import AssessmentsTab from './AssessmentsTab';
 import ReviewTab from './ReviewTab';
 
-export default function PersonCard({ person, tab, periodId, reviewPeriod, managerName, reportingLine }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; managerName?: string | null; reportingLine?: string | null }) {
+// The card body shows ONLY the selected tab's content for this person. Profile
+// fields (location, tenure, manager, reporting line, etc.) intentionally live on
+// the "Export talent profile" PDF, not on the card. The identity header (avatar,
+// name, title, leader badge) stays so the card is still attributable.
+export default function PersonCard({ person, tab, periodId, reviewPeriod }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; managerName?: string | null; reportingLine?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
-  const infoRows: { label: string; value: string }[] = [];
-  if (person.location) infoRows.push({ label: 'Location', value: person.location });
-  if (person.businessUnit) infoRows.push({ label: 'Business Unit', value: person.businessUnit });
-  if (person.eltLeader) infoRows.push({ label: 'ELT Leader', value: person.eltLeader });
-  if (person.hireYear != null) infoRows.push({ label: 'Hire date', value: hireDateLabel(person.hireYear, person.hireMonth, person.hireDay) });
-  if (person.hireYear != null) infoRows.push({ label: 'Tenure', value: tenureLabel(person.hireYear) });
-  if (managerName) infoRows.push({ label: 'Manager', value: managerName });
-  if (reportingLine) infoRows.push({ label: 'Reports up', value: reportingLine });
   return (
-    <div className="rounded-lg p-3" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-start gap-2.5 min-w-0">
+    <div className="rounded-lg p-4" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start gap-3 min-w-0">
           <span className="shrink-0 rounded-full flex items-center justify-center"
-            style={{ width: 32, height: 32, background: personColor(person.name), color: '#fff', fontSize: 12, fontWeight: 700 }}>
+            style={{ width: 40, height: 40, background: personColor(person.name), color: '#fff', fontSize: 14, fontWeight: 700 }}>
             {personInitials(person.name)}
           </span>
           <div className="min-w-0">
-            <div className="font-semibold text-[13.5px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
-            <div className="text-[11px] truncate" style={{ color: TOKENS.idle }}>
+            <div className="font-semibold text-[15px] truncate" style={{ color: TOKENS.activeText }}>{person.name}</div>
+            <div className="text-[12px] truncate" style={{ color: TOKENS.idle }}>
               {person.title ?? '—'}{person.dept ? ` · ${person.dept}` : ''}
             </div>
           </div>
@@ -35,16 +31,7 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod, manage
             style={{ background: badge.bg, color: badge.fg }}>{person.leaderBadge}</span>
         )}
       </div>
-      {infoRows.length > 0 && (
-        <div className="mb-2 flex flex-col gap-0.5">
-          {infoRows.map((r) => (
-            <div key={r.label} className="text-[11px] truncate" style={{ color: TOKENS.idle }}>
-              <span style={{ fontWeight: 600 }}>{r.label}:</span> {r.value}
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 10 }}>
+      <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 12 }}>
         {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} />}
         {tab === 'engagement' && <EngagementTab employeeId={person.id} periodId={periodId} />}
