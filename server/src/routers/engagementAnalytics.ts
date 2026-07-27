@@ -828,7 +828,7 @@ export const engagementAnalyticsRouter = router({
         return { name, responseCount: arr.length, score: Math.round((pr / arr.length - de / arr.length) * 100),
           promoterPct: r1((pr / arr.length) * 100), passivePct: r1((pa / arr.length) * 100), detractorPct: r1((de / arr.length) * 100),
           eligibleCount: elig, participationPct: elig ? r1(Math.min(100, (arr.length / elig) * 100)) : null };
-      }).filter((g) => g.responseCount >= 4).sort((a, b) => b.score - a.score);
+      }).filter((g) => g.responseCount >= 3).sort((a, b) => b.score - a.score);
       return { available: true as const, score, responseCount: total, promoters: prom, passives: pas, detractors: det,
         promoterPct: r1((prom / total) * 100), passivePct: r1((pas / total) * 100), detractorPct: r1((det / total) * 100), byGroup };
     }),
