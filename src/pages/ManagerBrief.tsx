@@ -184,7 +184,7 @@ export default function ManagerBrief() {
           <Stat icon={AlertTriangle} label="Reviews need action" value={`${reviewsNeedAction}`} note="not started or mid-cycle" tone={reviewsNeedAction ? 'text-rose-600' : 'text-gray-400'} />
           <Stat icon={FileText} label="Coaching plans" value={`${plansReady}`} note="drafted, ready to share" />
           <Stat icon={ClipboardList} label="Open actions" value={`${openActions.length}`} note={`${actions.length} total`} />
-          <Stat icon={ListChecks} label="Priorities done" value={recap?.completionPct != null ? `${recap.completionPct}%` : '\u2014'} note={`${recap?.donePrio ?? 0}/${recap?.totalPrio ?? 0} done`} />
+          <Stat icon={ListChecks} label="Priorities done" value={recap?.completionPct != null ? `${recap.completionPct}%` : '—'} note={`${recap?.donePrio ?? 0}/${recap?.totalPrio ?? 0} done`} />
         </div>
       </div>
 
@@ -209,9 +209,9 @@ export default function ManagerBrief() {
                       <div className="text-sm font-semibold text-gray-900 truncate">{p.name}</div>
                       <div className="text-[11.5px] text-gray-500 truncate">{p.title ?? p.role}</div>
                       <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 flex-wrap">
-                        <span className={p.checkedIn ? 'text-emerald-600' : 'text-gray-400'}>{p.checkedIn ? '\u25cf Checked in' : '\u25cb No check-in'}</span>
-                        <span>\u00b7 Mood {p.mood != null ? `${p.mood}/5` : '\u2014'}</span>
-                        <span>\u00b7 Priorities {p.priorityTotal ? `${p.priorityDone}/${p.priorityTotal}` : '\u2014'}</span>
+                        <span className={p.checkedIn ? 'text-emerald-600' : 'text-gray-400'}>{p.checkedIn ? '● Checked in' : '○ No check-in'}</span>
+                        <span>· Mood {p.mood != null ? `${p.mood}/5` : '—'}</span>
+                        <span>· Priorities {p.priorityTotal ? `${p.priorityDone}/${p.priorityTotal}` : '—'}</span>
                       </div>
                     </div>
                     <span className={`ml-auto flex-none text-[11px] font-bold px-2.5 py-1 rounded-full ${SIG_CLS[sig]}`}>{SIG_LABEL[sig]}</span>
@@ -267,7 +267,7 @@ export default function ManagerBrief() {
           <div className="divide-y divide-gray-100">
             {talkingPoints.map((g) => (
               <div key={g.employeeId} className="px-4 py-3 bg-blue-50/30">
-                <div className="text-sm font-semibold text-gray-900">{g.employeeName} <span className="text-[11px] font-normal text-gray-400">\u00b7 {g.count} new</span></div>
+                <div className="text-sm font-semibold text-gray-900">{g.employeeName} <span className="text-[11px] font-normal text-gray-400">· {g.count} new</span></div>
                 <ul className="mt-1 space-y-1">
                   {g.items.map((it) => (
                     <li key={it.id} className="text-[12.5px] text-gray-600 flex items-start gap-2">
