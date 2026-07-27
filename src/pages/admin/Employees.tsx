@@ -61,7 +61,7 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
+  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], additionalDepartmentIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
@@ -73,6 +73,7 @@ export default function Employees() {
     setEditForm({
       name: u.name ?? '', email: u.email ?? '', externalId: u.externalId ?? '', role: u.role ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
+      additionalDepartmentIds: (u.additionalDepartmentIds ?? []) as string[],
       managerId: u.managerId ?? '',
       managerIds: (u.managerIds ?? (u.managerId ? [u.managerId] : [])) as string[],
       primaryManagerId: u.managerId ?? '',
@@ -103,6 +104,7 @@ export default function Employees() {
       role: editForm.role as any,
       jobTitleId: editForm.jobTitleId || null,
       departmentId: editForm.departmentId || null,
+      additionalDepartmentIds: editForm.additionalDepartmentIds,
       managerIds: editForm.managerIds,
       primaryManagerId: editForm.primaryManagerId || null,
       secondaryManagerId: editForm.secondaryManagerId || null,
@@ -180,7 +182,7 @@ export default function Employees() {
                 {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
               </select>
             </label>
-            <label className="text-xs text-gray-600">Department
+            <label className="text-xs text-gray-600">Primary Department
               <select value={form.departmentId} onChange={(e) => f({ departmentId: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                 <option value="">—</option>
@@ -394,13 +396,34 @@ export default function Employees() {
                   {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-gray-600">Department
+              <label className="text-xs text-gray-600">Primary Department
                 <select value={editForm.departmentId} onChange={(e) => ef({ departmentId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">—</option>
                   {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </label>
+              <div className="text-xs text-gray-600">Additional Departments
+                <div className="mt-1 max-h-40 overflow-auto rounded border border-gray-300 p-2 grid grid-cols-1 gap-y-1">
+                  {depts.filter((d: any) => d.id !== editForm.departmentId).map((d: any) => {
+                    const checked = editForm.additionalDepartmentIds.includes(d.id);
+                    return (
+                      <label key={d.id} className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...editForm.additionalDepartmentIds, d.id]
+                              : editForm.additionalDepartmentIds.filter((x) => x !== d.id);
+                            ef({ additionalDepartmentIds: next });
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="truncate">{d.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <span className="mt-1 block text-[11px] text-gray-400">Extra teams this person belongs to, beyond their primary department.</span>
+              </div>
               <label className="text-xs text-gray-600">Employee ID
                 <input value={editForm.externalId} onChange={(e) => ef({ externalId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="e.g. A0OT" />

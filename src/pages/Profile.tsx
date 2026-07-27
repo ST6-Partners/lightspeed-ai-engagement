@@ -227,7 +227,8 @@ export default function Profile() {
           <div>
             <ReadonlyRow label="Employee ID" value={p.employeeId} />
             <ReadonlyRow label="Title" value={p.title} />
-            <ReadonlyRow label="Department" value={p.department} />
+            <ReadonlyRow label="Primary Department" value={p.department} />
+            <ReadonlyRow label="Additional Departments" value={p.additionalDepartments && p.additionalDepartments.length ? p.additionalDepartments.join(', ') : '—'} />
             <ReadonlyRow label="Manager" value={p.manager} />
             <ReadonlyRow label="Reporting line" value={p.reportingLine} />
           </div>

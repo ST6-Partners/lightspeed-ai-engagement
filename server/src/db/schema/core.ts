@@ -114,3 +114,10 @@ export const userManagers = pgTable('user_managers', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   managerId: uuid('manager_id').notNull().references((): AnyPgColumn => users.id, { onDelete: 'cascade' }),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.managerId] }) }));
+
+// Additional department memberships (multi-team, e.g. IT + AI). users.departmentId
+// stays the PRIMARY department; this join holds the EXTRA departments. AIE 2026-07-27.
+export const userDepartments = pgTable('user_departments', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  departmentId: uuid('department_id').notNull().references(() => departments.id, { onDelete: 'cascade' }),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.departmentId] }) }));
