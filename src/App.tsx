@@ -18,7 +18,6 @@ import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
 import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
-import Metrics from './pages/Metrics';
 import ManagerEffectiveness from './pages/ManagerEffectiveness';
 import ManagerBrief from './pages/ManagerBrief';
 import InsightsDashboard from './pages/InsightsDashboard';
@@ -75,7 +74,6 @@ export default function App() {
         {/* Insights (manager+) */}
         <Route path="/insights" element={<InsightsDashboard />} />
         <Route path="/manager-brief" element={<ManagerBrief />} />
-        <Route path="/metrics" element={<Metrics />} />
         <Route path="/manager-effectiveness" element={<ManagerEffectiveness />} />
         {/* Documents */}
         <Route path="/documents/overview" element={<Overview />} />
