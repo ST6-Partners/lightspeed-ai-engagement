@@ -18,6 +18,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 const DOB_YEARS = Array.from({ length: CUR - 1939 }, (_, i) => CUR - i);
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const GENDERS = ['Female', 'Male', 'Non-binary', 'Prefer not to say', 'Other'];
+const ETHNICITIES = ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Hispanic or Latino', 'Native Hawaiian or Other Pacific Islander', 'White', 'Two or More Races', 'Prefer not to say'];
 
 function fmtDate(y?: number | null, m?: number | null, d?: number | null): string | null {
   if (!y) return null;
@@ -196,7 +197,11 @@ export default function Profile() {
           </div>
           <div>
             <label className={lblCls}>Ethnicity</label>
-            <input className={inputCls} value={ethnicity} placeholder="Self-described (optional)" onChange={(e) => { setEthnicity(e.target.value); setSaved(false); }} />
+            <select className={inputCls} value={ethnicity} onChange={(e) => { setEthnicity(e.target.value); setSaved(false); }}>
+              <option value="">Select… (optional)</option>
+              {ETHNICITIES.map((x) => <option key={x} value={x}>{x}</option>)}
+              {ethnicity && !ETHNICITIES.includes(ethnicity) && <option value={ethnicity}>{ethnicity}</option>}
+            </select>
           </div>
         </div>
 

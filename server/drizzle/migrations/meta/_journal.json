@@ -624,6 +624,13 @@
       "when": 1784836197989,
       "tag": "0087_aie_self_profile_demographics",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1784836198989,
+      "tag": "0088_aie_survey_demographic_snapshot",
+      "breakpoints": true
     }
   ]
 }

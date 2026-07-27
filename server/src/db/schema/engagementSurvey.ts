@@ -22,6 +22,9 @@ export const engagementSurveyResponses = pgTable('engagement_survey_responses', 
   managerName: varchar('manager_name', { length: 200 }),        // snapshot of primary manager's name (for manager roll-up)
   eltLeader: varchar('elt_leader', { length: 200 }),            // snapshot of ELT leader this person rolls up to
   startYear: integer('start_year'),                              // snapshot of start year (for tenure banding)
+  gender: varchar('gender', { length: 40 }),                     // snapshot of self-reported gender (DEI cut)
+  ethnicity: varchar('ethnicity', { length: 80 }),               // snapshot of self-reported ethnicity (DEI cut)
+  birthYear: integer('birth_year'),                              // snapshot of birth year (for age banding)
   periodId: uuid('period_id'),                                   // survey period this response belongs to
   managerPath: jsonb('manager_path').$type<string[]>().default([]),  // snapshot of manager-chain user ids (self→top) for hierarchy roll-up + manager-scoped views
   answers: jsonb('answers').$type<Record<string, number>>().notNull().default({}),

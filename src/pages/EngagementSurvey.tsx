@@ -35,6 +35,7 @@ export default function EngagementSurvey() {
   const [progressPeriod, setProgressPeriod] = useState<string | undefined>(undefined);
   const [groupSel, setGroupSel] = useState<string>('all');
   const [tenureBand, setTenureBand] = useState<string>('');
+  const [ageBand, setAgeBand] = useState<string>('');
   const [showSuppress, setShowSuppress] = useState(false);
   const groupToFilter = (v: string): Record<string, string> => {
     if (!v || v === 'all') return {};
@@ -44,11 +45,13 @@ export default function EngagementSurvey() {
     if (kind === 'dept') return { department: val };
     if (kind === 'bu') return { businessUnit: val };
     if (kind === 'loc') return { location: val };
+    if (kind === 'gender') return { gender: val };
+    if (kind === 'eth') return { ethnicity: val };
     if (kind === 'mgr') return { manager: val };
     if (kind === 'hier') return { hierarchyUnderId: val };
     return {};
   };
-  const activeFilters: Record<string, string> = { ...groupToFilter(groupSel), ...(tenureBand ? { tenureBand } : {}) };
+  const activeFilters: Record<string, string> = { ...groupToFilter(groupSel), ...(tenureBand ? { tenureBand } : {}), ...(ageBand ? { ageBand } : {}) };
   const anyFilter = Object.keys(activeFilters).length > 0;
 
   const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
@@ -223,6 +226,8 @@ export default function EngagementSurvey() {
                 {(fopts.data?.businessUnits?.length ?? 0) > 0 && <optgroup label="Business Units">{fopts.data!.businessUnits.map((n) => <option key={`bu:${n}`} value={`bu:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.locations?.length ?? 0) > 0 && <optgroup label="Locations">{fopts.data!.locations.map((n) => <option key={`loc:${n}`} value={`loc:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.managers?.length ?? 0) > 0 && <optgroup label="Managers">{fopts.data!.managers.map((n) => <option key={`mgr:${n}`} value={`mgr:${n}`}>{n}</option>)}</optgroup>}
+                {(fopts.data?.genders?.length ?? 0) > 0 && <optgroup label="Genders">{fopts.data!.genders.map((n) => <option key={`gender:${n}`} value={`gender:${n}`}>{n}</option>)}</optgroup>}
+                {(fopts.data?.ethnicities?.length ?? 0) > 0 && <optgroup label="Ethnicities">{fopts.data!.ethnicities.map((n) => <option key={`eth:${n}`} value={`eth:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.hierarchies?.length ?? 0) > 0 && <optgroup label="Hierarchy (rolls up under)">{fopts.data!.hierarchies.map((h) => <option key={`hier:${h.id}`} value={`hier:${h.id}`}>{h.name}’s org</option>)}</optgroup>}
               </select>
             </div>
@@ -239,6 +244,13 @@ export default function EngagementSurvey() {
               <select className={sel} value={tenureBand} onChange={(e) => setTenureBand(e.target.value)}>
                 <option value="">All</option>
                 {(fopts.data?.tenureBands ?? []).map((b) => <option key={b} value={b}>{b === '<1' ? 'Less than 1 year' : b === '10+' ? '10+ years' : `${b.replace('-', '–')} years`}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Age</label>
+              <select className={sel} value={ageBand} onChange={(e) => setAgeBand(e.target.value)}>
+                <option value="">All</option>
+                {(fopts.data?.ageBands ?? []).map((b) => <option key={b} value={b}>{b === '<25' ? 'Under 25' : b === '65+' ? '65+' : `${b.replace('-', '–')}`}</option>)}
               </select>
             </div>
             <div className="text-[12px] text-ls-ink-3 pb-1.5">{c.participationPct != null ? `${Math.round(c.participationPct)}%` : '—'} ({c.responseCount}{c.eligibleCount ? `/${c.eligibleCount}` : ''} participants)</div>

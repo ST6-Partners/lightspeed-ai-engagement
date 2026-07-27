@@ -101,6 +101,9 @@ export const engagementAnalyticsRouter = router({
       eltLeaders: uniq([...rows.map((r) => r.eltLeader), ...active.map((u) => u.eltLeader)]),
       hierarchies,
       tenureBands: ['<1', '1-2', '2-5', '5-10', '10+'],
+      genders: uniq([...rows.map((r) => r.gender), ...active.map((u) => u.gender)]),
+      ethnicities: uniq([...rows.map((r) => r.ethnicity), ...active.map((u) => u.ethnicity)]),
+      ageBands: ['<25', '25-34', '35-44', '45-54', '55-64', '65+'],
     };
   }),
 
@@ -118,6 +121,9 @@ export const engagementAnalyticsRouter = router({
       eltLeader: z.string().optional(),
       hierarchyUnderId: z.string().optional(),
       businessUnit: z.string().optional(),
+      gender: z.string().optional(),
+      ethnicity: z.string().optional(),
+      ageBand: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const MIN = 3;
@@ -150,6 +156,19 @@ export const engagementAnalyticsRouter = router({
       if (f.eltLeader) rows = rows.filter((r) => eq2(r.eltLeader, f.eltLeader!));
       if (f.tenureBand) rows = rows.filter((r) => bandOf(r.startYear) === f.tenureBand);
       if (f.hierarchyUnderId) rows = rows.filter((r) => (r.managerPath ?? []).includes(f.hierarchyUnderId!));
+      const ageBandOf = (birthYear: number | null | undefined): string | null => {
+        if (!birthYear) return null;
+        const a = thisYear - birthYear;
+        if (a < 25) return '<25';
+        if (a < 35) return '25-34';
+        if (a < 45) return '35-44';
+        if (a < 55) return '45-54';
+        if (a < 65) return '55-64';
+        return '65+';
+      };
+      if (f.gender) rows = rows.filter((r) => eq2(r.gender, f.gender!));
+      if (f.ethnicity) rows = rows.filter((r) => eq2(r.ethnicity, f.ethnicity!));
+      if (f.ageBand) rows = rows.filter((r) => ageBandOf(r.birthYear) === f.ageBand);
 
       const cohortSize = rows.length;
       if (cohortSize < MIN) {
