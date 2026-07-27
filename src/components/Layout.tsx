@@ -74,7 +74,6 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/insights', label: 'Insights Dashboard', icon: BarChart3, minRole: 'manager', children: [
         { path: '/insights?tab=brief', label: 'Manager Brief' },
-        { path: '/insights?tab=metrics', label: 'Metrics' },
         { path: '/insights?tab=effectiveness', label: 'Manager Effectiveness' },
       ] },
     ],

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { trpc } from '../lib/trpc';
 import {
-  Sparkles, CircleAlert, UserCheck, Bell, Plus,
+  Sparkles, CircleAlert, UserCheck, Bell, Plus, MessageCircle, ListChecks,
   ClipboardCheck, ClipboardList, FileText, CheckCircle2, Clock, Award, Users, AlertTriangle,
 } from 'lucide-react';
 
@@ -72,6 +72,7 @@ export default function ManagerBrief() {
   const reviewsQ = trpc.reviewSession.teamReviews.useQuery();
   const activityQ = trpc.metrics.recentActivity.useQuery();
   const actionsQ = trpc.actions.listForManager.useQuery();
+  const alertsQ = trpc.oneOnOne.talkingPointAlerts.useQuery();
 
   const createAction = trpc.actions.create.useMutation({
     onSuccess: () => { utils.actions.listForManager.invalidate(); setJustAssigned(form.assigneeName); setForm((f) => ({ ...f, title: '' })); },
@@ -87,6 +88,8 @@ export default function ManagerBrief() {
   const reviewRows = reviewsQ.data?.reviews ?? [];
   const reviewPeriod = reviewsQ.data?.period ?? null;
   const activity = activityQ.data?.items ?? [];
+  const talkingPoints = alertsQ.data ?? [];
+  const talkingPointCount = talkingPoints.reduce((n, g) => n + g.count, 0);
 
   const dist = profiles.reduce((acc, p) => { acc[signalOf(p)]++; return acc; }, { thrive: 0, watch: 0, risk: 0 } as Record<Signal, number>);
 
@@ -175,12 +178,13 @@ export default function ManagerBrief() {
       {/* At a glance */}
       <div>
         <div className="text-xs uppercase tracking-wider text-gray-400 font-bold mb-2">This week at a glance</div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <Stat icon={ClipboardCheck} label="Checked in" value={`${recap?.checkedIn ?? 0}`} sub={`/${teamSize}`} note={recap && recap.notCheckedIn.length > 0 ? `${recap.notCheckedIn.length} still to check in` : 'everyone in'} tone={recap && recap.notCheckedIn.length > 0 ? 'text-amber-600' : 'text-emerald-600'} />
           <Stat icon={CheckCircle2} label="Reviews on track" value={`${reviewsClosed}`} sub={`/${reviewRows.length}`} note="cycles complete" tone="text-emerald-600" />
           <Stat icon={AlertTriangle} label="Reviews need action" value={`${reviewsNeedAction}`} note="not started or mid-cycle" tone={reviewsNeedAction ? 'text-rose-600' : 'text-gray-400'} />
           <Stat icon={FileText} label="Coaching plans" value={`${plansReady}`} note="drafted, ready to share" />
           <Stat icon={ClipboardList} label="Open actions" value={`${openActions.length}`} note={`${actions.length} total`} />
+          <Stat icon={ListChecks} label="Priorities done" value={recap?.completionPct != null ? `${recap.completionPct}%` : '\u2014'} note={`${recap?.donePrio ?? 0}/${recap?.totalPrio ?? 0} done`} />
         </div>
       </div>
 
@@ -191,7 +195,7 @@ export default function ManagerBrief() {
           {/* Check-ins */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <div className="font-bold text-sm flex items-center gap-2 text-gray-900"><ClipboardCheck size={16} className="text-blue-600" /> Check-ins this week</div>
+              <div className="font-bold text-sm flex items-center gap-2 text-gray-900"><ClipboardCheck size={16} className="text-blue-600" /> Your team this week</div>
               <span className="text-xs text-gray-400 font-semibold">{recap?.checkedIn ?? 0} of {teamSize} in</span>
             </div>
             <div className="divide-y divide-gray-100">
@@ -201,14 +205,16 @@ export default function ManagerBrief() {
                 return (
                   <div key={p.id} className={`px-4 py-3 flex items-center gap-3 ${!p.checkedIn && sig === 'risk' ? 'bg-rose-50/40' : ''}`}>
                     <div className={`w-9 h-9 rounded-full text-white font-bold text-xs flex items-center justify-center flex-none ${avatarColor(p.name)}`}>{initials(p.name)}</div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-gray-900 truncate">{p.name}</div>
                       <div className="text-[11.5px] text-gray-500 truncate">{p.title ?? p.role}</div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 flex-wrap">
+                        <span className={p.checkedIn ? 'text-emerald-600' : 'text-gray-400'}>{p.checkedIn ? '\u25cf Checked in' : '\u25cb No check-in'}</span>
+                        <span>\u00b7 Mood {p.mood != null ? `${p.mood}/5` : '\u2014'}</span>
+                        <span>\u00b7 Priorities {p.priorityTotal ? `${p.priorityDone}/${p.priorityTotal}` : '\u2014'}</span>
+                      </div>
                     </div>
-                    <div className="ml-auto flex items-center gap-2 flex-none">
-                      <span className="text-[11px] text-gray-400 font-semibold hidden sm:inline">{p.checkedIn ? 'Checked in' : 'No check-in'}</span>
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${SIG_CLS[sig]}`}>{SIG_LABEL[sig]}</span>
-                    </div>
+                    <span className={`ml-auto flex-none text-[11px] font-bold px-2.5 py-1 rounded-full ${SIG_CLS[sig]}`}>{SIG_LABEL[sig]}</span>
                   </div>
                 );
               })}
@@ -250,6 +256,31 @@ export default function ManagerBrief() {
           </div>
         </div>
       </div>
+
+      {/* New talking points from your team (from the 1:1 hub) */}
+      {talkingPoints.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="font-bold text-sm flex items-center gap-2 text-gray-900"><MessageCircle size={16} className="text-blue-600" /> New talking points from your team</div>
+            <span className="text-xs text-gray-400 font-semibold">{talkingPointCount} new</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {talkingPoints.map((g) => (
+              <div key={g.employeeId} className="px-4 py-3 bg-blue-50/30">
+                <div className="text-sm font-semibold text-gray-900">{g.employeeName} <span className="text-[11px] font-normal text-gray-400">\u00b7 {g.count} new</span></div>
+                <ul className="mt-1 space-y-1">
+                  {g.items.map((it) => (
+                    <li key={it.id} className="text-[12.5px] text-gray-600 flex items-start gap-2">
+                      <MessageCircle size={13} className="text-blue-500 mt-0.5 flex-none" />
+                      <span>{it.message.replace(/^.*?added a talking point: /, '')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent updates + Needs attention */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
