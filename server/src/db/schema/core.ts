@@ -41,6 +41,12 @@ export const users = pgTable('users', {
   businessUnit: varchar('business_unit', { length: 160 }),
   // Per-person ELT Leader (Org rollup + profile + filter). AIE 2026-07-27.
   eltLeader: varchar('elt_leader', { length: 160 }),
+  // Self-reported demographics (optional, employee-editable on their Profile). AIE 2026-07-27.
+  dobYear: integer('dob_year'),
+  dobMonth: integer('dob_month'),
+  dobDay: integer('dob_day'),
+  gender: varchar('gender', { length: 40 }),
+  ethnicity: varchar('ethnicity', { length: 80 }),
   // Start date — YEAR required on entry; month/day optional. Stored as parts so a
   // year-only start is representable. Tenure (and its filter bands) derive from these.
   hireYear: integer('hire_year'),

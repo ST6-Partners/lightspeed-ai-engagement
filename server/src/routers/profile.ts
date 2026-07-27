@@ -42,6 +42,19 @@ export const profileRouter = router({
       cursor = anc.managerId ?? null;
     }
 
+    // Reporting line = primary-manager chain from me upward, names top->down.
+    const chain: string[] = [];
+    let rc: string | null = me.managerId ?? null;
+    const rseen = new Set<string>();
+    while (rc && !rseen.has(rc)) {
+      rseen.add(rc);
+      const anc = await ctx.db.query.users.findFirst({ where: eq(users.id, rc) });
+      if (!anc) break;
+      if (anc.name) chain.unshift(anc.name);
+      rc = anc.managerId ?? null;
+    }
+    const reportingLine = chain.length ? chain.join(' \u203a ') : null;
+
     return {
       // editable by the user
       id: me.id,
@@ -52,9 +65,18 @@ export const profileRouter = router({
       hireYear: me.hireYear,
       hireMonth: me.hireMonth,
       hireDay: me.hireDay,
+      // self-reported demographics (editable in the UI)
+      dobYear: me.dobYear,
+      dobMonth: me.dobMonth,
+      dobDay: me.dobDay,
+      gender: me.gender,
+      ethnicity: me.ethnicity,
       // managed by admin (read-only in the UI)
+      employeeId: me.externalId ?? null,
+      title: jt?.title ?? me.title ?? null,
       jobTitle: jt?.title ?? null,
       department: dept?.name ?? null,
+      reportingLine,
       team: me.team,
       location: me.location,
       businessUnit: me.businessUnit,
@@ -77,6 +99,12 @@ export const profileRouter = router({
       hireYear: z.number().int().min(1900).max(2100).nullable().optional(),
       hireMonth: z.number().int().min(1).max(12).nullable().optional(),
       hireDay: z.number().int().min(1).max(31).nullable().optional(),
+      // Self-reported demographics (optional).
+      dobYear: z.number().int().min(1900).max(2100).nullable().optional(),
+      dobMonth: z.number().int().min(1).max(12).nullable().optional(),
+      dobDay: z.number().int().min(1).max(31).nullable().optional(),
+      gender: z.string().max(40).nullable().optional(),
+      ethnicity: z.string().max(80).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const updates: Record<string, unknown> = {};
@@ -86,6 +114,11 @@ export const profileRouter = router({
       if (input.hireYear !== undefined) updates.hireYear = input.hireYear;
       if (input.hireMonth !== undefined) updates.hireMonth = input.hireMonth;
       if (input.hireDay !== undefined) updates.hireDay = input.hireDay;
+      if (input.dobYear !== undefined) updates.dobYear = input.dobYear;
+      if (input.dobMonth !== undefined) updates.dobMonth = input.dobMonth;
+      if (input.dobDay !== undefined) updates.dobDay = input.dobDay;
+      if (input.gender !== undefined) updates.gender = input.gender || null;
+      if (input.ethnicity !== undefined) updates.ethnicity = input.ethnicity || null;
 
       // Guard: month/day can't be set without a year (year is the mandatory part).
       const y = input.hireYear !== undefined ? input.hireYear : undefined;

@@ -617,6 +617,13 @@
       "when": 1784836196989,
       "tag": "0086_aie_fix_profile_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1784836197989,
+      "tag": "0087_aie_self_profile_demographics",
+      "breakpoints": true
     }
   ]
 }

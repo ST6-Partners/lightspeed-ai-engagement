@@ -61,7 +61,7 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
+  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export default function Employees() {
     setEditError(null);
     setManagerSearch('');
     setEditForm({
-      name: u.name ?? '', email: u.email ?? '', role: u.role ?? 'user',
+      name: u.name ?? '', email: u.email ?? '', externalId: u.externalId ?? '', role: u.role ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
       managerId: u.managerId ?? '',
       managerIds: (u.managerIds ?? (u.managerId ? [u.managerId] : [])) as string[],
@@ -99,6 +99,7 @@ export default function Employees() {
       id: editUser.id,
       name: editForm.name.trim() || null,
       email: editForm.email.trim(),
+      externalId: editForm.externalId.trim() || null,
       role: editForm.role as any,
       jobTitleId: editForm.jobTitleId || null,
       departmentId: editForm.departmentId || null,
@@ -399,6 +400,10 @@ export default function Employees() {
                   <option value="">—</option>
                   {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
+              </label>
+              <label className="text-xs text-gray-600">Employee ID
+                <input value={editForm.externalId} onChange={(e) => ef({ externalId: e.target.value })}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="e.g. A0OT" />
               </label>
               <label className="text-xs text-gray-600">Hire date
                 <input type="date" value={editForm.hireDate} onChange={(e) => ef({ hireDate: e.target.value })}

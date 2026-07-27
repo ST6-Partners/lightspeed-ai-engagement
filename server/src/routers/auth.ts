@@ -236,6 +236,7 @@ export const authRouter = router({
       name: z.string().nullable().optional(),
       email: z.string().email('Enter a valid email address.').optional(),
       title: z.string().optional(),
+      externalId: z.string().nullable().optional(),
       jobTitleId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
       managerId: z.string().uuid().nullable().optional(),
