@@ -191,13 +191,30 @@ function heatScale(t: number): string {
   const c = [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * u));
   return `#${c.map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }
-const colorFav = (f: number) => heatScale(f / 100);             // 0% red .. 50% mid .. 100% teal
-const colorUnfav = (u: number) => heatScale(1 - u / 40);        // 0% teal .. 40%+ red
+// Shared banded palette for the heatmap cells (PM spec 2026-07-27).
+const _LIGHT_TEAL = '#a7d5de', _TEAL_HEX = '#5fb8c9', _DARK_TEAL = '#3f8e9e';
+const _RED_HEX = '#e0897e', _NEUTRAL_HEX = '#eff3f4';
+// Favorable % — banded (higher = better), same palette as the average heatmap
+// (PM spec 2026-07-27): <40 red, 40-54 neutral, 55-69 light teal, 70-84 teal, >=85 darker teal.
+const colorFav = (f: number): string => {
+  if (f < 40) return _RED_HEX;
+  if (f < 55) return _NEUTRAL_HEX;
+  if (f < 70) return _LIGHT_TEAL;
+  if (f < 85) return _TEAL_HEX;
+  return _DARK_TEAL;
+};
+// Unfavorable % — banded (higher = worse, so inverted): >=40 red, 30-39 neutral,
+// 20-29 light teal, 10-19 teal, <10 darker teal.
+const colorUnfav = (u: number): string => {
+  if (u >= 40) return _RED_HEX;
+  if (u >= 30) return _NEUTRAL_HEX;
+  if (u >= 20) return _LIGHT_TEAL;
+  if (u >= 10) return _TEAL_HEX;
+  return _DARK_TEAL;
+};
 // Average-response heatmap color: banded thresholds keyed to the number shown
 // (1–5 scale), per PM spec 2026-07-27. <2 red, 2–2.49 neutral, 2.5–2.99
 // light teal, exactly 3.0 teal, >3.0 darker teal.
-const _LIGHT_TEAL = '#a7d5de', _TEAL_HEX = '#5fb8c9', _DARK_TEAL = '#3f8e9e';
-const _RED_HEX = '#e0897e', _NEUTRAL_HEX = '#eff3f4';
 const colorAvg = (m: number): string => {
   if (m < 2.0) return _RED_HEX;
   if (m < 2.5) return _NEUTRAL_HEX;
