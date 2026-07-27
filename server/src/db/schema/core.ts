@@ -39,6 +39,8 @@ export const users = pgTable('users', {
   team: varchar('team', { length: 160 }),
   location: varchar('location', { length: 160 }),
   businessUnit: varchar('business_unit', { length: 160 }),
+  // Per-person ELT Leader (Org rollup + profile + filter). AIE 2026-07-27.
+  eltLeader: varchar('elt_leader', { length: 160 }),
   // Start date — YEAR required on entry; month/day optional. Stored as parts so a
   // year-only start is representable. Tenure (and its filter bands) derive from these.
   hireYear: integer('hire_year'),

@@ -71,6 +71,12 @@ export const orgScreenRouter = router({
           managerId: u.managerId ?? null,
           leaderBadge: u.leaderBadge ?? null,
           role: u.role,
+          location: u.location ?? null,
+          businessUnit: u.businessUnit ?? null,
+          eltLeader: u.eltLeader ?? null,
+          hireYear: u.hireYear ?? null,
+          hireMonth: u.hireMonth ?? null,
+          hireDay: u.hireDay ?? null,
         })),
     };
   }),

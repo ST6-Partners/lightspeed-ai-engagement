@@ -1,12 +1,19 @@
-import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor } from './orgLib';
+import { Person, TabKey, TIER_BADGE, TOKENS, personInitials, personColor, tenureLabel } from './orgLib';
 import PrioritiesTab from './PrioritiesTab';
 import OkrsTab from './OkrsTab';
 import EngagementTab from './EngagementTab';
 import AssessmentsTab from './AssessmentsTab';
 import ReviewTab from './ReviewTab';
 
-export default function PersonCard({ person, tab, periodId, reviewPeriod }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null }) {
+export default function PersonCard({ person, tab, periodId, reviewPeriod, managerName, reportingLine }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; managerName?: string | null; reportingLine?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
+  const infoRows: { label: string; value: string }[] = [];
+  if (person.location) infoRows.push({ label: 'Location', value: person.location });
+  if (person.businessUnit) infoRows.push({ label: 'Business Unit', value: person.businessUnit });
+  if (person.eltLeader) infoRows.push({ label: 'ELT Leader', value: person.eltLeader });
+  if (person.hireYear != null) infoRows.push({ label: 'Tenure', value: tenureLabel(person.hireYear) });
+  if (managerName) infoRows.push({ label: 'Manager', value: managerName });
+  if (reportingLine) infoRows.push({ label: 'Reports up', value: reportingLine });
   return (
     <div className="rounded-lg p-3" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
       <div className="flex items-start justify-between mb-2">
@@ -27,6 +34,15 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod }: { pe
             style={{ background: badge.bg, color: badge.fg }}>{person.leaderBadge}</span>
         )}
       </div>
+      {infoRows.length > 0 && (
+        <div className="mb-2 flex flex-col gap-0.5">
+          {infoRows.map((r) => (
+            <div key={r.label} className="text-[11px] truncate" style={{ color: TOKENS.idle }}>
+              <span style={{ fontWeight: 600 }}>{r.label}:</span> {r.value}
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 10 }}>
         {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} />}

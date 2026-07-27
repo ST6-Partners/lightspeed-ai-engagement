@@ -80,20 +80,25 @@ export const engagementAnalyticsRouter = router({
     // response's manager path, resolved to a name.
     const ancestorIds = new Set<string>();
     for (const r of rows) for (const id of (r.managerPath ?? [])) ancestorIds.add(id);
-    const leaders = ancestorIds.size
-      ? await ctx.db.query.users.findMany({ columns: { id: true, name: true } })
-      : [];
+    // Roster (active employees) ALSO seeds the option lists, so the analytics
+    // filters populate straight from the employee directory even before any
+    // survey is taken — matches the Organization People filters (AIE 2026-07-27).
+    const roster = await ctx.db.query.users.findMany();
+    const deptRows = await ctx.db.query.departments.findMany();
+    const deptName = new Map(deptRows.map((d) => [d.id, d.name]));
+    const active = roster.filter((u) => u.isActive);
+    const leaders = ancestorIds.size ? roster : [];
     const hierarchies = leaders
       .filter((u) => ancestorIds.has(u.id))
       .map((u) => ({ id: u.id, name: u.name ?? '(unnamed)' }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return {
-      teams: uniq(rows.map((r) => r.team)),
-      locations: uniq(rows.map((r) => r.location)),
-      businessUnits: uniq(rows.map((r) => r.businessUnit)),
-      departments: uniq(rows.map((r) => r.department)),
+      teams: uniq([...rows.map((r) => r.team), ...active.map((u) => u.team)]),
+      locations: uniq([...rows.map((r) => r.location), ...active.map((u) => u.location)]),
+      businessUnits: uniq([...rows.map((r) => r.businessUnit), ...active.map((u) => u.businessUnit)]),
+      departments: uniq([...rows.map((r) => r.department), ...active.map((u) => (u.departmentId ? deptName.get(u.departmentId) : null))]),
       managers: uniq(rows.map((r) => r.managerName)),
-      eltLeaders: uniq(rows.map((r) => r.eltLeader)),
+      eltLeaders: uniq([...rows.map((r) => r.eltLeader), ...active.map((u) => u.eltLeader)]),
       hierarchies,
       tenureBands: ['<1', '1-2', '2-5', '5-10', '10+'],
     };

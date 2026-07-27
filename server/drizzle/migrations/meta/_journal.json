@@ -568,6 +568,34 @@
       "when": 1784836189989,
       "tag": "0079_aie_response_manager_path",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1784836190989,
+      "tag": "0080_aie_add_elt_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1784836191989,
+      "tag": "0081_aie_topup_departments_titles",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1784836192989,
+      "tag": "0082_aie_enrich_employee_org_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1784836193989,
+      "tag": "0083_aie_insert_new_hires",
+      "breakpoints": true
     }
   ]
 }

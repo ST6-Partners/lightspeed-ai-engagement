@@ -9,6 +9,7 @@ import PersonCard from '../components/org/PersonCard';
 import NineBox from '../components/org/NineBox';
 import {
   buildMaps, directsOf, descendantsOf, depthOf, Person, Scope, TabKey, TOKENS,
+  tenureLabel, tenureBand,
 } from '../components/org/orgLib';
 
 // Stage 2 added Assessments + Review. `minRole` HIDES (not disables) a tab the
@@ -59,9 +60,27 @@ export default function Organization() {
   const TABS = ALL_TABS.filter((t) => !t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]);
   const people = (data?.people ?? []) as Person[];
   const maps = useMemo(() => buildMaps(people), [people]);
+  // Reporting line (top-down to, not including, this person) — same logic as export.
+  const chainOf = (id: string) => { const c: string[] = []; const seen = new Set<string>(); let cur = maps.byId.get(id)?.managerId ?? null; while (cur && !seen.has(cur)) { seen.add(cur); const m = maps.byId.get(cur); if (m) c.unshift(m.name); cur = m?.managerId ?? null; } return c.join(' › '); };
+  // Distinct, sorted filter options derived from loaded people.
+  const uniqSorted = (vals: (string | null | undefined)[]) => [...new Set(vals.filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b));
+  const eltOptions = useMemo(() => uniqSorted(people.map((p) => p.eltLeader)), [people]);
+  const locOptions = useMemo(() => uniqSorted(people.map((p) => p.location)), [people]);
+  const buOptions = useMemo(() => uniqSorted(people.map((p) => p.businessUnit)), [people]);
+  const TENURE_OPTIONS: { value: string; label: string }[] = [
+    { value: '<1', label: '<1 yr' }, { value: '1-3', label: '1\u20133 yrs' },
+    { value: '3-5', label: '3\u20135 yrs' }, { value: '5-10', label: '5\u201310 yrs' },
+    { value: '10+', label: '10+ yrs' }, { value: 'unknown', label: 'Unknown' },
+  ];
+  const chooseFilter = (setter: (v: string) => void, key: string) => (v: string) => { setter(v); ls.set(key, v); };
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>(() => { const s = ls.get('org.scope') as Scope; return s && s !== 'organization' ? s : 'individual'; });
+  // Employment / org filters (spec: filter bar). '' = All. Persisted in localStorage.
+  const [fElt, setFElt] = useState<string>(() => ls.get('org.filter.elt') ?? '');
+  const [fLoc, setFLoc] = useState<string>(() => ls.get('org.filter.loc') ?? '');
+  const [fBu, setFBu] = useState<string>(() => ls.get('org.filter.bu') ?? '');
+  const [fTen, setFTen] = useState<string>(() => ls.get('org.filter.tenure') ?? '');
   const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
   const [periodId, setPeriodId] = useState<string | null>(ls.get('org.engPeriod'));
   const { data: periodsData } = trpc.engagementAnalytics.periods.useQuery();
@@ -158,6 +177,8 @@ export default function Organization() {
         ${kv('Name', selected.name)}${kv('Title', selected.title)}
         ${kv('Department', selected.dept)}${kv('Manager', mgr?.name)}
         ${kv('Leadership tier', selected.leaderBadge)}${kv('App role', selected.role)}
+        ${kv('Work location', selected.location)}${kv('Business unit', selected.businessUnit)}
+        ${kv('ELT leader', selected.eltLeader)}${kv('Tenure', tenureLabel(selected.hireYear))}
       </div>
       <h2>Org Context</h2>
       <div class="kv">
@@ -184,19 +205,28 @@ export default function Organization() {
     return descendantsOf(maps, selected.id);
   }, [selected, scope, maps, people]);
 
+  // Apply employment/org filters before rendering cards (spec: filter bar).
+  const visible: Person[] = useMemo(() => scoped.filter((p) =>
+    (!fElt || p.eltLeader === fElt) &&
+    (!fLoc || p.location === fLoc) &&
+    (!fBu || p.businessUnit === fBu) &&
+    (!fTen || tenureBand(p.hireYear) === fTen)
+  ), [scoped, fElt, fLoc, fBu, fTen]);
+
   // Team scope → depth-banded groups.
   const banded = useMemo(() => {
     if (scope !== 'descendants' || !selected) return null;
     const base = depthOf(maps, selected.id);
     const groups = new Map<number, Person[]>();
-    for (const p of scoped) {
+    for (const p of visible) {
       const rel = depthOf(maps, p.id) - base;
       (groups.get(rel) ?? groups.set(rel, []).get(rel)!).push(p);
     }
     return [...groups.entries()].sort((a, b) => a[0] - b[0]);
-  }, [scope, selected, scoped, maps]);
+  }, [scope, selected, visible, maps]);
 
   const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+  const filterSelStyle: React.CSSProperties = { color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '4px 6px', borderRadius: 6 };
 
   return (
     <div ref={containerRef} className="flex" style={{ height: 'calc(100vh - 7.5rem)', background: TOKENS.bg, borderRadius: 10, overflow: 'hidden', border: `1px solid ${TOKENS.border}`, userSelect: dragging ? 'none' : undefined }}>
@@ -221,14 +251,36 @@ export default function Organization() {
                   </button>
                 ))}
               </div>
-              {selected && (
-                <button onClick={exportTalentProfile}
-                  className="inline-flex items-center gap-1 text-[12px] font-medium rounded-md px-2.5 py-1.5"
-                  style={{ color: TOKENS.activeText, border: `1px solid ${TOKENS.border}`, background: '#fff' }}
-                  title={`Export a talent profile PDF for ${selected.name}`}>
-                  <Printer size={14} /> Export talent profile
-                </button>
-              )}
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                <select value={fElt} onChange={(e) => chooseFilter(setFElt, 'org.filter.elt')(e.target.value)}
+                  className="text-[11px]" style={filterSelStyle} title="Filter by ELT leader">
+                  <option value="">All ELT leaders</option>
+                  {eltOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select value={fLoc} onChange={(e) => chooseFilter(setFLoc, 'org.filter.loc')(e.target.value)}
+                  className="text-[11px]" style={filterSelStyle} title="Filter by location">
+                  <option value="">All locations</option>
+                  {locOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select value={fBu} onChange={(e) => chooseFilter(setFBu, 'org.filter.bu')(e.target.value)}
+                  className="text-[11px]" style={filterSelStyle} title="Filter by business unit">
+                  <option value="">All business units</option>
+                  {buOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select value={fTen} onChange={(e) => chooseFilter(setFTen, 'org.filter.tenure')(e.target.value)}
+                  className="text-[11px]" style={filterSelStyle} title="Filter by tenure">
+                  <option value="">All tenures</option>
+                  {TENURE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {selected && (
+                  <button onClick={exportTalentProfile}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium rounded-md px-2.5 py-1.5"
+                    style={{ color: TOKENS.activeText, border: `1px solid ${TOKENS.border}`, background: '#fff' }}
+                    title={`Export a talent profile PDF for ${selected.name}`}>
+                    <Printer size={14} /> Export talent profile
+                  </button>
+                )}
+              </div>
             </div>
             {/* Tab strip */}
             <div className="flex items-center justify-between" style={{ padding: '0 20px', borderBottom: `1px solid ${TOKENS.borderSoft}`, background: '#fff' }}>
@@ -279,13 +331,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>

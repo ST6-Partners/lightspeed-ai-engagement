@@ -8,7 +8,34 @@ export type Person = {
   managerId: string | null;
   leaderBadge: string | null; // 'ELT' | 'SLT' | 'ST6' | null
   role: string;
+  location?: string | null;
+  businessUnit?: string | null;
+  eltLeader?: string | null;
+  hireYear?: number | null;
+  hireMonth?: number | null;
+  hireDay?: number | null;
 };
+
+// Tenure helpers (Employment & Org block + filtering).
+export function tenureLabel(hireYear?: number | null): string {
+  if (hireYear == null) return '—';
+  const yrs = new Date().getFullYear() - hireYear;
+  if (yrs < 1) return '<1 yr';
+  if (yrs < 3) return '1–3 yrs';
+  if (yrs < 5) return '3–5 yrs';
+  if (yrs < 10) return '5–10 yrs';
+  return '10+ yrs';
+}
+
+export function tenureBand(hireYear?: number | null): string {
+  if (hireYear == null) return 'unknown';
+  const yrs = new Date().getFullYear() - hireYear;
+  if (yrs < 1) return '<1';
+  if (yrs < 3) return '1-3';
+  if (yrs < 5) return '3-5';
+  if (yrs < 10) return '5-10';
+  return '10+';
+}
 
 export type Scope = 'individual' | 'directs' | 'descendants' | 'organization';
 export type TabKey = 'priorities' | 'okrs' | 'engagement' | 'assessments' | 'review' | 'ninebox';
