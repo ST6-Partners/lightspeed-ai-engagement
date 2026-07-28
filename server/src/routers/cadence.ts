@@ -21,14 +21,21 @@ import { nineBoxRatings, priorities } from '../db/schema/orgScreen.js';
 import { reviews } from '../db/schema/reviews.js';
 import { auditChange } from '../services/audit.js';
 
-export type Cadence = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+export type Cadence = 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type CadenceStatus = 'done' | 'due' | 'overdue';
-const cadenceEnum = z.enum(['monthly', 'quarterly', 'semiannual', 'annual']);
+const cadenceEnum = z.enum(['weekly', 'monthly', 'quarterly', 'semiannual', 'annual']);
 
 // Start (UTC midnight) of the calendar period containing `d` for a cadence.
 export function periodStart(c: Cadence, d: Date): Date {
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth(); // 0-11
+  if (c === 'weekly') {
+    // Monday-start calendar week (UTC).
+    const s0 = new Date(Date.UTC(y, m, d.getUTCDate()));
+    const diff = (s0.getUTCDay() + 6) % 7; // 0=Mon..6=Sun -> days since Monday
+    s0.setUTCDate(s0.getUTCDate() - diff);
+    return s0;
+  }
   if (c === 'monthly') return new Date(Date.UTC(y, m, 1));
   if (c === 'quarterly') return new Date(Date.UTC(y, Math.floor(m / 3) * 3, 1));
   if (c === 'semiannual') return new Date(Date.UTC(y, m < 6 ? 0 : 6, 1));

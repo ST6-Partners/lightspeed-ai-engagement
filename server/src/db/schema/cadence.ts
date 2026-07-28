@@ -9,8 +9,8 @@ import { pgTable, uuid, varchar, timestamp } from 'drizzle-orm/pg-core';
 
 export const cadenceSettings = pgTable('cadence_settings', {
   id: uuid('id').primaryKey().defaultRandom(),
-  nineboxCadence: varchar('ninebox_cadence', { length: 16 }).notNull().default('quarterly'),
-  prioritiesCadence: varchar('priorities_cadence', { length: 16 }).notNull().default('quarterly'),
-  reviewsCadence: varchar('reviews_cadence', { length: 16 }).notNull().default('quarterly'),
+  nineboxCadence: varchar('ninebox_cadence', { length: 16 }).notNull().default('semiannual'),
+  prioritiesCadence: varchar('priorities_cadence', { length: 16 }).notNull().default('annual'),
+  reviewsCadence: varchar('reviews_cadence', { length: 16 }).notNull().default('weekly'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

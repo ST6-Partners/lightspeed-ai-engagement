@@ -652,6 +652,13 @@
       "when": 1784836201989,
       "tag": "0091_aie_remove_multiteam_and_supervisor_chain",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1784836202989,
+      "tag": "0092_aie_cadence_defaults",
+      "breakpoints": true
     }
   ]
 }

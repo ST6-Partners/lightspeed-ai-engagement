@@ -13,7 +13,8 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerMicrosoftSso } from './server/src/http/microsoftSso.js';
-import { registerBuiltInJobs } from './server/src/services/job-runner.js';
+import { registerBuiltInJobs, runJob } from './server/src/services/job-runner.js';
+import { registerCadenceNotifyJob } from './server/src/services/cadenceNotify.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
 
@@ -275,6 +276,10 @@ async function main() {
   });
 
   registerBuiltInJobs();
+  registerCadenceNotifyJob();
+  // Generate cadence-overdue notifications shortly after boot, then daily.
+  setTimeout(() => { runJob(db, 'cadence-overdue-notify', 'cron').catch((e) => console.error('[cadence-notify]', e?.message)); }, 30_000);
+  setInterval(() => { runJob(db, 'cadence-overdue-notify', 'cron').catch((e) => console.error('[cadence-notify]', e?.message)); }, 24 * 60 * 60 * 1000);
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Template App running on port ${PORT} [${isProduction ? 'production' : 'development'}]`);

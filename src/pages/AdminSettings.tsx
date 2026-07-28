@@ -94,6 +94,7 @@ const ANALYTICS_TABS = [
 ];
 
 const CONFIG_TABS = [
+  { id: 'cadence', label: 'Cadence' },
   { id: 'surveyperiods', label: 'Survey Periods' },
   { id: 'archived', label: 'Archived Items' },
 ];
@@ -205,6 +206,52 @@ function TabRow({ label, tabs, activeSection, onSelect }: TabRowProps) {
   );
 }
 
+// ── Cadence panel ─ required completion cadence per activity (admin) ──
+type CadenceValue = 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+const CADENCE_OPTIONS: { value: CadenceValue; label: string }[] = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'semiannual', label: 'Twice a year' },
+  { value: 'annual', label: 'Once a year' },
+];
+function CadencePanel() {
+  const utils = trpc.useUtils();
+  const { data, isLoading } = trpc.cadence.getSettings.useQuery();
+  const update = trpc.cadence.updateSettings.useMutation({ onSuccess: () => utils.cadence.getSettings.invalidate() });
+  const selStyle: React.CSSProperties = { padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#111827' };
+  if (isLoading || !data) return <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Loading cadence…</div>;
+  const rows: { label: string; field: 'ninebox' | 'priorities' | 'reviews'; value: CadenceValue }[] = [
+    { label: '9 Box ratings', field: 'ninebox', value: data.nineboxCadence as CadenceValue },
+    { label: 'Priorities', field: 'priorities', value: data.prioritiesCadence as CadenceValue },
+    { label: 'Reviews', field: 'reviews', value: data.reviewsCadence as CadenceValue },
+  ];
+  return (
+    <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Completion cadence</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>How often each activity must be completed — at least once per period; more often is allowed. Drives the Due/Overdue badges and overdue notifications.</div>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.field} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: '#111827', width: 220 }}>{r.label}</td>
+              <td style={{ padding: '12px 16px' }}>
+                <select value={r.value} disabled={update.isLoading} style={selStyle}
+                  onChange={(e) => update.mutate({ [r.field]: e.target.value as CadenceValue })}>
+                  {CADENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {update.isError && <div style={{ padding: '10px 16px', color: '#b91c1c', fontSize: 12 }}>Couldn’t save — only admins can change the cadence.</div>}
+    </div>
+  );
+}
+
 // ── Main AdminSettings page ──────────────────────────────────
 export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState('gettingstarted');
@@ -247,6 +294,7 @@ export default function AdminSettings() {
         {activeSection === 'feedback' && showAnalytics && <FeedbackPanel />}
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
+        {activeSection === 'cadence' && showConfig && <CadencePanel />}
         {activeSection === 'surveyperiods' && showConfig && <SurveyPeriods />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}
