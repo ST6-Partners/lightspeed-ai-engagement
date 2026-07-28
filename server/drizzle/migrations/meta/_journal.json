@@ -638,6 +638,13 @@
       "when": 1784836199989,
       "tag": "0089_aie_additional_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1784836200989,
+      "tag": "0090_aie_cadence_settings",
+      "breakpoints": true
     }
   ]
 }
