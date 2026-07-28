@@ -44,6 +44,7 @@ import { reviewSessionRouter } from './routers/reviewSession.js';
 import { checkinsRouter } from './routers/checkins.js';
 import { checkinQuestionsRouter } from './routers/checkinQuestions.js';
 import { checkinSettingsRouter } from './routers/checkinSettings.js';
+import { cadenceRouter } from './routers/cadence.js';
 import { oneOnOneRouter } from './routers/oneOnOne.js';
 import { accessRouter } from './routers/access.js';
 import { metricsRouter } from './routers/metrics.js';
@@ -99,6 +100,7 @@ export const appRouter = router({
   checkins: checkinsRouter,
   checkinQuestions: checkinQuestionsRouter,
   checkinSettings: checkinSettingsRouter,
+  cadence: cadenceRouter,
 });
 
 export type AppRouter = typeof appRouter;

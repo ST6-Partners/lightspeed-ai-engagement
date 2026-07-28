@@ -14,12 +14,13 @@ const perfOf = (b: number) => (b - 1) % 3;
 const potOf = (b: number) => Math.floor((b - 1) / 3);
 const boxOf = (p: number, q: number) => q * 3 + p + 1;
 
-export default function NineBox({ people, allPeople, scope, canPlace, companyWide }: {
+export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById }: {
   people: Person[];
   allPeople?: Person[];
   scope?: NineScope;
   canPlace?: (id: string) => boolean;
   companyWide?: boolean;
+  statusById?: Map<string, 'done' | 'due' | 'overdue'>;
 }) {
   const [editing, setEditing] = useState<Person | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -67,7 +68,10 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
     const can = editable(person.id);
     const cls = 'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] w-full';
     const st = { background: '#fff', border: `1px solid ${TOKENS.border}` };
-    const body = (<><span style={{ width: 6, height: 6, borderRadius: 3, background: TOKENS.selBar }} /><span className="truncate" style={{ maxWidth: 100 }}>{person.name}</span></>);
+    const cad = statusById?.get(person.id);
+    const dot = cad === 'overdue' ? '#ef4444' : cad === 'due' ? '#f59e0b' : TOKENS.selBar;
+    const cadTitle = cad === 'overdue' ? ' — 9 Box overdue' : cad === 'due' ? ' — 9 Box due' : '';
+    const body = (<><span style={{ width: 6, height: 6, borderRadius: 3, background: dot }} title={cadTitle ? cadTitle.slice(3) : undefined} /><span className="truncate" style={{ maxWidth: 100 }}>{person.name}</span></>);
     return can
       ? <button onClick={() => { setErr(null); setEditing(person); }} className={cls} style={st} title="Click to reposition">{body}</button>
       : <div className={cls} style={{ ...st, opacity: 0.7 }} title="View only — you cannot place this person">{body}</div>;

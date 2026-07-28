@@ -9,7 +9,7 @@ import ReviewTab from './ReviewTab';
 // fields (location, tenure, manager, reporting line, etc.) intentionally live on
 // the "Export talent profile" PDF, not on the card. The identity header (avatar,
 // name, title, leader badge) stays so the card is still attributable.
-export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPeriodId }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; okrPeriodId?: string; managerName?: string | null; reportingLine?: string | null }) {
+export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPeriodId, cadence }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; okrPeriodId?: string; cadence?: 'done' | 'due' | 'overdue'; managerName?: string | null; reportingLine?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
   return (
     <div className="rounded-lg p-5" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
@@ -26,10 +26,17 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPer
             </div>
           </div>
         </div>
-        {badge && (
-          <span className="rounded px-1 text-[9px] font-bold shrink-0"
-            style={{ background: badge.bg, color: badge.fg }}>{person.leaderBadge}</span>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {(cadence === 'due' || cadence === 'overdue') && (
+            <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+              style={cadence === 'overdue' ? { background: '#fde2e0', color: '#b91c1c' } : { background: '#fef3c7', color: '#92400e' }}
+              title={cadence === 'overdue' ? 'Overdue this period' : 'Due this period'}>{cadence}</span>
+          )}
+          {badge && (
+            <span className="rounded px-1 text-[9px] font-bold"
+              style={{ background: badge.bg, color: badge.fg }}>{person.leaderBadge}</span>
+          )}
+        </div>
       </div>
       <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 14 }}>
         {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}

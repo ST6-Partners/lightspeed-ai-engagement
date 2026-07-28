@@ -101,6 +101,28 @@ export default function Organization() {
   const goalPeriodIsCurrent = goalPeriods.find((p) => p.id === effectiveGoalPeriodId)?.isCurrent ?? true;
   const chooseGoalPeriod = (id: string) => { setGoalPeriodId(id); ls.set('org.goalPeriod', id); };
 
+  // Cadence status (done/due/overdue per activity) for the loaded people, used
+  // for the Due/Overdue badges on cards and 9-box chips (period cadence, 2026-07-27).
+  const cadUserIds = useMemo(() => people.map((p) => p.id).slice(0, 2000), [people]);
+  const { data: cadenceData } = trpc.cadence.status.useQuery({ userIds: cadUserIds }, { enabled: cadUserIds.length > 0 });
+  const cadenceByUser = useMemo(() => {
+    const m = new Map<string, { ninebox: 'done' | 'due' | 'overdue'; priorities: 'done' | 'due' | 'overdue'; reviews: 'done' | 'due' | 'overdue' }>();
+    for (const r of cadenceData?.people ?? []) m.set(r.userId, { ninebox: r.ninebox, priorities: r.priorities, reviews: r.reviews });
+    return m;
+  }, [cadenceData]);
+  const cadenceForTab = (id: string): 'done' | 'due' | 'overdue' | undefined => {
+    const st = cadenceByUser.get(id);
+    if (!st) return undefined;
+    if (tab === 'priorities') return st.priorities;
+    if (tab === 'review') return st.reviews;
+    return undefined;
+  };
+  const nineboxStatusById = useMemo(() => {
+    const m = new Map<string, 'done' | 'due' | 'overdue'>();
+    for (const [id, st] of cadenceByUser) m.set(id, st.ninebox);
+    return m;
+  }, [cadenceByUser]);
+
   // Screen-level review-period selector (spec: person-card exec-summary,
   // 2026-07-15). Drives every card's Review tab; defaults to the latest period.
   const { data: periods } = trpc.values.listPeriods.useQuery(undefined, { enabled: tab === 'review' });
@@ -345,7 +367,7 @@ export default function Organization() {
                 <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Not tracked by period yet — showing current.</div>
               )}
               {tab === 'ninebox' ? (
-                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} />
+                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} />
               ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
@@ -357,13 +379,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>
