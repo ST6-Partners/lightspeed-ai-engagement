@@ -16,14 +16,6 @@ const ROLE_COLORS: Record<string, string> = {
 // employee). Accounts are still created at sign-up; this screen curates them.
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [deptDdOpen, setDeptDdOpen] = useState(false);
-  const deptDdRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!deptDdOpen) return;
-    const onDoc = (e: MouseEvent) => { if (deptDdRef.current && !deptDdRef.current.contains(e.target as Node)) setDeptDdOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [deptDdOpen]);
   const utils = trpc.useContext();
   const { data: userList = [], isLoading } = trpc.auth.listUsers.useQuery();
   const { data: titles = [] } = trpc.jobTitles.list.useQuery();
@@ -69,25 +61,17 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', managerIds: [] as string[], additionalDepartmentIds: [] as string[], primaryManagerId: '', secondaryManagerId: '', tertiaryManagerId: '', quaternaryManagerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
+  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
-  const [managerSearch, setManagerSearch] = useState('');
   const ef = (patch: Partial<typeof EDIT_EMPTY>) => setEditForm((prev) => ({ ...prev, ...patch }));
   const openEdit = (u: any) => {
     setEditError(null);
-    setManagerSearch('');
     setEditForm({
       name: u.name ?? '', email: u.email ?? '', externalId: u.externalId ?? '', role: u.role ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
-      additionalDepartmentIds: (u.additionalDepartmentIds ?? []) as string[],
       managerId: u.managerId ?? '',
-      managerIds: (u.managerIds ?? (u.managerId ? [u.managerId] : [])) as string[],
-      primaryManagerId: u.managerId ?? '',
-      secondaryManagerId: u.secondaryManagerId ?? '',
-      tertiaryManagerId: u.tertiaryManagerId ?? '',
-      quaternaryManagerId: u.quaternaryManagerId ?? '',
       location: u.location ?? '', businessUnit: u.businessUnit ?? '', eltLeader: u.eltLeader ?? '',
       hireDate: (u.hireYear ? `${u.hireYear}-${String(u.hireMonth ?? 1).padStart(2, '0')}-${String(u.hireDay ?? 1).padStart(2, '0')}` : ''),
       leaderBadge: u.leaderBadge ?? '',
@@ -112,12 +96,7 @@ export default function Employees() {
       role: editForm.role as any,
       jobTitleId: editForm.jobTitleId || null,
       departmentId: editForm.departmentId || null,
-      additionalDepartmentIds: editForm.additionalDepartmentIds,
-      managerIds: editForm.managerIds,
-      primaryManagerId: editForm.primaryManagerId || null,
-      secondaryManagerId: editForm.secondaryManagerId || null,
-      tertiaryManagerId: editForm.tertiaryManagerId || null,
-      quaternaryManagerId: editForm.quaternaryManagerId || null,
+      managerId: editForm.managerId || null,
       location: editForm.location || null,
       businessUnit: editForm.businessUnit || null,
       eltLeader: editForm.eltLeader || null,
@@ -190,7 +169,7 @@ export default function Employees() {
                 {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
               </select>
             </label>
-            <label className="text-xs text-gray-600">Primary Department
+            <label className="text-xs text-gray-600">Department
               <select value={form.departmentId} onChange={(e) => f({ departmentId: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                 <option value="">—</option>
@@ -299,7 +278,7 @@ export default function Employees() {
                     </select>
                   </td>
 
-                  {/* Manager (primary) — another employee. "+N" = extra managers; manage them in the modal. */}
+                  {/* Manager — another employee. */}
                   <td className="px-3 py-3 text-sm">
                     <div className="flex items-center gap-1">
                       <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })}
@@ -309,9 +288,6 @@ export default function Employees() {
                           <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>
                         ))}
                       </select>
-                      {Array.isArray(user.managerIds) && user.managerIds.length > 1 && (
-                        <span title="Additional managers — edit in the employee modal" className="shrink-0 text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1 py-0.5">+{user.managerIds.length - 1}</span>
-                      )}
                     </div>
                   </td>
 
@@ -404,47 +380,13 @@ export default function Employees() {
                   {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-gray-600">Primary Department
+              <label className="text-xs text-gray-600">Department
                 <select value={editForm.departmentId} onChange={(e) => ef({ departmentId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">—</option>
                   {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </label>
-              <div className="text-xs text-gray-600">Additional Departments
-                <div ref={deptDdRef} className="relative mt-1">
-                  <button type="button" onClick={() => setDeptDdOpen((o) => !o)}
-                    className="w-full text-left px-2 py-1.5 rounded border border-gray-300 text-sm bg-white flex items-center justify-between gap-2 focus:ring-2 focus:ring-blue-500">
-                    <span className="truncate">
-                      {editForm.additionalDepartmentIds.length === 0
-                        ? <span className="text-gray-400">Select teams…</span>
-                        : <span className="text-gray-700">{depts.filter((d: any) => editForm.additionalDepartmentIds.includes(d.id)).map((d: any) => d.name).join(', ')}</span>}
-                    </span>
-                    <span className="shrink-0 text-gray-400">{editForm.additionalDepartmentIds.length > 0 ? `${editForm.additionalDepartmentIds.length} ▾` : '▾'}</span>
-                  </button>
-                  {deptDdOpen && (
-                    <div className="absolute z-20 mt-1 w-full max-h-52 overflow-auto rounded border border-gray-300 bg-white shadow-lg p-2 grid grid-cols-1 gap-y-0.5">
-                      {depts.filter((d: any) => d.id !== editForm.departmentId).map((d: any) => {
-                        const checked = editForm.additionalDepartmentIds.includes(d.id);
-                        return (
-                          <label key={d.id} className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-50 rounded px-1 py-1 cursor-pointer">
-                            <input type="checkbox" checked={checked}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...editForm.additionalDepartmentIds, d.id]
-                                  : editForm.additionalDepartmentIds.filter((x) => x !== d.id);
-                                ef({ additionalDepartmentIds: next });
-                              }}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                            <span className="truncate">{d.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <span className="mt-1 block text-[11px] text-gray-400">Extra teams this person belongs to, beyond their primary department.</span>
-              </div>
               <label className="text-xs text-gray-600">Employee ID
                 <input value={editForm.externalId} onChange={(e) => ef({ externalId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="e.g. A0OT" />
@@ -466,56 +408,10 @@ export default function Employees() {
                 <input value={editForm.businessUnit} onChange={(e) => ef({ businessUnit: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" />
               </label>
-              <div className="text-xs text-gray-600 sm:col-span-2 lg:col-span-3">Managers
-                <input value={managerSearch} onChange={(e) => setManagerSearch(e.target.value)}
-                  placeholder="Search people…"
-                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" />
-                <div className="mt-1 max-h-40 overflow-auto rounded border border-gray-300 p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-1">
-                  {employeesByFirstName.filter((m: any) => m.id !== editUser.id && (editForm.managerIds.includes(m.id) || (nameById.get(m.id) ?? '').toLowerCase().includes(managerSearch.toLowerCase()))).map((m: any) => {
-                    const checked = editForm.managerIds.includes(m.id);
-                    return (
-                      <label key={m.id} className="flex items-center gap-1.5 text-xs text-gray-700">
-                        <input type="checkbox" checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked
-                              ? [...editForm.managerIds, m.id]
-                              : editForm.managerIds.filter((x) => x !== m.id);
-                            const primary = next.includes(editForm.primaryManagerId) ? editForm.primaryManagerId : (next[0] ?? '');
-                            ef({ managerIds: next, primaryManagerId: primary });
-                          }}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                        <span className="truncate">{nameById.get(m.id)}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <span className="mt-1 block text-[11px] text-gray-400">Pick one or more. The primary manager (below) is the one who can place them on the 9 Box.</span>
-              </div>
-              <label className="text-xs text-gray-600">Primary manager
-                <select value={editForm.primaryManagerId} onChange={(e) => ef({ primaryManagerId: e.target.value })}
+              <label className="text-xs text-gray-600">Manager
+                <select value={editForm.managerId} onChange={(e) => ef({ managerId: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">— (top of tree)</option>
-                  {editForm.managerIds.map((mid) => <option key={mid} value={mid}>{nameById.get(mid)}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-gray-600">Secondary supervisor
-                <select value={editForm.secondaryManagerId} onChange={(e) => ef({ secondaryManagerId: e.target.value })}
-                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="">—</option>
-                  {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-gray-600">Tertiary supervisor
-                <select value={editForm.tertiaryManagerId} onChange={(e) => ef({ tertiaryManagerId: e.target.value })}
-                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="">—</option>
-                  {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-gray-600">Quaternary supervisor
-                <select value={editForm.quaternaryManagerId} onChange={(e) => ef({ quaternaryManagerId: e.target.value })}
-                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="">—</option>
                   {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
                 </select>
               </label>

@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
-import { users, userDepartments } from '../db/schema/core.js';
+import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 
@@ -28,15 +28,6 @@ export const profileRouter = router({
     const dept = me.departmentId
       ? await ctx.db.query.departments.findFirst({ where: eq(departments.id, me.departmentId) }) : null;
 
-    // Additional departments (multi-team): resolve each extra departmentId -> name.
-    const addlDeptRows = await ctx.db.select({ departmentId: userDepartments.departmentId })
-      .from(userDepartments).where(eq(userDepartments.userId, me.id));
-    const additionalDepartments: string[] = [];
-    for (const r of addlDeptRows) {
-      const d = await ctx.db.query.departments.findFirst({ where: eq(departments.id, r.departmentId) });
-      if (d?.name) additionalDepartments.push(d.name);
-    }
-    additionalDepartments.sort((a, b) => a.localeCompare(b));
     const mgr = me.managerId
       ? await ctx.db.query.users.findFirst({ where: eq(users.id, me.managerId) }) : null;
 
@@ -86,7 +77,6 @@ export const profileRouter = router({
       title: jt?.title ?? me.title ?? null,
       jobTitle: jt?.title ?? null,
       department: dept?.name ?? null,
-      additionalDepartments,
       reportingLine,
       team: me.team,
       location: me.location,

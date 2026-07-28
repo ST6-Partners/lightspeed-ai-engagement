@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { users, userManagers, userDepartments } from '../db/schema/core.js';
+import { users, userManagers } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
@@ -206,19 +206,17 @@ export const authRouter = router({
   listUsers: protectedProcedure
     .use(requireAdmin)
     .query(async ({ ctx }) => {
-      const [rows, mgrRows, deptRows] = await Promise.all([
+      const [rows, mgrRows] = await Promise.all([
         ctx.db.query.users.findMany({
           columns: {
             id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
             jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
-            secondaryManagerId: true, tertiaryManagerId: true, quaternaryManagerId: true,
             location: true, businessUnit: true, eltLeader: true, hireYear: true, hireMonth: true, hireDay: true,
             connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true,
             lastActiveAt: true, lastLoginAt: true,
           },
         }),
         ctx.db.select({ userId: userManagers.userId, managerId: userManagers.managerId }).from(userManagers),
-        ctx.db.select({ userId: userDepartments.userId, departmentId: userDepartments.departmentId }).from(userDepartments),
       ]);
       const byUser = new Map<string, string[]>();
       for (const m of mgrRows) {
@@ -226,13 +224,7 @@ export const authRouter = router({
         arr.push(m.managerId);
         byUser.set(m.userId, arr);
       }
-      const deptByUser = new Map<string, string[]>();
-      for (const d of deptRows) {
-        const arr = deptByUser.get(d.userId) ?? [];
-        arr.push(d.departmentId);
-        deptByUser.set(d.userId, arr);
-      }
-      return rows.map((u) => ({ ...u, managerIds: byUser.get(u.id) ?? (u.managerId ? [u.managerId] : []), additionalDepartmentIds: deptByUser.get(u.id) ?? [] }));
+      return rows.map((u) => ({ ...u, managerIds: byUser.get(u.id) ?? (u.managerId ? [u.managerId] : []) }));
     }),
 
   // Admin: update a user's app-level fields.
@@ -250,11 +242,7 @@ export const authRouter = router({
       leaderBadge: z.enum(['ELT', 'SLT', 'ST6']).nullable().optional(),
       isHrAccess: z.boolean().optional(),
       managerIds: z.array(z.string().uuid()).optional(),
-      additionalDepartmentIds: z.array(z.string().uuid()).optional(),
       primaryManagerId: z.string().uuid().nullable().optional(),
-      secondaryManagerId: z.string().uuid().nullable().optional(),
-      tertiaryManagerId: z.string().uuid().nullable().optional(),
-      quaternaryManagerId: z.string().uuid().nullable().optional(),
       location: z.string().nullable().optional(),
       businessUnit: z.string().nullable().optional(),
       eltLeader: z.string().nullable().optional(),
@@ -272,7 +260,7 @@ export const authRouter = router({
       if (input.id === ctx.user.id && input.isActive === false) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "You can't set your own account to inactive — you'd be locked out of the app." });
       }
-      const { id, managerIds, additionalDepartmentIds, primaryManagerId, ...rest } = input;
+      const { id, managerIds, primaryManagerId, ...rest } = input;
       const updates: Record<string, unknown> = { ...rest };
       // Manager set: unify legacy single managerId with the new managerIds[] +
       // primaryManagerId. users.managerId stays the PRIMARY (drives the tree).
@@ -326,16 +314,6 @@ export const authRouter = router({
         await ctx.db.delete(userManagers).where(eq(userManagers.userId, id));
         if (managerSet.length) {
           await ctx.db.insert(userManagers).values(managerSet.map((mId) => ({ userId: id, managerId: mId })));
-        }
-      }
-      // Additional departments (multi-team). users.departmentId stays PRIMARY;
-      // this join holds only the EXTRA departments, so drop the primary + dupes.
-      if (additionalDepartmentIds !== undefined) {
-        await ctx.db.delete(userDepartments).where(eq(userDepartments.userId, id));
-        const primaryDeptId = (updates.departmentId as string | null | undefined) ?? user.departmentId ?? null;
-        const deptIds = Array.from(new Set(additionalDepartmentIds)).filter((d) => d !== primaryDeptId);
-        if (deptIds.length) {
-          await ctx.db.insert(userDepartments).values(deptIds.map((departmentId) => ({ userId: id, departmentId })));
         }
       }
       return user;
