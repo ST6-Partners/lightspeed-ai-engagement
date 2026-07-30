@@ -8,13 +8,14 @@
 import { useRef, useState } from 'react';
 import { Upload, ChevronDown, ChevronRight } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
-import { parseCsv } from '../../lib/csv';
 
 const input = 'px-3 py-2 border border-ls-line rounded-md text-sm focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50';
 const lbl = 'block text-xs font-medium text-ls-ink-3 uppercase tracking-wide mb-1';
 
+type SheetReport = { sheet: string; shape: string; rows: number; columns: string[] };
+
 type Result = {
-  shape: string;
+  sheets: SheetReport[];
   periodCreated: boolean;
   replacedMetrics: number;
   columnsDetected: string[];
@@ -24,15 +25,31 @@ type Result = {
   driverMetrics: number;
   overallMetrics: number;
   droppedRows: number;
+  countsWerePercentages: boolean;
   unmatchedStatements: number;
   unmappedDimensions: string[];
 };
 
 const SHAPE_LABEL: Record<string, string> = {
-  'company-statements': 'Company-wide statements',
-  'department-statements': 'Statements broken out by department',
-  'department-scores': 'Department engagement scores',
+  'company-statements': 'company-wide statements',
+  'department-statements': 'statements by department',
+  'department-scores': 'department engagement scores',
+  unrecognised: 'not recognised — skipped',
 };
+
+/** File -> base64 (parsing happens server-side; see services/tableUpload.ts). */
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const res = String(reader.result ?? '');
+      const comma = res.indexOf(',');
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ImportResultsPanel() {
   const utils = trpc.useContext();
@@ -55,11 +72,11 @@ export default function ImportResultsPanel() {
     if (!file) return;
     setBusy(true); setErr(null); setResult(null);
     try {
-      const rows = parseCsv(await file.text());
-      if (rows.length === 0) throw new Error('That file has no data rows.');
+      const base64 = await toBase64(file);
       const res = await importer.mutateAsync({
         period: { label: label.trim(), periodDate, scaleMax: Number(scaleMax) },
-        rows, replace, makeCurrent: false,
+        file: { name: file.name, base64 },
+        replace, makeCurrent: false,
       });
       setResult(res as Result);
       utils.engagementAnalytics.invalidate();
@@ -91,9 +108,10 @@ export default function ImportResultsPanel() {
       {open && (
         <div className="px-5 pb-5 pt-1 border-t border-ls-line">
           <p className="text-[13px] text-ls-ink-2 mt-3 mb-4 max-w-2xl">
-            Export your results from 15Five and upload the file as-is — no need to rearrange
-            columns. Name the survey below and it appears alongside the in-app surveys, with
-            department and statement detail intact.
+            Export your results from 15Five and upload the file as-is — Excel or CSV, no need to
+            rearrange columns. If the workbook has several sheets, they all load in one go. Name the
+            survey below and it appears alongside the in-app surveys, with department and statement
+            detail intact.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-3 mb-4">
@@ -119,10 +137,15 @@ export default function ImportResultsPanel() {
           <label className="flex items-center gap-2 text-[13px] text-ls-ink-2 mb-4">
             <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
             Replace this survey&rsquo;s existing results if it has already been uploaded
-            <span className="text-ls-ink-3">(prevents double-counting)</span>
+            <span className="text-ls-ink-3">(prevents double-counting — untick to add a second file to the same survey)</span>
           </label>
 
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            className="hidden"
+            onChange={onFile} />
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => fileRef.current?.click()}
@@ -140,9 +163,21 @@ export default function ImportResultsPanel() {
           {result && (
             <div className="ls-card p-4 mt-4 border-l-4 border-ls-thrive">
               <p className="text-[13px] font-semibold text-ls-ink-1 mb-2">
-                Imported {SHAPE_LABEL[result.shape] ?? result.shape}
-                {result.periodCreated ? ' — new survey created.' : ' — added to the existing survey.'}
+                Import complete{result.periodCreated ? ' — new survey created.' : ' — added to the existing survey.'}
               </p>
+              {result.sheets.length > 0 && (
+                <ul className="text-[12px] text-ls-ink-2 mb-2 space-y-0.5">
+                  {result.sheets.map((sh) => (
+                    <li key={sh.sheet} className={sh.shape === 'unrecognised' ? 'text-ls-ink-3' : ''}>
+                      <b>{sh.sheet}</b> — {SHAPE_LABEL[sh.shape] ?? sh.shape}
+                      {sh.shape !== 'unrecognised' && ` (${sh.rows} row(s))`}
+                      {sh.shape === 'unrecognised' && sh.columns.length > 0 && (
+                        <span className="text-ls-ink-3"> · columns: {sh.columns.join(', ')}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <ul className="text-[12px] text-ls-ink-2 space-y-0.5">
                 <li>{result.statementRows} statement row(s) stored</li>
                 <li>
@@ -151,6 +186,11 @@ export default function ImportResultsPanel() {
                 </li>
                 {result.replacedMetrics > 0 && <li>{result.replacedMetrics} previous figure(s) replaced</li>}
                 {result.droppedRows > 0 && <li>{result.droppedRows} blank/unlabelled row(s) skipped</li>}
+                {result.countsWerePercentages && (
+                  <li className="text-ls-ink-3">
+                    The favorable/neutral/unfavorable columns held percentages, not head counts — read as percentages.
+                  </li>
+                )}
                 {result.unmatchedStatements > 0 && (
                   <li className="text-ls-ink-3">
                     {result.unmatchedStatements} statement(s) didn&rsquo;t match a question in the bank — kept in the

@@ -15,6 +15,7 @@ import {
   detectColumns, detectShape, normalizeRows, mapDimension, statementKey, weightedMean,
   type NormalizedRow,
 } from '../services/fifteenFiveImport.js';
+import { parseUploadedTable } from '../services/tableUpload.js';
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -1032,7 +1033,11 @@ export const engagementAnalyticsRouter = router({
         periodDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'periodDate must be YYYY-MM-DD'),
         scaleMax: z.number().int().min(2).max(11).default(5),
       }),
-      rows: z.array(z.record(z.string(), z.string())).min(1).max(20000),
+      file: z.object({
+        name: z.string().min(1),
+        // base64 of the raw upload; ~25MB of base64 is well past any real export
+        base64: z.string().min(1).max(25_000_000),
+      }),
       replace: z.boolean().default(true),
       makeCurrent: z.boolean().default(false),
     }))
@@ -1040,18 +1045,49 @@ export const engagementAnalyticsRouter = router({
       const role = (ctx.user?.role ?? 'user') as RoleTier;
       if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
 
-      const headers = Object.keys(input.rows[0] ?? {});
-      const cols = detectColumns(headers);
-      const shape = detectShape(cols);
-      if (shape === 'unknown') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Could not recognise this file as a 15Five engagement export. Columns found: ${headers.join(', ') || '(none)'}. It needs at least a statement/question column, or a department/group column with a score.`,
-        });
+      // A workbook may hold several differently-shaped sheets (company
+      // statements, department statements, department scores). Each is detected
+      // and normalised on its own, then merged into one import.
+      let sheets;
+      try {
+        sheets = await parseUploadedTable(input.file.base64, input.file.name);
+      } catch (e) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: e instanceof Error ? e.message : 'Could not read that file.' });
+      }
+      if (sheets.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That file has no data rows.' });
+
+      const norm: NormalizedRow[] = [];
+      const sheetReports: Array<{ sheet: string; shape: string; rows: number; columns: string[] }> = [];
+      const columnsDetected: string[] = [];
+      let dropped = 0;
+      let countsWerePercentages = false;
+
+      for (const sheet of sheets) {
+        const headers = Object.keys(sheet.rows[0] ?? {});
+        const cols = detectColumns(headers);
+        const shape = detectShape(cols);
+        if (shape === 'unknown') {
+          sheetReports.push({ sheet: sheet.sheet, shape: 'unrecognised', rows: 0, columns: headers.slice(0, 30) });
+          continue;
+        }
+        const res = normalizeRows(sheet.rows, cols);
+        norm.push(...res.rows);
+        dropped += res.dropped;
+        countsWerePercentages = countsWerePercentages || res.countsWerePercentages;
+        sheetReports.push({ sheet: sheet.sheet, shape, rows: res.rows.length, columns: [] });
+        for (const [field, header] of Object.entries(cols)) {
+          const line = sheets.length > 1 ? `${sheet.sheet}: ${field} \u2190 "${header}"` : `${field} \u2190 "${header}"`;
+          columnsDetected.push(line);
+        }
       }
 
-      const { rows: norm, dropped, countsWerePercentages } = normalizeRows(input.rows, cols);
-      if (norm.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No usable rows found in that file.' });
+      if (norm.length === 0) {
+        const detail = sheetReports.map((r) => `"${r.sheet}" (columns: ${r.columns.join(', ') || 'none'})`).join('; ');
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Could not recognise any sheet in this file as a 15Five engagement export. Found ${detail}. A sheet needs a statement/question column, or a department/group column with a score.`,
+        });
+      }
 
       // ---- period: reuse by label (case-insensitive) or create ----
       const existing = await ctx.db.query.surveyPeriods.findMany();
@@ -1217,11 +1253,11 @@ export const engagementAnalyticsRouter = router({
       }
 
       return {
-        shape,
+        sheets: sheetReports,
         periodId,
         periodCreated,
         replacedMetrics: replaced,
-        columnsDetected: Object.entries(cols).map(([field, header]) => `${field} ← "${header}"`),
+        columnsDetected,
         statementRows: stmtRows.length,
         metricsAdded: derived.length,
         questionMetrics: questionMetrics.filter((m) => m.dimension === 'question').length,
