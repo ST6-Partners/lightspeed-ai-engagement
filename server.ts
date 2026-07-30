@@ -78,9 +78,21 @@ async function main() {
   }));
 
   // Skip JSON body parsing for file upload routes (handled by express.raw inline)
+  //
+  // /api/trpc gets a much larger limit than everything else because several
+  // procedures accept a base64 file in the request body (assessment PDFs,
+  // 15Five spreadsheet imports). express.json() defaults to 100kb, and when a
+  // body exceeds it Express replies 413 with an HTML error BEFORE tRPC runs —
+  // which surfaces in the client as the opaque "Unable to transform response
+  // from server" (superjson choking on non-JSON), with nothing in the server
+  // logs to point at the size. Base64 also inflates a file by ~33%, so the
+  // effective file ceiling is roughly three quarters of this number.
+  const trpcJson = express.json({ limit: '25mb' });
+  const defaultJson = express.json();
   app.use((req, res, next) => {
     if (req.path === '/api/upload/video') return next();
-    express.json()(req, res, next);
+    if (req.path.startsWith('/api/trpc')) return trpcJson(req, res, next);
+    defaultJson(req, res, next);
   });
 
   // ── Auth — email/password + Postgres-backed sessions ──

@@ -836,6 +836,17 @@ export const orgScreenRouter = router({
       userId: z.string().uuid().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Belt and braces: the express.json limit for /api/trpc is 25mb, which a
+      // base64 payload hits at roughly an 18mb file. Checking here turns a
+      // transport-level 413 into a sentence the user can act on.
+      const approxBytes = Math.floor((input.fileBase64.length * 3) / 4);
+      const MAX_BYTES = 18 * 1024 * 1024;
+      if (approxBytes > MAX_BYTES) {
+        throw new TRPCError({
+          code: 'PAYLOAD_TOO_LARGE',
+          message: `"${input.fileName}" is ${(approxBytes / 1024 / 1024).toFixed(1)}MB — the limit is 18MB. Assessment reports are normally well under 5MB, so check this is the right file.`,
+        });
+      }
       const parsed = await parseAssessmentPdf(input.fileBase64, input.fileName, input.kind as AssessmentKind | undefined);
 
       // Attribution safety net: warn (never block) when the name printed on the
