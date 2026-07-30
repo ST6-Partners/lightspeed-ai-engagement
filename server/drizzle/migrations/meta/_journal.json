@@ -659,6 +659,13 @@
       "when": 1784836202989,
       "tag": "0092_aie_cadence_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1784836203989,
+      "tag": "0093_aie_cadence_auto_advance",
+      "breakpoints": true
     }
   ]
 }

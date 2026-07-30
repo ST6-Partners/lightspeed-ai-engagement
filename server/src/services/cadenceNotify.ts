@@ -17,7 +17,7 @@ import { users } from '../db/schema/core.js';
 import { nineBoxRatings, priorities } from '../db/schema/orgScreen.js';
 import { reviews } from '../db/schema/reviews.js';
 import { cadenceSettings } from '../db/schema/cadence.js';
-import { periodStart, statusFor, type Cadence } from '../routers/cadence.js';
+import { periodStart, periodKeyLabel, statusFor, type Cadence } from '../routers/cadence.js';
 
 type Activity = 'ninebox' | 'priorities' | 'reviews';
 
@@ -62,32 +62,47 @@ async function handler(): Promise<JobResult> {
   const now = new Date();
   let affected = 0;
 
-  const notifyOnce = async (ownerId: string, targetId: string, activity: Activity, message: string) => {
+  const notifyOnce = async (ownerId: string, targetId: string, activity: Activity, type: 'cadence_overdue' | 'cadence_new_period', message: string) => {
     const start = periodStart(cad[activity], now);
+    // Dedup across BOTH cadence types for the same owner+target+activity within
+    // the current period, so a person gets at most one cadence ping per period.
     const existing = await db.query.notifications.findFirst({
       where: and(
         eq(notifications.userId, ownerId),
-        eq(notifications.type, 'cadence_overdue'),
+        inArray(notifications.type, ['cadence_overdue', 'cadence_new_period']),
         eq(notifications.referenceType, activity),
         eq(notifications.referenceId, targetId),
         gte(notifications.createdAt, start),
       ),
     });
     if (existing) return;
-    await db.insert(notifications).values({ userId: ownerId, type: 'cadence_overdue', referenceType: activity, referenceId: targetId, message });
+    await db.insert(notifications).values({ userId: ownerId, type, referenceType: activity, referenceId: targetId, message });
     affected += 1;
   };
 
+  const lbl = {
+    ninebox: periodKeyLabel(cad.ninebox, now).label,
+    reviews: periodKeyLabel(cad.reviews, now).label,
+    priorities: periodKeyLabel(cad.priorities, now).label,
+  };
   for (const u of activeUsers) {
-    if (statusFor(nb.get(u.id) ?? null, cad.ninebox, now) === 'overdue' && u.managerId && activeSet.has(u.managerId)) {
-      await notifyOnce(u.managerId, u.id, 'ninebox', `9 Box rating for ${nameById.get(u.id)} is overdue.`);
+    const name = nameById.get(u.id);
+    // 9 Box -> manager
+    const nbSt = statusFor(nb.get(u.id) ?? null, cad.ninebox, now);
+    if ((nbSt === 'due' || nbSt === 'overdue') && u.managerId && activeSet.has(u.managerId)) {
+      if (nbSt === 'overdue') await notifyOnce(u.managerId, u.id, 'ninebox', 'cadence_overdue', `9 Box rating for ${name} is overdue (${lbl.ninebox}).`);
+      else await notifyOnce(u.managerId, u.id, 'ninebox', 'cadence_new_period', `New period ${lbl.ninebox} — a 9 Box rating for ${name} is now due.`);
     }
-    if (statusFor(rv.get(u.id) ?? null, cad.reviews, now) === 'overdue' && u.managerId && activeSet.has(u.managerId)) {
-      await notifyOnce(u.managerId, u.id, 'reviews', `Performance review for ${nameById.get(u.id)} is overdue.`);
+    // Reviews -> manager
+    const rvSt = statusFor(rv.get(u.id) ?? null, cad.reviews, now);
+    if ((rvSt === 'due' || rvSt === 'overdue') && u.managerId && activeSet.has(u.managerId)) {
+      if (rvSt === 'overdue') await notifyOnce(u.managerId, u.id, 'reviews', 'cadence_overdue', `Performance review for ${name} is overdue (${lbl.reviews}).`);
+      else await notifyOnce(u.managerId, u.id, 'reviews', 'cadence_new_period', `New period ${lbl.reviews} — a review for ${name} is now due.`);
     }
-    if (statusFor(pr.get(u.id) ?? null, cad.priorities, now) === 'overdue') {
-      await notifyOnce(u.id, u.id, 'priorities', 'Your priorities are overdue — please update them.');
-    }
+    // Priorities -> self
+    const prSt = statusFor(pr.get(u.id) ?? null, cad.priorities, now);
+    if (prSt === 'overdue') await notifyOnce(u.id, u.id, 'priorities', 'cadence_overdue', `Your priorities are overdue (${lbl.priorities}) — please update them.`);
+    else if (prSt === 'due') await notifyOnce(u.id, u.id, 'priorities', 'cadence_new_period', `New period ${lbl.priorities} — set your priorities.`);
   }
   return { affected, details: `Created ${affected} overdue notification(s).` };
 }

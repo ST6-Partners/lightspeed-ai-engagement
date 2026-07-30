@@ -13,7 +13,7 @@
 // "overdue" = none this period AND none last period (or never).
 // ============================================================
 import { z } from 'zod';
-import { inArray } from 'drizzle-orm';
+import { inArray, eq } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireAdmin } from '../services/permissions.js';
 import { cadenceSettings } from '../db/schema/cadence.js';
@@ -54,6 +54,22 @@ export function statusFor(last: Date | null, c: Cadence, now: Date): CadenceStat
   return 'overdue';
 }
 
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Stable key + human label for the calendar period containing `d`.
+export function periodKeyLabel(c: Cadence, d: Date): { key: string; label: string } {
+  const s = periodStart(c, d);
+  const y = s.getUTCFullYear();
+  const m = s.getUTCMonth();
+  if (c === 'weekly') {
+    const key = `W-${y}-${String(m + 1).padStart(2, '0')}-${String(s.getUTCDate()).padStart(2, '0')}`;
+    return { key, label: `Week of ${MON[m]} ${s.getUTCDate()}, ${y}` };
+  }
+  if (c === 'monthly') return { key: `${y}-M${String(m + 1).padStart(2, '0')}`, label: `${MON[m]} ${y}` };
+  if (c === 'quarterly') { const q = Math.floor(m / 3) + 1; return { key: `${y}-Q${q}`, label: `Q${q} ${y}` }; }
+  if (c === 'semiannual') { const h = m < 6 ? 1 : 2; return { key: `${y}-H${h}`, label: `H${h} ${y}` }; }
+  return { key: `${y}`, label: `${y}` };
+}
+
 async function ensureSettings(db: any) {
   const existing = await db.query.cadenceSettings.findFirst();
   if (existing) return existing;
@@ -83,6 +99,7 @@ export const cadenceRouter = router({
       ninebox: cadenceEnum.optional(),
       priorities: cadenceEnum.optional(),
       reviews: cadenceEnum.optional(),
+      autoAdvance: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const cur = await ensureSettings(ctx.db);
@@ -90,7 +107,21 @@ export const cadenceRouter = router({
       if (input.ninebox) patch.nineboxCadence = input.ninebox;
       if (input.priorities) patch.prioritiesCadence = input.priorities;
       if (input.reviews) patch.reviewsCadence = input.reviews;
-      const { eq } = await import('drizzle-orm');
+      if (input.autoAdvance !== undefined) {
+        patch.autoAdvance = input.autoAdvance;
+        const now = new Date();
+        if (input.autoAdvance === false) {
+          // Freeze each activity's active period at the current calendar period.
+          patch.nineboxActiveKey = periodKeyLabel((input.ninebox ?? cur.nineboxCadence) as Cadence, now).key;
+          patch.prioritiesActiveKey = periodKeyLabel((input.priorities ?? cur.prioritiesCadence) as Cadence, now).key;
+          patch.reviewsActiveKey = periodKeyLabel((input.reviews ?? cur.reviewsCadence) as Cadence, now).key;
+        } else {
+          // Auto mode ignores the frozen keys.
+          patch.nineboxActiveKey = null;
+          patch.prioritiesActiveKey = null;
+          patch.reviewsActiveKey = null;
+        }
+      }
       const [row] = await ctx.db.update(cadenceSettings).set(patch)
         .where(eq(cadenceSettings.id, cur.id)).returning();
       await auditChange(ctx.db, ctx.user.id, cur.id, 'cadence_settings', 'update');
@@ -126,5 +157,46 @@ export const cadenceRouter = router({
         reviews: statusFor(rv.get(id) ?? null, cadences.reviews, now),
       }));
       return { cadence: cadences, people };
+    }),
+
+  // Active period per activity (respects auto_advance). In auto mode the active
+  // period is the calendar-current one; in manual mode it is the frozen key
+  // until an admin advances it. `behind` = a newer calendar period is available.
+  currentPeriods: protectedProcedure.query(async ({ ctx }) => {
+    const s = await ensureSettings(ctx.db);
+    const now = new Date();
+    const auto = s.autoAdvance ?? true;
+    const mk = (c: Cadence, storedKey: string | null) => {
+      const cal = periodKeyLabel(c, now);
+      if (auto || !storedKey) return { cadence: c, activeKey: cal.key, activeLabel: cal.label, calendarKey: cal.key, calendarLabel: cal.label, behind: false };
+      return { cadence: c, activeKey: storedKey, activeLabel: storedKey === cal.key ? cal.label : storedKey, calendarKey: cal.key, calendarLabel: cal.label, behind: storedKey !== cal.key };
+    };
+    return {
+      autoAdvance: auto,
+      ninebox: mk(s.nineboxCadence as Cadence, s.nineboxActiveKey),
+      priorities: mk(s.prioritiesCadence as Cadence, s.prioritiesActiveKey),
+      reviews: mk(s.reviewsCadence as Cadence, s.reviewsActiveKey),
+    };
+  }),
+
+  // Manual-mode: advance one activity's active period to the current calendar period.
+  advancePeriod: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ activity: z.enum(['ninebox', 'priorities', 'reviews']) }))
+    .mutation(async ({ ctx, input }) => {
+      const s = await ensureSettings(ctx.db);
+      const now = new Date();
+      const cadOf: Record<string, Cadence> = {
+        ninebox: s.nineboxCadence as Cadence,
+        priorities: s.prioritiesCadence as Cadence,
+        reviews: s.reviewsCadence as Cadence,
+      };
+      const key = periodKeyLabel(cadOf[input.activity], now).key;
+      const col: Record<string, string> = { ninebox: 'nineboxActiveKey', priorities: 'prioritiesActiveKey', reviews: 'reviewsActiveKey' };
+      const [row] = await ctx.db.update(cadenceSettings)
+        .set({ [col[input.activity]]: key, updatedAt: new Date() })
+        .where(eq(cadenceSettings.id, s.id)).returning();
+      await auditChange(ctx.db, ctx.user.id, s.id, 'cadence_settings', 'update');
+      return row;
     }),
 });
