@@ -11,6 +11,10 @@ import { engagementImportRows } from '../db/schema/engagementImportRows.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { eq } from 'drizzle-orm';
+import {
+  detectColumns, detectShape, normalizeRows, mapDimension, statementKey, weightedMean,
+  type NormalizedRow,
+} from '../services/fifteenFiveImport.js';
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -1008,4 +1012,225 @@ export const engagementAnalyticsRouter = router({
       return { periodsCreated, metricsAdded, skipped, errors: errors.slice(0, 50) };
     }),
 
+
+  // ------------------------------------------------------------
+  // Import a RAW 15Five export (admin). Unlike importHistorical above — which
+  // needs a CSV already reshaped into this app's internal column names — this
+  // reads the export as 15Five emits it, creates/reuses the period inline, and
+  // writes BOTH levels of data:
+  //   • engagement_import_rows — statement level, so the drill-down tabs work
+  //     on imported periods the same way they do on live ones. Previously this
+  //     table was only ever populated by hand-written migrations.
+  //   • survey_metrics — the derived overall/driver/question aggregates the
+  //     results tabs read.
+  // Re-importing the same period replaces its data rather than duplicating it.
+  // ------------------------------------------------------------
+  importSurveyExport: protectedProcedure
+    .input(z.object({
+      period: z.object({
+        label: z.string().trim().min(1).max(80),
+        periodDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'periodDate must be YYYY-MM-DD'),
+        scaleMax: z.number().int().min(2).max(11).default(5),
+      }),
+      rows: z.array(z.record(z.string(), z.string())).min(1).max(20000),
+      replace: z.boolean().default(true),
+      makeCurrent: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+
+      const headers = Object.keys(input.rows[0] ?? {});
+      const cols = detectColumns(headers);
+      const shape = detectShape(cols);
+      if (shape === 'unknown') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Could not recognise this file as a 15Five engagement export. Columns found: ${headers.join(', ') || '(none)'}. It needs at least a statement/question column, or a department/group column with a score.`,
+        });
+      }
+
+      const { rows: norm, dropped, countsWerePercentages } = normalizeRows(input.rows, cols);
+      if (norm.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No usable rows found in that file.' });
+
+      // ---- period: reuse by label (case-insensitive) or create ----
+      const existing = await ctx.db.query.surveyPeriods.findMany();
+      const match = existing.find((p) => p.label.trim().toLowerCase() === input.period.label.toLowerCase());
+      let periodId: string;
+      let periodCreated = false;
+      let replaced = 0;
+
+      if (match) {
+        periodId = match.id;
+        await ctx.db.update(surveyPeriods)
+          .set({ periodDate: input.period.periodDate, scaleMax: input.period.scaleMax, source: 'import' })
+          .where(eq(surveyPeriods.id, periodId));
+        if (input.replace) {
+          const oldMetrics = await ctx.db.select({ id: surveyMetrics.id }).from(surveyMetrics).where(eq(surveyMetrics.periodId, periodId));
+          replaced = oldMetrics.length;
+          await ctx.db.delete(surveyMetrics).where(eq(surveyMetrics.periodId, periodId));
+          await ctx.db.delete(engagementImportRows).where(eq(engagementImportRows.periodId, periodId));
+        }
+      } else {
+        const [created] = await ctx.db.insert(surveyPeriods).values({
+          label: input.period.label,
+          periodDate: input.period.periodDate,
+          scaleMax: input.period.scaleMax,
+          source: 'import',
+          isCurrent: false,
+          status: 'closed',
+        }).returning();
+        periodId = created.id;
+        periodCreated = true;
+      }
+
+      // ---- statement-level rows ----
+      const stmtRows = norm.filter((r) => r.statement);
+      const CHUNK = 500;
+      for (let i = 0; i < stmtRows.length; i += CHUNK) {
+        await ctx.db.insert(engagementImportRows).values(stmtRows.slice(i, i + CHUNK).map((r) => ({
+          periodId,
+          scope: r.scope,
+          groupName: r.groupName,
+          dimension: r.dimension,
+          statement: r.statement as string,
+          avgResponse: r.avgResponse != null ? String(r.avgResponse) : null,
+          unfavorable: r.unfavorable,
+          neutral: r.neutral,
+          favorable: r.favorable,
+          noResponse: r.noResponse,
+          totalResponses: r.totalResponses,
+          totalPossible: r.totalPossible,
+          responseRate: r.responseRate != null ? String(r.responseRate) : null,
+        })));
+      }
+
+      // ---- derive aggregates ----
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const bankByText = new Map(qbank.map((q) => [statementKey(q.text), q]));
+
+      type Bucket = { value: number | null; weight: number | null };
+      const driverAgg = new Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>();
+      const overallAgg = new Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>();
+      const questionMetrics: Array<typeof surveyMetrics.$inferInsert> = [];
+      const unmappedDimensions = new Set<string>();
+      let unmatchedStatements = 0;
+
+      const bump = (
+        store: Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>,
+        key: string, r: NormalizedRow,
+      ) => {
+        const cur = store.get(key) ?? { mean: [], fav: [], unfav: [], responses: 0, eligible: null };
+        cur.mean.push({ value: r.avgResponse, weight: r.totalResponses });
+        cur.fav.push({ value: r.favorablePct, weight: r.totalResponses });
+        cur.unfav.push({ value: r.unfavorablePct, weight: r.totalResponses });
+        cur.responses = Math.max(cur.responses, r.totalResponses ?? 0);
+        if (r.totalPossible != null) cur.eligible = Math.max(cur.eligible ?? 0, r.totalPossible);
+        store.set(key, cur);
+      };
+      const scopeKey = (r: NormalizedRow) => `${r.scope}|${r.groupName ?? ''}`;
+
+      for (const r of norm) {
+        if (!r.statement) {
+          // department-scores shape: the row IS the department overall.
+          if (r.scope === 'department') {
+            const pctVal = r.score ?? r.favorablePct;
+            questionMetrics.push({
+              periodId, scope: 'department', department: r.groupName, dimension: 'overall', metricKey: null,
+              mean: r.avgResponse != null ? String(r.avgResponse) : null,
+              favorablePct: pctVal != null ? String(pctVal) : null,
+              unfavorablePct: r.unfavorablePct != null ? String(r.unfavorablePct) : null,
+              responseCount: r.totalResponses ?? 0,
+              eligibleCount: r.totalPossible,
+            });
+          }
+          continue;
+        }
+
+        const hit = bankByText.get(statementKey(r.statement));
+        if (hit) {
+          questionMetrics.push({
+            periodId, scope: r.scope, department: r.scope === 'department' ? r.groupName : null,
+            dimension: 'question', metricKey: hit.id,
+            mean: r.avgResponse != null ? String(r.avgResponse) : null,
+            favorablePct: r.favorablePct != null ? String(r.favorablePct) : null,
+            unfavorablePct: r.unfavorablePct != null ? String(r.unfavorablePct) : null,
+            responseCount: r.totalResponses ?? 0,
+            eligibleCount: r.totalPossible,
+          });
+        } else {
+          unmatchedStatements++;
+        }
+
+        const driverKey = (hit?.driver as string | null | undefined) ?? mapDimension(r.dimension);
+        if (driverKey) bump(driverAgg, `${scopeKey(r)}|${driverKey}`, r);
+        else if (r.dimension) unmappedDimensions.add(r.dimension);
+
+        bump(overallAgg, scopeKey(r), r);
+      }
+
+      const derived: Array<typeof surveyMetrics.$inferInsert> = [...questionMetrics];
+
+      for (const [key, agg] of driverAgg.entries()) {
+        const [scope, group, driverKey] = key.split('|');
+        derived.push({
+          periodId, scope, department: scope === 'department' ? (group || null) : null,
+          dimension: 'driver', metricKey: driverKey,
+          mean: weightedMean(agg.mean) != null ? String(weightedMean(agg.mean)) : null,
+          favorablePct: weightedMean(agg.fav) != null ? String(weightedMean(agg.fav)) : null,
+          unfavorablePct: weightedMean(agg.unfav) != null ? String(weightedMean(agg.unfav)) : null,
+          responseCount: agg.responses,
+          eligibleCount: agg.eligible,
+        });
+      }
+
+      let companyResponses = 0;
+      let companyEligible: number | null = null;
+      for (const [key, agg] of overallAgg.entries()) {
+        const [scope, group] = key.split('|');
+        if (scope === 'company') { companyResponses = agg.responses; companyEligible = agg.eligible; }
+        derived.push({
+          periodId, scope, department: scope === 'department' ? (group || null) : null,
+          dimension: 'overall', metricKey: null,
+          mean: weightedMean(agg.mean) != null ? String(weightedMean(agg.mean)) : null,
+          favorablePct: weightedMean(agg.fav) != null ? String(weightedMean(agg.fav)) : null,
+          unfavorablePct: weightedMean(agg.unfav) != null ? String(weightedMean(agg.unfav)) : null,
+          responseCount: agg.responses,
+          eligibleCount: agg.eligible,
+        });
+      }
+
+      for (let i = 0; i < derived.length; i += CHUNK) {
+        await ctx.db.insert(surveyMetrics).values(derived.slice(i, i + CHUNK));
+      }
+
+      // Keep the period header honest about participation.
+      if (companyResponses > 0 || companyEligible != null) {
+        await ctx.db.update(surveyPeriods).set({
+          responseCount: companyResponses,
+          eligibleCount: companyEligible ?? 0,
+        }).where(eq(surveyPeriods.id, periodId));
+      }
+      if (input.makeCurrent) {
+        await ctx.db.update(surveyPeriods).set({ isCurrent: false });
+        await ctx.db.update(surveyPeriods).set({ isCurrent: true }).where(eq(surveyPeriods.id, periodId));
+      }
+
+      return {
+        shape,
+        periodId,
+        periodCreated,
+        replacedMetrics: replaced,
+        columnsDetected: Object.entries(cols).map(([field, header]) => `${field} ← "${header}"`),
+        statementRows: stmtRows.length,
+        metricsAdded: derived.length,
+        questionMetrics: questionMetrics.filter((m) => m.dimension === 'question').length,
+        driverMetrics: driverAgg.size,
+        overallMetrics: overallAgg.size,
+        droppedRows: dropped,
+        countsWerePercentages,
+        unmatchedStatements,
+        unmappedDimensions: [...unmappedDimensions].slice(0, 25),
+      };
+    }),
 });

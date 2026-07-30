@@ -8,6 +8,8 @@ import { trpc } from '../lib/trpc';
 import SurveyForm from '../components/engagement/SurveyForm';
 import { ResultsSummary, ResultsDrivers } from '../components/engagement/Results';
 import { ResultsStatements, ResultsEngagement, ResultsHeatmap, ResultsEnps, ResultsFeedback } from '../components/engagement/ResultsTabs';
+import ImportResultsPanel from '../components/engagement/ImportResultsPanel';
+import { hasMinRole, type RoleTier } from '../lib/access';
 
 const TABS = ['Summary', 'Engagement', 'Drivers', 'Statements', 'Heatmap', 'eNPS', 'Feedback'] as const;
 type Tab = (typeof TABS)[number];
@@ -58,6 +60,8 @@ export default function EngagementSurvey() {
   const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: progressPeriod, groupBy }, { enabled: view === 'landing' });
   const groups = trpc.engagementAnalytics.groups.useQuery(undefined, { enabled: view === 'analytics' });
   const fopts = trpc.engagementAnalytics.filterOptions.useQuery(undefined, { enabled: view === 'analytics' });
+  const me = trpc.auth.me.useQuery();
+  const isAdmin = hasMinRole((me.data?.role ?? 'user') as RoleTier, 'admin');
   const filtered = trpc.engagementAnalytics.filtered.useQuery(activeFilters, { enabled: view === 'analytics' });
   const suppressed = filtered.data?.suppressed === true;
   useEffect(() => { if (suppressed && anyFilter) setShowSuppress(true); }, [suppressed, anyFilter]);
@@ -173,6 +177,8 @@ export default function EngagementSurvey() {
             <p className="text-[11.5px] text-ls-ink-3 mt-2">Cost Centers grouping is intentionally omitted (not in the org data model).</p>
           </>
         )}
+
+        {isAdmin && <ImportResultsPanel />}
       </div>
     );
   }

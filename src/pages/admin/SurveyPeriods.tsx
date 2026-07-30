@@ -37,9 +37,16 @@ export default function SurveyPeriods() {
   return (
     <div className="max-w-3xl">
       <h2 className="text-lg font-bold text-ls-ink-1 mb-1">Survey Periods</h2>
-      <p className="text-[13px] text-ls-ink-3 mb-4">
+      <p className="text-[13px] text-ls-ink-3 mb-3">
         Open the engagement survey for a period. It’s locked before the release date and after the close date, and each person can take it once per period. Managed by HR / ELT only.
       </p>
+
+      <div className="ls-card p-3 mb-5 border-l-4 border-ls-blue text-[12.5px] text-ls-ink-2">
+        <b>Engagement surveys do not roll over automatically.</b> The quarterly auto-advance setting
+        (Admin &rarr; Cadence) governs 9-box, priorities, and reviews — not this. Every new engagement
+        survey is created here, by hand. Historical results uploaded on the Engagement Surveys page get
+        their own period automatically and appear in this list as closed.
+      </div>
 
       <div className="ls-card p-4 mb-5">
         <h3 className="text-sm font-bold text-ls-ink-1 mb-3">New period</h3>
