@@ -398,13 +398,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadIsCurrent ? cadenceForTab(p.id) : undefined} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadIsCurrent ? cadenceForTab(p.id) : undefined} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>
