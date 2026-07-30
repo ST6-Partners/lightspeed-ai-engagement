@@ -9,6 +9,7 @@ import SurveyForm from '../components/engagement/SurveyForm';
 import { ResultsSummary, ResultsDrivers } from '../components/engagement/Results';
 import { ResultsStatements, ResultsEngagement, ResultsHeatmap, ResultsEnps, ResultsFeedback } from '../components/engagement/ResultsTabs';
 import ImportResultsPanel from '../components/engagement/ImportResultsPanel';
+import VerifyImportPanel from '../components/engagement/VerifyImportPanel';
 import { hasMinRole, type RoleTier } from '../lib/access';
 
 const TABS = ['Summary', 'Engagement', 'Drivers', 'Statements', 'Heatmap', 'eNPS', 'Feedback'] as const;
@@ -179,6 +180,10 @@ export default function EngagementSurvey() {
         )}
 
         {isAdmin && <ImportResultsPanel onOpenSurvey={openPeriod} />}
+        {isAdmin && hasData && data.periods.some((p) => p.id !== 'live') && (
+          <VerifyImportPanel
+            periods={data.periods.filter((p) => p.id !== 'live').map((p) => ({ id: p.id, label: p.label }))} />
+        )}
       </div>
     );
   }

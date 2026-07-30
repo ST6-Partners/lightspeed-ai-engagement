@@ -123,7 +123,7 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
           </p>
         </div>
         <span className="flex items-center gap-2">
-          <span className="ls-chip bg-ls-bg-2 text-ls-ink-3 font-mono text-[10px]">importer v4</span>
+          <span className="ls-chip bg-ls-bg-2 text-ls-ink-3 font-mono text-[10px]">importer v5</span>
           <span className="ls-chip bg-ls-bg-2 text-ls-ink-2">Admin</span>
         </span>
       </button>

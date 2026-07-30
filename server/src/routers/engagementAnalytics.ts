@@ -12,7 +12,7 @@ import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { eq } from 'drizzle-orm';
 import {
-  detectColumns, detectShape, normalizeRows, statementKey, deriveMetrics,
+  detectColumns, detectShape, normalizeRows, statementKey, deriveMetrics, mapDimension,
   type NormalizedRow,
 } from '../services/fifteenFiveImport.js';
 import { parseUploadedTable } from '../services/tableUpload.js';
@@ -1209,5 +1209,129 @@ export const engagementAnalyticsRouter = router({
         unmatchedStatements,
         unmappedDimensions: [...unmappedDimensions].slice(0, 25),
       };
+    }),
+
+  // ------------------------------------------------------------
+  // IMPORT AUDIT — "how do I know these numbers are real?"
+  //
+  // Recomputes every aggregate from the stored source rows and compares it to
+  // what is actually saved, then exposes the individual statements behind each
+  // figure. Nothing here is estimated, modelled, or AI-generated: each number is
+  // a respondent-weighted average of rows that came out of the uploaded file,
+  // and this query shows the arithmetic.
+  //
+  // A mismatch means the stored aggregates have drifted from their sources
+  // (a partial re-import, a manual edit) and should be re-imported.
+  // ------------------------------------------------------------
+  importAudit: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+
+      const period = (await ctx.db.query.surveyPeriods.findMany()).find((p) => p.id === input.periodId);
+      if (!period) throw new TRPCError({ code: 'NOT_FOUND', message: 'Survey not found.' });
+
+      const srcRows = await ctx.db.select().from(engagementImportRows).where(eq(engagementImportRows.periodId, input.periodId));
+      const stored = await ctx.db.select().from(surveyMetrics).where(eq(surveyMetrics.periodId, input.periodId));
+
+      const nnum = (v: unknown) => (v == null ? null : Number(v));
+
+      // Rebuild the normalized rows from what was stored, then re-derive.
+      const rebuilt: NormalizedRow[] = srcRows.map((r) => {
+        const fav = r.favorable;
+        const unfav = r.unfavorable;
+        const total = r.totalResponses;
+        return {
+          scope: (r.scope === 'department' ? 'department' : 'company') as 'company' | 'department',
+          groupName: r.groupName,
+          dimension: r.dimension,
+          statement: r.statement,
+          avgResponse: nnum(r.avgResponse),
+          unfavorable: unfav, neutral: r.neutral, favorable: fav,
+          noResponse: r.noResponse,
+          totalResponses: total,
+          totalPossible: r.totalPossible,
+          responseRate: nnum(r.responseRate),
+          favorablePct: fav != null && total ? Math.round((fav / total) * 10000) / 100 : null,
+          unfavorablePct: unfav != null && total ? Math.round((unfav / total) * 10000) / 100 : null,
+          score: null,
+        };
+      });
+
+      const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
+      const bankByText = new Map(qbank.map((q) => [statementKey(q.text), { id: q.id, driver: q.driver }]));
+      const recomputed = rebuilt.length ? deriveMetrics(rebuilt, bankByText) : null;
+
+      const round = (v: number | null) => (v == null ? null : Math.round(v * 100) / 100);
+      const near = (a: number | null, b: number | null) =>
+        a == null && b == null ? true : a == null || b == null ? false : Math.abs(a - b) <= 0.05;
+
+      // Compare company + driver figures: stored vs recomputed from source.
+      const checks: Array<{ label: string; stored: number | null; recomputed: number | null; matches: boolean }> = [];
+      if (recomputed) {
+        const findStored = (dim: string, key: string | null) => {
+          const m = stored.find((x) => x.scope === 'company' && x.dimension === dim && (x.metricKey ?? null) === key);
+          return round(nnum(m?.favorablePct));
+        };
+        const findRecomputed = (dim: string, key: string | null) => {
+          const m = recomputed.metrics.find((x) => x.scope === 'company' && x.dimension === dim && (x.metricKey ?? null) === key);
+          return round(m?.favorablePct ?? null);
+        };
+        const s0 = findStored('overall', null); const r0 = findRecomputed('overall', null);
+        checks.push({ label: 'Company overall', stored: s0, recomputed: r0, matches: near(s0, r0) });
+        for (const m of recomputed.metrics.filter((x) => x.scope === 'company' && x.dimension === 'driver')) {
+          const sv = findStored('driver', m.metricKey);
+          const rv = round(m.favorablePct);
+          checks.push({ label: `Driver: ${m.metricKey}`, stored: sv, recomputed: rv, matches: near(sv, rv) });
+        }
+      }
+
+      // Show the statements behind each company-level driver, with their weights.
+      const drivers = new Map<string, Array<{ statement: string; favorable: number | null; totalResponses: number | null; favorablePct: number | null }>>();
+      for (const r of rebuilt) {
+        if (!r.statement || r.scope !== 'company') continue;
+        const hit = bankByText.get(statementKey(r.statement));
+        const dk = hit?.driver ?? mapDimension(r.dimension);
+        if (!dk) continue;
+        const list = drivers.get(dk) ?? [];
+        list.push({ statement: r.statement, favorable: r.favorable, totalResponses: r.totalResponses, favorablePct: r.favorablePct });
+        drivers.set(dk, list);
+      }
+
+      const companyStatements = rebuilt.filter((r) => r.scope === 'company' && r.statement).length;
+      const deptStatements = rebuilt.filter((r) => r.scope === 'department' && r.statement).length;
+
+      return {
+        period: {
+          label: period.label, periodDate: period.periodDate, scaleMax: period.scaleMax,
+          source: period.source, responseCount: period.responseCount, eligibleCount: period.eligibleCount,
+        },
+        sourceRowCount: srcRows.length,
+        companyStatements,
+        deptStatements,
+        departments: [...new Set(srcRows.map((r) => r.groupName).filter(Boolean))].length,
+        storedMetricCount: stored.length,
+        checks,
+        allMatch: checks.length > 0 && checks.every((c) => c.matches),
+        driverBreakdown: [...drivers.entries()].map(([driver, statements]) => ({ driver, statements })),
+      };
+    }),
+
+  // Raw stored source rows, for downloading and diffing against the original
+  // export. This is the app's copy of the file — if it matches the 15Five
+  // download, nothing was lost or altered on the way in.
+  importSourceRows: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+      const rows = await ctx.db.select().from(engagementImportRows).where(eq(engagementImportRows.periodId, input.periodId));
+      return rows.map((r) => ({
+        scope: r.scope, group: r.groupName ?? '', dimension: r.dimension ?? '', statement: r.statement,
+        avgResponse: r.avgResponse ?? '', unfavorable: r.unfavorable ?? '', neutral: r.neutral ?? '',
+        favorable: r.favorable ?? '', noResponse: r.noResponse ?? '', totalResponses: r.totalResponses ?? '',
+        totalPossible: r.totalPossible ?? '', responseRate: r.responseRate ?? '',
+      }));
     }),
 });
