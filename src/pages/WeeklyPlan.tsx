@@ -121,10 +121,7 @@ export default function WeeklyPlan() {
   const setDone = (i: number, v: boolean) =>
     setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, done: v } : x)));
   const okrDone = (id: string | null) => !!id && (okrs ?? []).find((n) => n.id === id)?.status === 'complete';
-  // Unchecking goes to 'in_progress', not 'not_started'. The work was demonstrably
-  // underway, and not_started drops the OKR progress bar to 0 — so tick-then-untick
-  // used to erase a half-done key result's progress. Mirrors prioritiesToggleDone.
-  const toggleLinked = (id: string, done: boolean) => updateOkr.mutate({ id, status: done ? 'complete' : 'in_progress' });
+  const toggleLinked = (id: string, done: boolean) => updateOkr.mutate({ id, status: done ? 'complete' : 'not_started' });
   const removeRow = (i: number) => setPriorities((p) => p.filter((_, idx) => idx !== i));
   const addOwn = () => setPriorities((p) => [...p, { text: '', okrNodeId: null }]);
   const addFromNode = (id: string, title: string) =>

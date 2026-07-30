@@ -559,17 +559,33 @@ export const orgScreenRouter = router({
       const [updated] = await ctx.db.update(priorities)
         .set({ done: input.done, completedAt: input.done ? new Date() : null })
         .where(eq(priorities.id, input.id)).returning();
-      // Move the linked OKR. Assigned priorities are ALWAYS OKR-linked
-      // (prioritiesAdd requires an okrNodeId), yet this path never touched
-      // okr_nodes — so the one list guaranteed to have an OKR behind it was the
-      // only one that did not move its progress bar, while the free-text weekly
-      // list did via WeeklyPlan's toggleLinked. Un-completing goes to
-      // 'in_progress', not 'not_started': the work was demonstrably underway, and
-      // resetting to not_started would drop the bar to 0 and lose that.
+      // Move the linked OKR — but only ever a LEAF node.
+      //
+      // Okrs.tsx computes progress as a weighted rollup of children, with one
+      // escape hatch: an explicit `complete` on a node returns 100 and overrides
+      // the rollup entirely (OkrAnalytics warns about exactly this — "Marked
+      // complete while key results are still open"). A priority may point at an
+      // objective, not just a key result or task, so writing `complete` here
+      // unconditionally would let one employee ticking one assigned priority slam a
+      // whole objective to 100% with its key results still open. Restricting the
+      // write to leaves means completion flows UP through the rollup instead of
+      // overriding it — which is the intent — and a parent-linked priority simply
+      // records its own done state without faking its children's.
+      //
+      // Un-completing writes `not_started`, matching WeeklyPlan's toggleLinked.
+      // An earlier version used `in_progress` to avoid "losing" progress; that was
+      // wrong — it invents 50% for work that may never have been started, and it
+      // inflates the bar rather than restoring it.
       if (row.okrNodeId) {
-        await ctx.db.update(okrNodes)
-          .set({ status: input.done ? 'complete' : 'in_progress', updatedAt: new Date() })
-          .where(eq(okrNodes.id, row.okrNodeId));
+        const children = await ctx.db.query.okrNodes.findMany({
+          where: and(eq(okrNodes.parentId, row.okrNodeId), isNull(okrNodes.archivedAt)),
+          columns: { id: true },
+        });
+        if (children.length === 0) {
+          await ctx.db.update(okrNodes)
+            .set({ status: input.done ? 'complete' : 'not_started', updatedAt: new Date() })
+            .where(eq(okrNodes.id, row.okrNodeId));
+        }
       }
       return updated;
     }),
