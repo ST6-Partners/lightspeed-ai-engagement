@@ -8,7 +8,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, inArray, asc, desc, and, isNull } from 'drizzle-orm';
+import { eq, inArray, asc, desc, and, isNull, gte, lt } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireManager, requireAdmin, hasMinimumRole } from '../services/permissions.js';
@@ -18,6 +18,14 @@ import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { priorities, nineBoxRatings, engagementSnapshots } from '../db/schema/orgScreen.js';
+import { cadenceSettings } from '../db/schema/cadence.js';
+import { periodKeyLabel, type Cadence } from './cadence.js';
+
+async function currentPrioritiesKey(db: any): Promise<string> {
+  const s = await db.query.cadenceSettings.findFirst();
+  const cad = (s?.prioritiesCadence ?? 'annual') as Cadence;
+  return periodKeyLabel(cad, new Date()).key;
+}
 import {
   assessmentSummaries, assessmentCcatSections, assessmentEppAttributes,
   assessmentInsightProfiles, reviewCycles, reviewValueDetails,
@@ -83,10 +91,12 @@ export const orgScreenRouter = router({
 
   // ---- Priorities tab (read) ----
   prioritiesByUser: protectedProcedure
-    .input(z.object({ userId: z.string().uuid() }))
+    .input(z.object({ userId: z.string().uuid(), periodKey: z.string().max(32).optional() }))
     .query(async ({ ctx, input }) => {
       const rows = await ctx.db.query.priorities.findMany({
-        where: and(eq(priorities.userId, input.userId), isNull(priorities.weekStart)),
+        where: input.periodKey
+          ? and(eq(priorities.userId, input.userId), eq(priorities.periodKey, input.periodKey))
+          : and(eq(priorities.userId, input.userId), isNull(priorities.weekStart)),
         orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
       });
       const nodeIds = rows.map((r) => r.okrNodeId).filter((x): x is string => !!x);
@@ -120,8 +130,9 @@ export const orgScreenRouter = router({
     .mutation(async ({ ctx, input }) => {
       const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
       if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
+      const periodKey = await currentPrioritiesKey(ctx.db);
       const current = await ctx.db.query.priorities.findMany({
-        where: and(eq(priorities.userId, input.userId), isNull(priorities.weekStart)),
+        where: and(eq(priorities.userId, input.userId), eq(priorities.periodKey, periodKey)),
       });
       // Idempotent: same node already a current priority -> return it unchanged.
       const dupe = current.find((p) => p.okrNodeId === input.okrNodeId);
@@ -134,6 +145,7 @@ export const orgScreenRouter = router({
         itemType: node.type, // 'objective' | 'key_result' | 'task'
         okrNodeId: node.id,
         weekStart: null,
+        periodKey,
         sortOrder: current.length,
         assignedBy: ctx.user.id,
         assignedAt: new Date(),
@@ -147,9 +159,13 @@ export const orgScreenRouter = router({
     .mutation(async ({ ctx, input }) => {
       const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
       if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
+      const existing = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const curKey = await currentPrioritiesKey(ctx.db);
+      if (existing.periodKey && existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });
       const [row] = await ctx.db.update(priorities)
         .set({ okrNodeId: node.id, itemType: node.type, assignedBy: ctx.user.id, assignedAt: new Date() })
-        .where(and(eq(priorities.id, input.id), isNull(priorities.weekStart)))
+        .where(eq(priorities.id, input.id))
         .returning();
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       return row;
@@ -159,6 +175,11 @@ export const orgScreenRouter = router({
     .use(requireManager)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (existing?.periodKey) {
+        const curKey = await currentPrioritiesKey(ctx.db);
+        if (existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });
+      }
       await ctx.db.delete(priorities).where(eq(priorities.id, input.id));
       return { ok: true };
     }),
@@ -222,13 +243,17 @@ export const orgScreenRouter = router({
 
   // ---- 9 Box (read + inline rate) ----
   nineboxByIds: protectedProcedure
-    .input(z.object({ ids: z.array(z.string().uuid()) }))
+    .input(z.object({ ids: z.array(z.string().uuid()), startISO: z.string().optional(), endISO: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       if (input.ids.length === 0) return { people: [] };
+      const start = input.startISO ? input.startISO.slice(0, 10) : null;
+      const end = input.endISO ? input.endISO.slice(0, 10) : null;
       const [people, ratings] = await Promise.all([
         ctx.db.query.users.findMany({ where: inArray(users.id, input.ids) }),
         ctx.db.query.nineBoxRatings.findMany({
-          where: inArray(nineBoxRatings.userId, input.ids),
+          where: start && end
+            ? and(inArray(nineBoxRatings.userId, input.ids), gte(nineBoxRatings.ratedAt, start), lt(nineBoxRatings.ratedAt, end))
+            : inArray(nineBoxRatings.userId, input.ids),
           orderBy: [desc(nineBoxRatings.ratedAt)],
         }),
       ]);
@@ -316,6 +341,11 @@ export const orgScreenRouter = router({
   prioritiesRemove: protectedProcedure.use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (existing?.periodKey) {
+        const curKey = await currentPrioritiesKey(ctx.db);
+        if (existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });
+      }
       await ctx.db.delete(priorities).where(eq(priorities.id, input.id));
       return { ok: true };
     }),

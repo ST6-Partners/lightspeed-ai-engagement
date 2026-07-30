@@ -99,6 +99,15 @@ export default function Organization() {
     ? goalPeriodId
     : (goalPeriods.find((p) => p.isCurrent)?.id ?? goalPeriods[0]?.id ?? null);
   const goalPeriodIsCurrent = goalPeriods.find((p) => p.id === effectiveGoalPeriodId)?.isCurrent ?? true;
+  // Cadence calendar periods drive the Priorities & 9 Box selectors (period-
+  // scoped reads + lock aligned to the cadence rollover). OKRs keep goal periods.
+  const cadenceActivity: 'ninebox' | 'priorities' | null = tab === 'ninebox' ? 'ninebox' : tab === 'priorities' ? 'priorities' : null;
+  const { data: cadPeriodOpts } = trpc.cadence.periodOptions.useQuery({ activity: cadenceActivity ?? 'priorities' }, { enabled: !!cadenceActivity });
+  const [cadPeriodKey, setCadPeriodKey] = useState<string | null>(null);
+  const cadCurrent = cadPeriodOpts?.find((p) => p.isCurrent) ?? cadPeriodOpts?.[0];
+  const effectiveCadKey = cadPeriodKey && cadPeriodOpts?.some((p) => p.key === cadPeriodKey) ? cadPeriodKey : cadCurrent?.key;
+  const selectedCadPeriod = cadPeriodOpts?.find((p) => p.key === effectiveCadKey);
+  const cadIsCurrent = selectedCadPeriod?.isCurrent ?? true;
   const chooseGoalPeriod = (id: string) => { setGoalPeriodId(id); ls.set('org.goalPeriod', id); };
 
   // Cadence status (done/due/overdue per activity) for the loaded people, used
@@ -350,7 +359,7 @@ export default function Organization() {
                   </select>
                 </div>
               )}
-              {(tab === 'priorities' || tab === 'okrs' || tab === 'ninebox') && goalPeriods.length > 0 && (
+              {tab === 'okrs' && goalPeriods.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Period</span>
                   <select value={effectiveGoalPeriodId ?? ''} onChange={(e) => chooseGoalPeriod(e.target.value)}
@@ -360,14 +369,24 @@ export default function Organization() {
                   </select>
                 </div>
               )}
+              {(tab === 'priorities' || tab === 'ninebox') && (cadPeriodOpts?.length ?? 0) > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>Period</span>
+                  <select value={effectiveCadKey ?? ''} onChange={(e) => setCadPeriodKey(e.target.value)}
+                    className="text-[12px] font-medium rounded-md"
+                    style={{ color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '5px 8px' }}>
+                    {(cadPeriodOpts ?? []).map((p) => <option key={p.key} value={p.key}>{p.label}{p.isCurrent ? ' (current)' : ''}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
-              {(tab === 'priorities' || tab === 'ninebox') && !goalPeriodIsCurrent && (
-                <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Past period — view-only. (9 Box &amp; Priorities aren’t period-scoped yet, so current data is shown.)</div>
+              {(tab === 'priorities' || tab === 'ninebox') && !cadIsCurrent && (
+                <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Past period — view-only.</div>
               )}
               {tab === 'ninebox' ? (
-                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!goalPeriodIsCurrent} />
+                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!cadIsCurrent} periodStartISO={selectedCadPeriod?.startISO} periodEndISO={selectedCadPeriod?.endISO} />
               ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
@@ -379,13 +398,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !goalPeriodIsCurrent} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !goalPeriodIsCurrent} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>

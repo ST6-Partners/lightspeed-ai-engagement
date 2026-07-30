@@ -20,9 +20,9 @@ const TYPE_ICON: Record<string, typeof Target> = {
 type OkrRow = { id: string; parentId: string | null; type: string; title: string };
 type ModalState = { mode: 'add' } | { mode: 'edit'; id: string; current: string | null } | null;
 
-export default function PrioritiesTab({ employeeId, readOnly }: { employeeId: string; readOnly?: boolean }) {
+export default function PrioritiesTab({ employeeId, readOnly, periodKey }: { employeeId: string; readOnly?: boolean; periodKey?: string }) {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.orgScreen.prioritiesByUser.useQuery({ userId: employeeId });
+  const { data, isLoading, error } = trpc.orgScreen.prioritiesByUser.useQuery({ userId: employeeId, periodKey });
   const { data: me } = trpc.auth.me.useQuery();
   const role = (me as { role?: string } | undefined)?.role ?? 'user';
   const canManage = ['manager', 'admin', 'sysadmin'].includes(role);
@@ -36,11 +36,11 @@ export default function PrioritiesTab({ employeeId, readOnly }: { employeeId: st
     setErr(code === 'FORBIDDEN' ? 'Only managers can set priorities.'
       : (e as { message?: string })?.message ?? 'Could not save.');
   };
-  const done = () => { utils.orgScreen.prioritiesByUser.invalidate({ userId: employeeId }); setModal(null); setErr(null); };
+  const done = () => { utils.orgScreen.prioritiesByUser.invalidate(); setModal(null); setErr(null); };
   const add = trpc.orgScreen.prioritiesAdd.useMutation({ onSuccess: done, onError: onErr });
   const edit = trpc.orgScreen.prioritiesEdit.useMutation({ onSuccess: done, onError: onErr });
   const del = trpc.orgScreen.prioritiesDelete.useMutation({
-    onSuccess: () => utils.orgScreen.prioritiesByUser.invalidate({ userId: employeeId }),
+    onSuccess: () => utils.orgScreen.prioritiesByUser.invalidate(),
     onError: onErr,
   });
 

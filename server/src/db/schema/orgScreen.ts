@@ -26,6 +26,8 @@ export const priorities = pgTable('priorities', {
   okrNodeId: uuid('okr_node_id').references(() => okrNodes.id, { onDelete: 'set null' }),
   ktbrLabel: text('ktbr_label'),                          // set when itemType='ktbr'
   sortOrder: integer('sort_order').notNull().default(0),
+  // Cadence period this priority belongs to (period-scoped reads + lock).
+  periodKey: varchar('period_key', { length: 32 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   // Set when a manager assigns this priority from the Org screen (attribution
   // for the "assigned by your manager" badge in the person's Weekly Plan).

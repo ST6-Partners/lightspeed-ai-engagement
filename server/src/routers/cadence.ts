@@ -70,6 +70,18 @@ export function periodKeyLabel(c: Cadence, d: Date): { key: string; label: strin
   return { key: `${y}`, label: `${y}` };
 }
 
+// Start of the period immediately AFTER the one containing `d` (period end).
+export function nextPeriodStart(c: Cadence, d: Date): Date {
+  const s = periodStart(c, d);
+  const y = s.getUTCFullYear();
+  const m = s.getUTCMonth();
+  if (c === 'weekly') return new Date(s.getTime() + 7 * 86400000);
+  if (c === 'monthly') return new Date(Date.UTC(y, m + 1, 1));
+  if (c === 'quarterly') return new Date(Date.UTC(y, m + 3, 1));
+  if (c === 'semiannual') return new Date(Date.UTC(y, m + 6, 1));
+  return new Date(Date.UTC(y + 1, 0, 1));
+}
+
 async function ensureSettings(db: any) {
   const existing = await db.query.cadenceSettings.findFirst();
   if (existing) return existing;
@@ -198,5 +210,27 @@ export const cadenceRouter = router({
         .where(eq(cadenceSettings.id, s.id)).returning();
       await auditChange(ctx.db, ctx.user.id, s.id, 'cadence_settings', 'update');
       return row;
+    }),
+
+  // Recent calendar periods for an activity's cadence (newest first), for the
+  // Org-screen period selector. Each carries the [startISO, endISO) window.
+  periodOptions: protectedProcedure
+    .input(z.object({ activity: z.enum(['ninebox', 'priorities', 'reviews']), count: z.number().int().min(1).max(24).optional() }))
+    .query(async ({ ctx, input }) => {
+      const s = await ensureSettings(ctx.db);
+      const cad = ({ ninebox: s.nineboxCadence, priorities: s.prioritiesCadence, reviews: s.reviewsCadence } as Record<string, Cadence>)[input.activity];
+      const count = input.count ?? 6;
+      const now = new Date();
+      const curKey = periodKeyLabel(cad, now).key;
+      const out: Array<{ key: string; label: string; startISO: string; endISO: string; isCurrent: boolean }> = [];
+      let d = now;
+      for (let i = 0; i < count; i++) {
+        const st = periodStart(cad, d);
+        const en = nextPeriodStart(cad, d);
+        const { key, label } = periodKeyLabel(cad, d);
+        out.push({ key, label, startISO: st.toISOString(), endISO: en.toISOString(), isCurrent: key === curKey });
+        d = new Date(st.getTime() - 1); // step into the previous period
+      }
+      return out;
     }),
 });

@@ -14,7 +14,7 @@ const perfOf = (b: number) => (b - 1) % 3;
 const potOf = (b: number) => Math.floor((b - 1) / 3);
 const boxOf = (p: number, q: number) => q * 3 + p + 1;
 
-export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly }: {
+export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly, periodStartISO, periodEndISO }: {
   people: Person[];
   allPeople?: Person[];
   scope?: NineScope;
@@ -22,6 +22,8 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
   companyWide?: boolean;
   statusById?: Map<string, 'done' | 'due' | 'overdue'>;
   readOnly?: boolean;
+  periodStartISO?: string;
+  periodEndISO?: string;
 }) {
   const [editing, setEditing] = useState<Person | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -36,13 +38,13 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
 
   const ids = pool.map((p) => p.id);
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids }, { enabled: ids.length > 0 });
+  const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids, startISO: periodStartISO, endISO: periodEndISO }, { enabled: ids.length > 0 });
   const rate = trpc.orgScreen.nineboxRate.useMutation({
-    onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate({ ids }); setEditing(null); },
+    onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate(); setEditing(null); },
     onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'You can only place people in your own reporting line.' : 'Could not save rating.'),
   });
   const clear = trpc.orgScreen.nineboxClear.useMutation({
-    onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate({ ids }); setEditing(null); },
+    onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate(); setEditing(null); },
     onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'You can only place people in your own reporting line.' : 'Could not remove rating.'),
   });
 
