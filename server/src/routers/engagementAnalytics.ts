@@ -10,6 +10,7 @@ import { engagementSurveyResponses } from '../db/schema/engagementSurvey.js';
 import { engagementImportRows } from '../db/schema/engagementImportRows.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
+import { jobTitles } from '../db/schema/jobTitles.js';
 import { eq } from 'drizzle-orm';
 import {
   detectColumns, detectShape, normalizeRows, statementKey, deriveMetrics, mapDimension,
@@ -91,6 +92,8 @@ export const engagementAnalyticsRouter = router({
     const roster = await ctx.db.query.users.findMany();
     const deptRows = await ctx.db.query.departments.findMany();
     const deptName = new Map(deptRows.map((d) => [d.id, d.name]));
+    const titleRows = await ctx.db.select().from(jobTitles);
+    const titleName = new Map(titleRows.map((t) => [t.id, t.title]));
     const active = roster.filter((u) => u.isActive);
     const leaders = ancestorIds.size ? roster : [];
     const hierarchies = leaders
@@ -109,6 +112,7 @@ export const engagementAnalyticsRouter = router({
       genders: uniq([...rows.map((r) => r.gender), ...active.map((u) => u.gender)]),
       ethnicities: uniq([...rows.map((r) => r.ethnicity), ...active.map((u) => u.ethnicity)]),
       ageBands: ['<25', '25-34', '35-44', '45-54', '55-64', '65+'],
+      jobTitles: uniq([...rows.map((r) => r.jobTitle), ...active.map((u) => (u.jobTitleId ? titleName.get(u.jobTitleId) : null))]),
     };
   }),
 
@@ -129,6 +133,7 @@ export const engagementAnalyticsRouter = router({
       gender: z.string().optional(),
       ethnicity: z.string().optional(),
       ageBand: z.string().optional(),
+      jobTitle: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const MIN = 3;
@@ -171,6 +176,7 @@ export const engagementAnalyticsRouter = router({
         if (a < 65) return '55-64';
         return '65+';
       };
+      if (f.jobTitle) rows = rows.filter((r) => eq2(r.jobTitle, f.jobTitle!));
       if (f.gender) rows = rows.filter((r) => eq2(r.gender, f.gender!));
       if (f.ethnicity) rows = rows.filter((r) => eq2(r.ethnicity, f.ethnicity!));
       if (f.ageBand) rows = rows.filter((r) => ageBandOf(r.birthYear) === f.ageBand);

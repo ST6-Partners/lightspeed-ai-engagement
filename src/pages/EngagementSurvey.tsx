@@ -38,24 +38,29 @@ export default function EngagementSurvey() {
   const [groupBy, setGroupBy] = useState<GroupBy>('dept');
   const [progressPeriod, setProgressPeriod] = useState<string | undefined>(undefined);
   const [groupSel, setGroupSel] = useState<string>('all');
-  const [tenureBand, setTenureBand] = useState<string>('');
-  const [ageBand, setAgeBand] = useState<string>('');
+  const [attrSel, setAttrSel] = useState<string>('all');
   const [showSuppress, setShowSuppress] = useState(false);
-  const groupToFilter = (v: string): Record<string, string> => {
+  // One encoding shared by the Groups and Attributes selects: "kind:value".
+  // Groups = where someone sits in the org. Attributes = who they are.
+  const selToFilter = (v: string): Record<string, string> => {
     if (!v || v === 'all') return {};
     const i = v.indexOf(':'); const kind = v.slice(0, i); const val = v.slice(i + 1);
     if (kind === 'elt') return { eltLeader: val };
     if (kind === 'team') return { team: val };
     if (kind === 'dept') return { department: val };
     if (kind === 'bu') return { businessUnit: val };
+    if (kind === 'mgr') return { manager: val };
+    if (kind === 'hier') return { hierarchyUnderId: val };
     if (kind === 'loc') return { location: val };
     if (kind === 'gender') return { gender: val };
     if (kind === 'eth') return { ethnicity: val };
-    if (kind === 'mgr') return { manager: val };
-    if (kind === 'hier') return { hierarchyUnderId: val };
+    if (kind === 'job') return { jobTitle: val };
+    if (kind === 'age') return { ageBand: val };
+    if (kind === 'tenure') return { tenureBand: val };
     return {};
   };
-  const activeFilters: Record<string, string> = { ...groupToFilter(groupSel), ...(tenureBand ? { tenureBand } : {}), ...(ageBand ? { ageBand } : {}) };
+
+  const activeFilters: Record<string, string> = { ...selToFilter(groupSel), ...selToFilter(attrSel) };
   const anyFilter = Object.keys(activeFilters).length > 0;
 
   const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
@@ -237,34 +242,51 @@ export default function EngagementSurvey() {
                 {(fopts.data?.departments?.length ?? 0) > 0 && <optgroup label="Departments">{fopts.data!.departments.map((n) => <option key={`dept:${n}`} value={`dept:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.teams?.length ?? 0) > 0 && <optgroup label="Teams">{fopts.data!.teams.map((n) => <option key={`team:${n}`} value={`team:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.businessUnits?.length ?? 0) > 0 && <optgroup label="Business Units">{fopts.data!.businessUnits.map((n) => <option key={`bu:${n}`} value={`bu:${n}`}>{n}</option>)}</optgroup>}
-                {(fopts.data?.locations?.length ?? 0) > 0 && <optgroup label="Locations">{fopts.data!.locations.map((n) => <option key={`loc:${n}`} value={`loc:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.managers?.length ?? 0) > 0 && <optgroup label="Managers">{fopts.data!.managers.map((n) => <option key={`mgr:${n}`} value={`mgr:${n}`}>{n}</option>)}</optgroup>}
-                {(fopts.data?.genders?.length ?? 0) > 0 && <optgroup label="Genders">{fopts.data!.genders.map((n) => <option key={`gender:${n}`} value={`gender:${n}`}>{n}</option>)}</optgroup>}
-                {(fopts.data?.ethnicities?.length ?? 0) > 0 && <optgroup label="Ethnicities">{fopts.data!.ethnicities.map((n) => <option key={`eth:${n}`} value={`eth:${n}`}>{n}</option>)}</optgroup>}
                 {(fopts.data?.hierarchies?.length ?? 0) > 0 && <optgroup label="Hierarchy (rolls up under)">{fopts.data!.hierarchies.map((h) => <option key={`hier:${h.id}`} value={`hier:${h.id}`}>{h.name}’s org</option>)}</optgroup>}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Attributes</label>
-              <select className={sel} defaultValue="all" title="Filter by attribute — coming soon"><option value="all">All</option><option value="job">Job title</option></select>
+              <select className={sel} value={attrSel} onChange={(e) => setAttrSel(e.target.value)}>
+                <option value="all">All</option>
+                <optgroup label="Age">
+                  {(fopts.data?.ageBands ?? []).map((b) => (
+                    <option key={`age:${b}`} value={`age:${b}`}>{b === '<25' ? 'Under 25' : b === '65+' ? '65+' : b.replace('-', '–')}</option>
+                  ))}
+                </optgroup>
+                {(fopts.data?.ethnicities?.length ?? 0) > 0 && (
+                  <optgroup label="Ethnicity">
+                    {fopts.data!.ethnicities.map((n) => <option key={`eth:${n}`} value={`eth:${n}`}>{n}</option>)}
+                  </optgroup>
+                )}
+                {(fopts.data?.genders?.length ?? 0) > 0 && (
+                  <optgroup label="Gender">
+                    {fopts.data!.genders.map((n) => <option key={`gender:${n}`} value={`gender:${n}`}>{n}</option>)}
+                  </optgroup>
+                )}
+                {(fopts.data?.jobTitles?.length ?? 0) > 0 && (
+                  <optgroup label="Job titles">
+                    {fopts.data!.jobTitles.map((n) => <option key={`job:${n}`} value={`job:${n}`}>{n}</option>)}
+                  </optgroup>
+                )}
+                {(fopts.data?.locations?.length ?? 0) > 0 && (
+                  <optgroup label="Location">
+                    {fopts.data!.locations.map((n) => <option key={`loc:${n}`} value={`loc:${n}`}>{n}</option>)}
+                  </optgroup>
+                )}
+                <optgroup label="Tenure">
+                  {(fopts.data?.tenureBands ?? []).map((b) => (
+                    <option key={`tenure:${b}`} value={`tenure:${b}`}>
+                      {b === '<1' ? 'Less than 1 year' : b === '10+' ? '10+ years' : `${b.replace('-', '–')} years`}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Outcomes</label>
               <select className={sel} defaultValue="all" title="Filter by outcome — coming soon"><option value="all">All</option><option value="promoters">eNPS promoters</option></select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Tenure</label>
-              <select className={sel} value={tenureBand} onChange={(e) => setTenureBand(e.target.value)}>
-                <option value="">All</option>
-                {(fopts.data?.tenureBands ?? []).map((b) => <option key={b} value={b}>{b === '<1' ? 'Less than 1 year' : b === '10+' ? '10+ years' : `${b.replace('-', '–')} years`}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Age</label>
-              <select className={sel} value={ageBand} onChange={(e) => setAgeBand(e.target.value)}>
-                <option value="">All</option>
-                {(fopts.data?.ageBands ?? []).map((b) => <option key={b} value={b}>{b === '<25' ? 'Under 25' : b === '65+' ? '65+' : `${b.replace('-', '–')}`}</option>)}
-              </select>
             </div>
             <div className="text-[12px] text-ls-ink-3 pb-1.5">{c.participationPct != null ? `${Math.round(c.participationPct)}%` : '—'} ({c.responseCount}{c.eligibleCount ? `/${c.eligibleCount}` : ''} participants)</div>
           </div>
