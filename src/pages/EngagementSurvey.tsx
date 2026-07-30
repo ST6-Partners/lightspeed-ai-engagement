@@ -178,7 +178,7 @@ export default function EngagementSurvey() {
           </>
         )}
 
-        {isAdmin && <ImportResultsPanel />}
+        {isAdmin && <ImportResultsPanel onOpenSurvey={openPeriod} />}
       </div>
     );
   }

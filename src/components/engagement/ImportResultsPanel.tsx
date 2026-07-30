@@ -15,6 +15,7 @@ const lbl = 'block text-xs font-medium text-ls-ink-3 uppercase tracking-wide mb-
 type SheetReport = { sheet: string; shape: string; rows: number; columns: string[] };
 
 type Result = {
+  periodId: string;
   sheets: SheetReport[];
   periodCreated: boolean;
   replacedMetrics: number;
@@ -53,7 +54,7 @@ function toBase64(file: File): Promise<string> {
   });
 }
 
-export default function ImportResultsPanel() {
+export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (periodId: string) => void }) {
   const utils = trpc.useContext();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -106,7 +107,10 @@ export default function ImportResultsPanel() {
             Upload a 15Five export to add a historical survey. HR / admin only.
           </p>
         </div>
-        <span className="ls-chip bg-ls-bg-2 text-ls-ink-2">Admin</span>
+        <span className="flex items-center gap-2">
+          <span className="ls-chip bg-ls-bg-2 text-ls-ink-3 font-mono text-[10px]">importer v3</span>
+          <span className="ls-chip bg-ls-bg-2 text-ls-ink-2">Admin</span>
+        </span>
       </button>
 
       {open && (
@@ -223,6 +227,14 @@ export default function ImportResultsPanel() {
                   </li>
                 )}
               </ul>
+              {onOpenSurvey && result.periodId && (
+                <button
+                  onClick={() => onOpenSurvey(result.periodId)}
+                  className="ls-btn ls-btn-primary mt-3">
+                  Open this survey &rarr;
+                </button>
+              )}
+
               <details className="mt-3">
                 <summary className="text-[12px] text-ls-ink-3 cursor-pointer">Columns the app recognised</summary>
                 <ul className="text-[11px] text-ls-ink-3 mt-1 space-y-0.5">
