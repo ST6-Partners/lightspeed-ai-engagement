@@ -218,6 +218,21 @@ export const orgScreenRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       const curKey = await currentPrioritiesKey(ctx.db);
       if (existing.periodKey && existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });
+      // Changing WHAT someone's priority is, is materially a new assignment, so it
+      // notifies on the same terms as prioritiesAdd. Previously only add wrote a
+      // notice, so a manager could swap an employee's priority for a different OKR
+      // and the employee got nothing — the chip in their Weekly Plan silently
+      // changed meaning. Self-edits are not notified, same guard as add.
+      if (existing.userId !== ctx.user.id) {
+        const assigner = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+        await ctx.db.insert(notifications).values({
+          userId: existing.userId,
+          type: 'priority_assigned',
+          message: `${assigner?.name ?? 'Your manager'} changed one of your priorities to: ${node.title}`,
+          referenceId: existing.id,
+          referenceType: 'assigned_priority',
+        });
+      }
       const [row] = await ctx.db.update(priorities)
         .set({ okrNodeId: node.id, itemType: node.type, assignedBy: ctx.user.id, assignedAt: new Date() })
         .where(eq(priorities.id, input.id))
