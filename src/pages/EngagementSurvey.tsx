@@ -39,6 +39,7 @@ export default function EngagementSurvey() {
   const [progressPeriod, setProgressPeriod] = useState<string | undefined>(undefined);
   const [groupSel, setGroupSel] = useState<string>('all');
   const [attrSel, setAttrSel] = useState<string>('all');
+  const [outcomeSel, setOutcomeSel] = useState<string>('all');
   const [showSuppress, setShowSuppress] = useState(false);
   // One encoding shared by the Groups and Attributes selects: "kind:value".
   // Groups = where someone sits in the org. Attributes = who they are.
@@ -57,10 +58,14 @@ export default function EngagementSurvey() {
     if (kind === 'job') return { jobTitle: val };
     if (kind === 'age') return { ageBand: val };
     if (kind === 'tenure') return { tenureBand: val };
+    if (kind === 'perf') return { performanceTier: val };
+    if (kind === 'eng') return { engagementTier: val };
     return {};
   };
 
-  const activeFilters: Record<string, string> = { ...selToFilter(groupSel), ...selToFilter(attrSel) };
+  const activeFilters: Record<string, string> = {
+    ...selToFilter(groupSel), ...selToFilter(attrSel), ...selToFilter(outcomeSel),
+  };
   const anyFilter = Object.keys(activeFilters).length > 0;
 
   const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
@@ -69,6 +74,9 @@ export default function EngagementSurvey() {
   const fopts = trpc.engagementAnalytics.filterOptions.useQuery(undefined, { enabled: view === 'analytics' });
   const me = trpc.auth.me.useQuery();
   const isAdmin = hasMinRole((me.data?.role ?? 'user') as RoleTier, 'admin');
+  // Outcome filters slice by individual respondents, so they are HR / ELT only
+  // (mirrors the server gate — see the note in engagementAnalytics.filtered).
+  const canSeeOutcomes = isAdmin || me.data?.isHrAccess === true || me.data?.leaderBadge === 'ELT';
   const filtered = trpc.engagementAnalytics.filtered.useQuery(activeFilters, { enabled: view === 'analytics' });
   const suppressed = filtered.data?.suppressed === true;
   useEffect(() => { if (suppressed && anyFilter) setShowSuppress(true); }, [suppressed, anyFilter]);
@@ -284,10 +292,24 @@ export default function EngagementSurvey() {
                 </optgroup>
               </select>
             </div>
-            <div className="flex flex-col gap-1">
+            {canSeeOutcomes && <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase text-ls-ink-3">Outcomes</label>
-              <select className={sel} defaultValue="all" title="Filter by outcome — coming soon"><option value="all">All</option><option value="promoters">eNPS promoters</option></select>
-            </div>
+              <select className={sel} value={outcomeSel} onChange={(e) => setOutcomeSel(e.target.value)}>
+                <option value="all">All</option>
+                <optgroup label="Performance">
+                  <option value="perf:high">High performers</option>
+                  <option value="perf:mid">Mid performers</option>
+                  <option value="perf:bottom">Bottom performers</option>
+                </optgroup>
+                <optgroup label="Engagement">
+                  <option value="eng:extremely">Extremely engaged</option>
+                  <option value="eng:highly">Highly engaged</option>
+                  <option value="eng:moderately">Moderately engaged</option>
+                  <option value="eng:somewhat">Somewhat engaged</option>
+                  <option value="eng:disengaged">Disengaged</option>
+                </optgroup>
+              </select>
+            </div>}
             <div className="text-[12px] text-ls-ink-3 pb-1.5">{c.participationPct != null ? `${Math.round(c.participationPct)}%` : '—'} ({c.responseCount}{c.eligibleCount ? `/${c.eligibleCount}` : ''} participants)</div>
           </div>
           {anyFilter && filtered.data && (

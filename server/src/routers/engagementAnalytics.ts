@@ -11,6 +11,7 @@ import { engagementImportRows } from '../db/schema/engagementImportRows.js';
 import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
+import { nineBoxRatings } from '../db/schema/orgScreen.js';
 import { eq } from 'drizzle-orm';
 import {
   detectColumns, detectShape, normalizeRows, statementKey, deriveMetrics, mapDimension,
@@ -76,6 +77,34 @@ function aggregate(values: number[]): Agg | null {
 
 interface PeriodInfo { id: string; label: string; periodDate: string; eligibleCount: number; responseCount: number; source: string; isCurrent: boolean; scaleMax: number; }
 
+
+// Performance tier from a 9-box value. See the note in the router.
+export function performanceTierOf(box: number | null | undefined): 'high' | 'mid' | 'bottom' | null {
+  if (box == null || box < 1 || box > 9) return null;
+  const col = box % 3;              // 0 = right column, 2 = middle, 1 = left
+  return col === 0 ? 'high' : col === 2 ? 'mid' : 'bottom';
+}
+
+export const ENGAGEMENT_TIERS = [
+  { key: 'extremely', label: 'Extremely engaged', min: 90 },
+  { key: 'highly', label: 'Highly engaged', min: 80 },
+  { key: 'moderately', label: 'Moderately engaged', min: 65 },
+  { key: 'somewhat', label: 'Somewhat engaged', min: 50 },
+  { key: 'disengaged', label: 'Disengaged', min: 0 },
+] as const;
+
+/** Mean answer -> percent of the available scale -> tier key. */
+export function engagementTierOf(answers: Record<string, number>, scaleMax: number): string | null {
+  const vals = Object.values(answers ?? {}).filter((v) => typeof v === 'number' && v > 0);
+  if (vals.length === 0) return null;
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const span = Math.max(1, scaleMax - 1);
+  // Rounded before comparison: (4.6-1)/4 evaluates to 0.8999999999999999 in
+  // floating point, which would drop an exactly-90% respondent a whole tier.
+  const pctOfScale = Math.round((((mean - 1) / span) * 100) * 1e6) / 1e6;
+  return (ENGAGEMENT_TIERS.find((t) => pctOfScale >= t.min) ?? ENGAGEMENT_TIERS[ENGAGEMENT_TIERS.length - 1]).key;
+}
+
 export const engagementAnalyticsRouter = router({
   // ── Filter options for the analytics filter bar (from in-app responses + roster) ──
   filterOptions: protectedProcedure.query(async ({ ctx }) => {
@@ -116,6 +145,23 @@ export const engagementAnalyticsRouter = router({
     };
   }),
 
+  // ── Outcome tiers ───────────────────────────────────────────────────────
+  // Both tier sets are DEFINITIONS, not measurements — they are stated here in
+  // one place so the thresholds can be changed without hunting through queries.
+  //
+  // Performance comes from the 9-box rating (1..9, numpad layout):
+  //     7 8 9
+  //     4 5 6
+  //     1 2 3
+  // Performance is the horizontal axis, so the right column (3/6/9) is the top
+  // performance band, middle (2/5/8) is mid, left (1/4/7) is bottom.
+  //
+  // Engagement is each respondent's own mean answer expressed as a percentage
+  // of the available scale — (mean - 1) / (scaleMax - 1). Percent-of-scale
+  // rather than a raw score because 15Five history is 4-point and the in-app
+  // survey is 5-point; a raw threshold would quietly mean different things in
+  // different periods.
+
   // ── Filtered engagement read with min-group-size gate + manager scope ──
   // MIN GROUP SIZE = 3: any cohort under 3 responses is suppressed ("Not enough
   // results to view"), including filter combinations. Managers see only their own
@@ -134,6 +180,8 @@ export const engagementAnalyticsRouter = router({
       ethnicity: z.string().optional(),
       ageBand: z.string().optional(),
       jobTitle: z.string().optional(),
+      performanceTier: z.enum(['high', 'mid', 'bottom']).optional(),
+      engagementTier: z.enum(['extremely', 'highly', 'moderately', 'somewhat', 'disengaged']).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const MIN = 3;
@@ -177,6 +225,32 @@ export const engagementAnalyticsRouter = router({
         return '65+';
       };
       if (f.jobTitle) rows = rows.filter((r) => eq2(r.jobTitle, f.jobTitle!));
+
+      // Outcome filters slice by attributes of the individual respondent, so
+      // they are restricted to HR / ELT / admin. A manager narrowing their own
+      // small team to 'Disengaged' would come close to naming people, which is
+      // the line this module is explicit about not crossing. The min-group-size
+      // gate below still applies on top.
+      if ((f.performanceTier || f.engagementTier) && !elevated) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Outcome filters are available to HR and ELT only.' });
+      }
+      if (f.performanceTier) {
+        const boxes = await ctx.db.select().from(nineBoxRatings);
+        const latestByUser = new Map<string, { box: number; ratedAt: string }>();
+        for (const b of boxes) {
+          const cur = latestByUser.get(b.userId);
+          if (!cur || b.ratedAt > cur.ratedAt) latestByUser.set(b.userId, { box: b.box, ratedAt: b.ratedAt });
+        }
+        rows = rows.filter((r) => r.respondentId
+          && performanceTierOf(latestByUser.get(r.respondentId)?.box) === f.performanceTier);
+      }
+      if (f.engagementTier) {
+        const periodScale = new Map((await ctx.db.query.surveyPeriods.findMany()).map((p) => [p.id, p.scaleMax]));
+        rows = rows.filter((r) => engagementTierOf(
+          (r.answers ?? {}) as Record<string, number>,
+          (r.periodId ? periodScale.get(r.periodId) : null) ?? 5,
+        ) === f.engagementTier);
+      }
       if (f.gender) rows = rows.filter((r) => eq2(r.gender, f.gender!));
       if (f.ethnicity) rows = rows.filter((r) => eq2(r.ethnicity, f.ethnicity!));
       if (f.ageBand) rows = rows.filter((r) => ageBandOf(r.birthYear) === f.ageBand);
