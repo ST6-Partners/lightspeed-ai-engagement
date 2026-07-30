@@ -6,7 +6,7 @@
 // instead of duplicating it.
 // ============================================================
 import { useRef, useState } from 'react';
-import { Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const input = 'px-3 py-2 border border-ls-line rounded-md text-sm focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50';
@@ -63,6 +63,8 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
   const [periodDate, setPeriodDate] = useState('');
   const [scaleMax, setScaleMax] = useState('4');
   const [replace, setReplace] = useState(true);
+  const [queued, setQueued] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -70,13 +72,26 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
   const importer = trpc.engagementAnalytics.importSurveyExport.useMutation();
   const ready = label.trim().length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(periodDate);
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []);
-    if (picked.length === 0) return;
+  const addFiles = (incoming: FileList | File[] | null) => {
+    const list = Array.from(incoming ?? []);
+    if (list.length === 0) return;
+    setErr(null);
+    // De-duplicate by name+size so adding the same file twice can't double-count.
+    setQueued((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      return [...prev, ...list.filter((f) => !seen.has(`${f.name}:${f.size}`))];
+    });
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const removeFile = (idx: number) => setQueued((prev) => prev.filter((_, i) => i !== idx));
+
+  const runImport = async () => {
+    if (queued.length === 0 || !ready) return;
     setBusy(true); setErr(null); setResult(null);
     try {
       const files = await Promise.all(
-        picked.map(async (f) => ({ name: f.name, base64: await toBase64(f) })),
+        queued.map(async (f) => ({ name: f.name, base64: await toBase64(f) })),
       );
       const res = await importer.mutateAsync({
         period: { label: label.trim(), periodDate, scaleMax: Number(scaleMax) },
@@ -84,12 +99,12 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
         replace, makeCurrent: false,
       });
       setResult(res as Result);
+      setQueued([]);
       utils.engagementAnalytics.invalidate();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : 'Import failed.');
     } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
@@ -108,7 +123,7 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
           </p>
         </div>
         <span className="flex items-center gap-2">
-          <span className="ls-chip bg-ls-bg-2 text-ls-ink-3 font-mono text-[10px]">importer v3</span>
+          <span className="ls-chip bg-ls-bg-2 text-ls-ink-3 font-mono text-[10px]">importer v4</span>
           <span className="ls-chip bg-ls-bg-2 text-ls-ink-2">Admin</span>
         </span>
       </button>
@@ -117,10 +132,9 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
         <div className="px-5 pb-5 pt-1 border-t border-ls-line">
           <p className="text-[13px] text-ls-ink-2 mt-3 mb-4 max-w-2xl">
             Export your results from 15Five and upload them as-is — Excel or CSV, no need to
-            rearrange columns. Select as many files as you like at once (hold Shift or Cmd in the
-            file picker); multi-sheet workbooks load whole. Everything merges into the one survey you
-            name below, and it appears alongside the in-app surveys with department and statement
-            detail intact.
+            rearrange columns. Add as many files as you need; multi-sheet workbooks load whole.
+            Everything merges into the one survey you name here, and it appears alongside the in-app
+            surveys with department and statement detail intact.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-3 mb-4">
@@ -155,15 +169,55 @@ export default function ImportResultsPanel({ onOpenSurvey }: { onOpenSurvey?: (p
             accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             multiple
             className="hidden"
-            onChange={onFile} />
-          <div className="flex items-center gap-3 flex-wrap">
+            onChange={(e) => addFiles(e.target.files)} />
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+            className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
+              dragging ? 'border-ls-blue bg-ls-blue-50' : 'border-ls-line'}`}>
             <button
               onClick={() => fileRef.current?.click()}
-              disabled={!ready || busy}
-              className="ls-btn ls-btn-primary inline-flex items-center gap-1.5 disabled:opacity-50">
-              <Upload size={15} /> {busy ? 'Importing…' : 'Choose file(s) & import'}
+              disabled={busy}
+              className="ls-btn ls-btn-ghost inline-flex items-center gap-1.5 disabled:opacity-50">
+              <Upload size={15} /> {queued.length === 0 ? 'Add files' : 'Add more files'}
             </button>
-            {!ready && <span className="text-[12px] text-ls-ink-3">Add a survey name and close date first.</span>}
+            <p className="text-[12px] text-ls-ink-3 mt-2">
+              or drag them here. Add one at a time or several at once — they can live in different
+              folders, and they all import into the survey named above.
+            </p>
+          </div>
+
+          {queued.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {queued.map((f, i) => (
+                <li key={`${f.name}-${f.size}-${i}`}
+                  className="flex items-center justify-between gap-3 text-[13px] border border-ls-line rounded-md px-3 py-2">
+                  <span className="truncate">
+                    {f.name}
+                    <span className="text-ls-ink-3"> · {Math.max(1, Math.round(f.size / 1024))} KB</span>
+                  </span>
+                  <button onClick={() => removeFile(i)} disabled={busy}
+                    className="text-ls-ink-3 hover:text-ls-risk shrink-0" aria-label={`Remove ${f.name}`}>
+                    <X size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-3 flex-wrap mt-4">
+            <button
+              onClick={runImport}
+              disabled={!ready || busy || queued.length === 0}
+              className="ls-btn ls-btn-primary inline-flex items-center gap-1.5 disabled:opacity-50">
+              {busy ? 'Importing…' : `Import ${queued.length || ''} file${queued.length === 1 ? '' : 's'}`.trim()}
+            </button>
+            {queued.length === 0 && <span className="text-[12px] text-ls-ink-3">Add at least one file.</span>}
+            {queued.length > 0 && !ready && (
+              <span className="text-[12px] text-ls-ink-3">Add a survey name and close date first.</span>
+            )}
           </div>
 
           {err && (
