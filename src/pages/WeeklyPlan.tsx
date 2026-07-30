@@ -39,6 +39,14 @@ export default function WeeklyPlan() {
   // them straight back rather than guessing which past rows used to be current.
   const [demoRun, setDemoRun] = useState<{ movedIds: string[]; demoIds: string[] } | null>(null);
   const afterDemo = () => { utils.orgScreen.prioritiesRolloverPreview.invalidate(); utils.orgScreen.prioritiesByUser.invalidate(); utils.cadence.status.invalidate(); refetch(); };
+  const [assignRun, setAssignRun] = useState<{ priorityId: string; notificationId: string } | null>(null);
+  const afterAssign = () => { utils.notifications.list.invalidate(); utils.notifications.unreadCount.invalidate(); utils.orgScreen.prioritiesByUser.invalidate(); refetch(); };
+  const seedAssign = trpc.orgScreen.seedAssignmentDemo.useMutation({
+    onSuccess: (r) => { setAssignRun({ priorityId: r.priorityId, notificationId: r.notificationId }); afterAssign(); },
+  });
+  const undoAssign = trpc.orgScreen.seedAssignmentDemoUndo.useMutation({
+    onSuccess: () => { setAssignRun(null); afterAssign(); },
+  });
   const seedRollover = trpc.orgScreen.seedRolloverDemo.useMutation({
     onSuccess: (r) => { setDemoRun({ movedIds: r.movedIds, demoIds: r.demoIds }); afterDemo(); },
   });
@@ -113,7 +121,10 @@ export default function WeeklyPlan() {
   const setDone = (i: number, v: boolean) =>
     setPriorities((p) => p.map((x, idx) => (idx === i ? { ...x, done: v } : x)));
   const okrDone = (id: string | null) => !!id && (okrs ?? []).find((n) => n.id === id)?.status === 'complete';
-  const toggleLinked = (id: string, done: boolean) => updateOkr.mutate({ id, status: done ? 'complete' : 'not_started' });
+  // Unchecking goes to 'in_progress', not 'not_started'. The work was demonstrably
+  // underway, and not_started drops the OKR progress bar to 0 — so tick-then-untick
+  // used to erase a half-done key result's progress. Mirrors prioritiesToggleDone.
+  const toggleLinked = (id: string, done: boolean) => updateOkr.mutate({ id, status: done ? 'complete' : 'in_progress' });
   const removeRow = (i: number) => setPriorities((p) => p.filter((_, idx) => idx !== i));
   const addOwn = () => setPriorities((p) => [...p, { text: '', okrNodeId: null }]);
   const addFromNode = (id: string, title: string) =>
@@ -290,6 +301,27 @@ export default function WeeklyPlan() {
               className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
             >
               {seedRollover.isLoading ? 'Loading…' : 'Demo period rollover'}
+            </button>
+          )
+        )}
+        {isAdmin && (
+          assignRun ? (
+            <button
+              onClick={() => undoAssign.mutate(assignRun)}
+              disabled={undoAssign.isLoading}
+              title="Remove the simulated manager-assigned priority and its notification"
+              className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
+            >
+              {undoAssign.isLoading ? 'Undoing…' : 'Undo assignment demo'}
+            </button>
+          ) : (
+            <button
+              onClick={() => seedAssign.mutate()}
+              disabled={seedAssign.isLoading}
+              title="Admin only — stage a priority on your own account as if a manager assigned it, so you can see the employee-side popup and Weekly Plan row"
+              className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
+            >
+              {seedAssign.isLoading ? 'Loading…' : 'Demo assignment to me'}
             </button>
           )
         )}

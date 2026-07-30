@@ -8,7 +8,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, inArray, asc, desc, and, isNull, gte, lt, or } from 'drizzle-orm';
+import { eq, inArray, asc, desc, and, isNull, gte, lt, or, ne } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireManager, requireAdmin, hasMinimumRole } from '../services/permissions.js';
@@ -472,6 +472,82 @@ export const orgScreenRouter = router({
       return { ok: true as const, restored: input.movedIds.length, removed: input.demoIds.length + demoCarried.length };
     }),
 
+  // ---- Assignment demo seed (admin only, dev aid) ----
+  // A manager assigning to THEMSELVES is deliberately not notified, which makes
+  // the employee-facing assignment flow impossible to test on your own account.
+  // This stages it faithfully instead of loosening the guard: it writes a priority
+  // on the caller stamped assignedBy = someone else, plus the same
+  // priority_assigned notice prioritiesAdd would have written. The caller then
+  // sees exactly what a real employee sees — the popup and the Weekly Plan row.
+  seedAssignmentDemo: protectedProcedure
+    .use(requireAdmin)
+    .mutation(async ({ ctx }) => {
+      const me = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+      // Prefer the caller's real manager as the pretend assigner; otherwise any
+      // other active user, so the notice names a real person.
+      let assigner = me?.managerId
+        ? await ctx.db.query.users.findFirst({ where: eq(users.id, me.managerId) })
+        : null;
+      if (!assigner) {
+        const others = await ctx.db.query.users.findMany({
+          where: and(eq(users.isActive, true), ne(users.id, ctx.user.id)),
+          columns: { id: true, name: true, email: true },
+          limit: 1,
+        });
+        assigner = (others[0] as any) ?? null;
+      }
+      if (!assigner) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No other user available to act as the assigner.' });
+
+      const periodKey = await currentPrioritiesKey(ctx.db);
+      const mine = await ctx.db.query.priorities.findMany({
+        where: and(eq(priorities.userId, ctx.user.id), isNull(priorities.weekStart)),
+        columns: { okrNodeId: true },
+      });
+      const taken = new Set(mine.map((r: any) => r.okrNodeId).filter(Boolean));
+      const candidates = await ctx.db.query.okrNodes.findMany({
+        where: isNull(okrNodes.archivedAt),
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+      });
+      const node = candidates.find((n: any) => !taken.has(n.id) && (n.type === 'key_result' || n.type === 'objective'));
+      if (!node) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No spare OKR item to assign.' });
+
+      const [row] = await ctx.db.insert(priorities).values({
+        userId: ctx.user.id,
+        itemType: node.type,
+        okrNodeId: node.id,
+        weekStart: null,
+        periodKey,
+        sortOrder: mine.length,
+        assignedBy: assigner.id,
+        assignedAt: new Date(),
+        done: false,
+        archived: false,
+      }).returning();
+
+      const [notice] = await ctx.db.insert(notifications).values({
+        userId: ctx.user.id,
+        type: 'priority_assigned',
+        message: `${assigner.name ?? assigner.email ?? 'Your manager'} assigned you a priority: ${node.title}`,
+        referenceId: row.id,
+        referenceType: 'assigned_priority',
+      }).returning();
+
+      return { ok: true as const, priorityId: row.id, notificationId: notice.id, assignerName: assigner.name ?? null, okrTitle: node.title };
+    }),
+
+  seedAssignmentDemoUndo: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ priorityId: z.string().uuid(), notificationId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(priorities).where(and(
+        eq(priorities.userId, ctx.user.id), eq(priorities.id, input.priorityId),
+      ));
+      await ctx.db.delete(notifications).where(and(
+        eq(notifications.userId, ctx.user.id), eq(notifications.id, input.notificationId),
+      ));
+      return { ok: true as const };
+    }),
+
   prioritiesToggleDone: protectedProcedure
     .input(z.object({ id: z.string().uuid(), done: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
@@ -483,6 +559,18 @@ export const orgScreenRouter = router({
       const [updated] = await ctx.db.update(priorities)
         .set({ done: input.done, completedAt: input.done ? new Date() : null })
         .where(eq(priorities.id, input.id)).returning();
+      // Move the linked OKR. Assigned priorities are ALWAYS OKR-linked
+      // (prioritiesAdd requires an okrNodeId), yet this path never touched
+      // okr_nodes — so the one list guaranteed to have an OKR behind it was the
+      // only one that did not move its progress bar, while the free-text weekly
+      // list did via WeeklyPlan's toggleLinked. Un-completing goes to
+      // 'in_progress', not 'not_started': the work was demonstrably underway, and
+      // resetting to not_started would drop the bar to 0 and lose that.
+      if (row.okrNodeId) {
+        await ctx.db.update(okrNodes)
+          .set({ status: input.done ? 'complete' : 'in_progress', updatedAt: new Date() })
+          .where(eq(okrNodes.id, row.okrNodeId));
+      }
       return updated;
     }),
 
