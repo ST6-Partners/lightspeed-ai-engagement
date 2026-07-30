@@ -232,7 +232,8 @@ function CcatProfile({ userId, person }: { userId: string; person: any }) {
   const { data = [] } = trpc.orgScreen.ccatSectionsList.useQuery({ userId });
   const rows = [...(data as any[])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const overall = rows.find((r) => String(r.label).toLowerCase() === 'overall');
-  const subs = rows.filter((r) => String(r.label).toLowerCase() !== 'overall');
+  // Same rule as the person card: no "Overall*" row is a sub-score bar.
+  const subs = rows.filter((r) => !String(r.label).toLowerCase().startsWith('overall'));
   return (
     <SectionShell title="CCAT" subtitle="Criteria Cognitive Aptitude Test — overall raw score (/50) and sub-score percentiles.">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>

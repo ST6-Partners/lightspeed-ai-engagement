@@ -84,20 +84,30 @@ eq('name from name label', detectName(INSIGHTS_TEXT), 'Brooke Friedman');
 // ---------- CCAT ----------
 
 const ccat = parseCcat(CCAT_TEXT);
+eq('ccat always emits the same five rows in the same order',
+  ccat.sections.map((s) => s.label), ['Overall', 'Overall Percentile', 'Spatial', 'Verbal', 'Math & Logic']);
 eq('ccat overall is the RAW /50 score, not the percentile', ccat.sections[0], { label: 'Overall', score: 37, sortOrder: 0 });
-eq('ccat subs use the card labels + percentiles', ccat.sections.slice(1), [
-  { label: 'Spatial', score: 96, sortOrder: 10 },
-  { label: 'Verbal', score: 95, sortOrder: 20 },
-  { label: 'Math & Logic', score: 85, sortOrder: 30 },
-]);
-eq('ccat clean parse has no notes', ccat.notes, []);
+eq('ccat sub-score percentiles', ccat.sections.slice(2).map((s) => s.score), [96, 95, 85]);
 
-// "37/50" phrasing instead of "Raw Score:"
-eq('ccat raw from x/50 phrasing', parseCcat('CCAT\nScored 41/50 overall\nVerbal Ability 70\n').sections[0].score, 41);
-// missing data is reported, not invented
+// missing data is reported, not invented — and the rows are still all present
 const ccatThin = parseCcat('Criteria Cognitive Aptitude Test\nVerbal Ability 70\n');
-eq('ccat missing raw -> null + note', ccatThin.sections[0].score, null);
-eq('ccat missing subs noted', ccatThin.notes.length, 3);
+eq('ccat thin parse still emits five rows', ccatThin.sections.length, 5);
+eq('ccat missing raw -> null', ccatThin.sections[0].score, null);
+eq('ccat found what it could', ccatThin.sections.find((s) => s.label === 'Verbal')?.score, 70);
+
+// The bar-chart x-axis (1..50) sits right after the "Raw Score" SECTION heading.
+// Anchoring there returned 1 with total confidence; the prose must win instead.
+const axisTrap = 'Criteria Cognitive Aptitude Test\nRaw Score\n1 2 3 4 5 6 7 8 9 10\n' +
+  'Brooke Friedman achieved an overall score of 37, which means Brooke answered 37 questions correctly. ' +
+  'This corresponds to a percentile rank of 89.\n';
+eq('chart axis does not become the raw score', parseCcat(axisTrap).sections[0].score, 37);
+eq('overall percentile comes from the prose', parseCcat(axisTrap).sections[1].score, 89);
+eq('name comes from the summary sentence', detectName(axisTrap), 'Brooke Friedman');
+
+// Side-by-side sub-score cards: the three labels appear on one line, so a loose
+// window after "Verbal Ability" reaches the NEXT card's number first.
+const cards = 'Criteria Cognitive Aptitude Test\nSpatial Reasoning\nPercentile 96 Verbal Ability\nPercentile 95 Math & Logic\nPercentile 85\n';
+eq('each card keeps its own number', parseCcat(cards).sections.slice(2).map((s) => s.score), [96, 95, 85]);
 
 // ---------- EPP ----------
 
@@ -183,7 +193,7 @@ try {
   eq('fused-column PDF: recovery is flagged for confirmation',
     r.notes.some((n) => /columns ran together/.test(n)), true);
   eq('fused-column PDF: sub-scores recovered',
-    r.ccat?.sections.slice(1).map((x) => x.score), [96, 95, 85]);
+    r.ccat?.sections.slice(2).map((x) => x.score), [96, 95, 85]);
   eq('fused-column PDF: header not mistaken for a name', r.detectedName, 'Brooke Friedman');
 } catch (e) {
   console.log(`SKIP fused-column PDF test (fixture missing): ${(e as Error).message}`);
@@ -202,6 +212,23 @@ eq('leading-zero cut skipped, valid cut still found', splitFusedNumber('8807', [
 eq('no valid cut -> null', splitFusedNumber('8807', [{ firstMax: 100, secondMax: 50 }]), null);
 eq('too short to be fused', splitFusedNumber('88', [{ firstMax: 100, secondMax: 50 }]), null);
 eq('non-numeric refused', splitFusedNumber('88a7', [{ firstMax: 100, secondMax: 50 }]), null);
+
+// ---------- the real Criteria CCAT layout, end to end ----------
+// /tmp/ccat_real.pdf replicates the actual vendor report: name in the header,
+// a Results Summary box with the numbers ABOVE their labels, a 1..50 chart
+// axis, the summary sentence, and three side-by-side sub-score cards.
+try {
+  const real = readFileSync('/tmp/ccat_real.pdf').toString('base64');
+  const r = await parseAssessmentPdf(real, 'ccat_real.pdf');
+  eq('real layout: kind', r.kind, 'ccat');
+  eq('real layout: name', r.detectedName, 'Brooke Friedman');
+  eq('real layout: every value correct',
+    r.ccat?.sections.map((s) => [s.label, s.score]),
+    [['Overall', 37], ['Overall Percentile', 89], ['Spatial', 96], ['Verbal', 95], ['Math & Logic', 85]]);
+  eq('real layout: nothing to flag', r.notes, []);
+} catch (e) {
+  console.log(`SKIP real-layout PDF test (fixture missing): ${(e as Error).message}`);
+}
 
 console.log(fails === 0 ? '\nAll assessment PDF parser tests passed.' : `\n${fails} test(s) failed.`);
 process.exit(fails === 0 ? 0 : 1);

@@ -31,7 +31,9 @@ export default function AssessmentsTab({ employeeId }: { employeeId: string }) {
 
   const { ccat, epp, insights } = data;
   const overall = ccat.sections.find((s) => s.label.toLowerCase() === 'overall');
-  const breakdown = ccat.sections.filter((s) => s.label.toLowerCase() !== 'overall');
+  // Excludes BOTH "Overall" (the raw /50 badge) and "Overall Percentile" —
+  // neither is a sub-category, so neither belongs in the breakdown bars.
+  const breakdown = ccat.sections.filter((s) => !s.label.toLowerCase().startsWith('overall'));
   const divider: React.CSSProperties = { borderTop: '.5px solid #e5e7eb', paddingTop: 14, marginTop: 16 };
 
   // Priority attributes = the top few by Score (keeps the card readable).

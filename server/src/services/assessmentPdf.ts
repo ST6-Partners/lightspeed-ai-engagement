@@ -274,6 +274,10 @@ export function detectKind(text: string): { kind: AssessmentKind | 'unknown'; sc
 
 /** Candidate/participant name, used to warn on a person mismatch. */
 export function detectName(text: string): string | null {
+  // A CCAT report names the person in its summary sentence, which is far more
+  // reliable than pattern-matching the header block.
+  const prose = ccatNameFromProse(text);
+  if (prose) return prose;
   return firstMatch(text.slice(0, 1500), [
     // The separator is optional: plenty of reports print "Candidate  Jane Doe"
     // in two table cells with no colon between them. A label word that leaks
@@ -286,65 +290,152 @@ export function detectName(text: string): string | null {
 
 // ---------- CCAT ----------
 
-const CCAT_SUBS: Array<LabelSpec & { sortOrder: number }> = [
-  { canonical: 'Spatial Reasoning', aliases: ['Spatial'], sortOrder: 10 },
-  { canonical: 'Verbal Ability', aliases: ['Verbal'], sortOrder: 20 },
-  { canonical: 'Math & Logic', aliases: ['Math and Logic', 'Math &Logic', 'Math/Logic', 'Math'], sortOrder: 30 },
+// Fixed shape for a CCAT record, in card order. The form always shows exactly
+// these rows whatever the parser found, so the review step looks identical for
+// every CCAT report.
+export const CCAT_ROWS: Array<{ label: string; sortOrder: number; max: number; kind: 'raw' | 'percentile' }> = [
+  { label: 'Overall', sortOrder: 0, max: 50, kind: 'raw' },
+  { label: 'Overall Percentile', sortOrder: 5, max: 100, kind: 'percentile' },
+  { label: 'Spatial', sortOrder: 10, max: 100, kind: 'percentile' },
+  { label: 'Verbal', sortOrder: 20, max: 100, kind: 'percentile' },
+  { label: 'Math & Logic', sortOrder: 30, max: 100, kind: 'percentile' },
 ];
 
-// The card shows the sub-score label as-is, so keep the short forms the
-// Organization → Assessments card was designed around.
-const CCAT_DISPLAY: Record<string, string> = {
-  'Spatial Reasoning': 'Spatial',
-  'Verbal Ability': 'Verbal',
-  'Math & Logic': 'Math & Logic',
-};
+// The vendor prints each sub-score as a two-line label with the word
+// "Percentile" underneath, then the number: "Spatial Reasoning / Percentile 96".
+// Anchoring on the label PLUS "Percentile" keeps the match tight. A loose
+// window instead drifts into the next card — the three cards sit side by side
+// on one visual line, so "Verbal Ability" is followed in the text by
+// "Math & Logic" before its own number appears.
+const CCAT_SUB_PATTERNS: Array<{ label: string; res: RegExp[] }> = [
+  { label: 'Spatial', res: [
+    /spatial\s+reasoning\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+    /\bspatial\b\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+  ] },
+  { label: 'Verbal', res: [
+    /verbal\s+ability\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+    /\bverbal\b\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+  ] },
+  { label: 'Math & Logic', res: [
+    /math\s*(?:&|and)\s*logic\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+    /\bmath\b\s*(?:percentile)?\s*[:\-–]?\s*(?<![\d.])(\d{1,3})(?![\d])/i,
+  ] },
+];
+
+function firstNum(text: string, res: RegExp[], max: number): number | null {
+  for (const re of res) {
+    const m = text.match(re);
+    if (m && m[1] !== undefined) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v >= 0 && v <= max) return v;
+    }
+  }
+  return null;
+}
+
+/** The name from the report's own summary sentence — the most reliable source. */
+export function ccatNameFromProse(text: string): string | null {
+  const m = text.match(/([A-Z][A-Za-z'’\-]+(?: [A-Z][A-Za-z'’\-]+){1,2})\s+achieved\s+an\s+overall\s+score/);
+  return m ? m[1].replace(/\s+/g, ' ').trim() : null;
+}
 
 export function parseCcat(text: string): { sections: ParsedCcatSection[]; notes: string[] } {
   const notes: string[] = [];
-  const sections: ParsedCcatSection[] = [];
 
-  // Overall is the RAW score out of 50 — not a percentile. Never coerce it to 0-100.
-  const raw =
-    numberNear(text, /raw\s+score/i, { max: 50 }) ??
-    firstMatch(text, [/(\d{1,2})\s*(?:out\s+of|\/)\s*50/i])?.match(/\d+/)?.[0] ??
-    null;
-  let rawNum = raw === null ? null : Number(raw);
+  // 1. PROSE FIRST. The report states both numbers in a sentence: "achieved an
+  //    overall score of 37 ... corresponds to a percentile rank of 89". Prose is
+  //    immune to the two things that break table parsing here — fused columns,
+  //    and the raw-score bar chart whose x-axis is the run 1..50. Anchoring on
+  //    the bare "Raw Score" heading picks up that axis and confidently returns 1.
+  let raw = firstNum(text, [
+    /overall\s+score\s+of\s+(?<![\d.])(\d{1,2})(?![\d])/i,
+    /answered\s+(?<![\d.])(\d{1,2})(?![\d])\s+questions\s+correctly/i,
+    // "37 out of 50" / "37/50" — self-describing, so safe anywhere.
+    /(?<![\d.])(\d{1,2})(?![\d])\s*(?:out\s+of|\/)\s*50\b/i,
+    // "Raw Score: 37" — an explicit separator means this is a labelled value,
+    // not the bare "Raw Score" section heading that the 1..50 chart axis follows.
+    /raw\s*score\s*[:\-–]\s*(?<![\d.])(\d{1,2})(?![\d])/i,
+  ], 50);
+  let overallPct = firstNum(text, [
+    /percentile\s+rank\s+of\s+(?<![\d.])(\d{1,3})(?![\d])/i,
+    /scored\s+better\s+than\s+(?<![\d.])(\d{1,3})(?![\d])\s*%/i,
+  ], 100);
 
-  // Fused-column recovery: "Overall 8837" is a percentile and a raw score in
-  // adjacent flush cells. Try both column orders and accept only a unique fit.
-  if (rawNum === null) {
-    const fused = fusedTokenNear(text, /overall/i) ?? fusedTokenNear(text, /raw\s+score/i);
+  // 2. Results Summary box. The numbers sit ABOVE their labels ("37  89" then
+  //    "Raw Score  Percentile"), so a search that only looks after a label
+  //    finds nothing. Take the two numbers following the box heading and sort
+  //    them by range: the one <= 50 is the raw score.
+  if (raw === null || overallPct === null) {
+    const box = text.match(/results\s+summary([\s\S]{0,80})/i);
+    if (box) {
+      const nums = [...box[1].matchAll(/(?<![\d.])(\d{1,3})(?![\d])/g)].map((m) => Number(m[1]));
+      const rawCand = nums.find((n) => n <= 50) ?? null;
+      const pctCand = nums.find((n) => n !== rawCand && n <= 100) ?? null;
+      if (raw === null && rawCand !== null) {
+        raw = rawCand;
+        notes.push(`CCAT raw score read as ${rawCand} from the Results Summary box — please confirm.`);
+      }
+      if (overallPct === null && pctCand !== null) overallPct = pctCand;
+    }
+  }
+
+  // 3. The "Overall" row itself, for layouts with no summary sentence. Safe to
+  //    anchor on (unlike the "Raw Score" heading, which the chart axis follows).
+  if (raw === null || overallPct === null) {
+    const row = text.match(/\boverall\b([^\n]{0,40})/i);
+    if (row) {
+      const nums = [...row[1].matchAll(/(?<![\d.])(\d{1,3})(?![\d])/g)].map((m) => Number(m[1]));
+      const rawCand = nums.find((n) => n <= 50) ?? null;
+      const pctCand = nums.find((n) => n !== rawCand && n <= 100) ?? null;
+      if (raw === null && rawCand !== null) {
+        raw = rawCand;
+        notes.push(`CCAT raw score read as ${rawCand} from the Overall row — please confirm.`);
+      }
+      if (overallPct === null && pctCand !== null) overallPct = pctCand;
+    }
+  }
+
+  // 4. Fused-column recovery, last resort (see splitFusedNumber).
+  if (raw === null) {
+    const fused = fusedTokenNear(text, /results\s+summary/i) ?? fusedTokenNear(text, /overall/i);
     if (fused) {
       const split = splitFusedNumber(fused, [
-        { firstMax: 100, secondMax: 50 }, // Percentile then Raw Score
-        { firstMax: 50, secondMax: 100 }, // Raw Score then Percentile
+        { firstMax: 100, secondMax: 50 },
+        { firstMax: 50, secondMax: 100 },
       ]);
       if (split) {
-        // Whichever half is <= 50 and cannot be the percentile is the raw score;
-        // when both fit, the pair came from the unique split so take the one
-        // matching the /50 scale.
-        rawNum = split.second <= 50 ? split.second : split.first;
-        notes.push(`CCAT overall raw score read as ${rawNum} out of a merged "${fused}" — the report's columns ran together, so please confirm it.`);
+        raw = split.first <= 50 && split.second > 50 ? split.first : split.second <= 50 ? split.second : split.first;
+        if (overallPct === null) overallPct = raw === split.first ? split.second : split.first;
+        notes.push(`CCAT raw score read as ${raw} out of a merged "${fused}" — the report's columns ran together, so please confirm it.`);
       } else {
-        notes.push(`CCAT overall raw score could not be separated from the merged value "${fused}" — enter it by hand.`);
+        notes.push(`CCAT raw score could not be separated from the merged value "${fused}" — enter it by hand.`);
       }
     }
   }
-  if (rawNum === null && !notes.some((n) => n.includes('overall raw score'))) {
-    notes.push('CCAT overall raw score (out of 50) not found — enter it by hand.');
-  }
-  sections.push({ label: 'Overall', score: rawNum, sortOrder: 0 });
 
-  for (const sub of CCAT_SUBS) {
-    const v = findLabelled(text, sub);
-    if (v === null) notes.push(`CCAT "${CCAT_DISPLAY[sub.canonical]}" percentile not found.`);
-    sections.push({ label: CCAT_DISPLAY[sub.canonical], score: v, sortOrder: sub.sortOrder });
+  if (raw === null) notes.push('CCAT overall raw score (out of 50) not found — enter it by hand.');
+  if (overallPct === null) notes.push('CCAT overall percentile not found — enter it by hand.');
+
+  const subs = new Map<string, number | null>();
+  for (const sub of CCAT_SUB_PATTERNS) {
+    const v = firstNum(text, sub.res, 100);
+    subs.set(sub.label, v);
+    if (v === null) notes.push(`CCAT "${sub.label}" percentile not found.`);
   }
+
+  // Always emit the full fixed row set, in order, blanks included.
+  const sections: ParsedCcatSection[] = CCAT_ROWS.map((r) => ({
+    label: r.label,
+    score: r.label === 'Overall' ? raw
+      : r.label === 'Overall Percentile' ? overallPct
+      : subs.get(r.label) ?? null,
+    sortOrder: r.sortOrder,
+  }));
+
   return { sections, notes };
 }
 
-// ---------- EPP ----------
+// ---------- EPP ----------// ---------- EPP ----------
 
 // Criteria's 12 EPP traits, in the order the existing records use.
 const EPP_TRAITS: LabelSpec[] = [
@@ -563,11 +654,16 @@ export async function parseAssessmentPdf(
     return out;
   }
 
-  // Parse both readings and keep whichever recovered more.
-  const candidates = [parseOneReading(split, kind, fileName), parseOneReading(flat, kind, fileName)];
-  const best = candidates[0];
-  const other = candidates[1];
-  const winner = scoreParsed(other) > scoreParsed(best) ? other : best;
+  // Flat is the primary reading. The positioned reading is a FALLBACK only,
+  // used when flat recovers nothing at all — it groups cells by line, which
+  // helps interleaved layouts but actively hurts this one: the three CCAT
+  // sub-score cards share a visual line, so grouping by y detaches every label
+  // from its number and all three read as the first value. Picking the reading
+  // with more populated fields cannot distinguish that from a correct parse,
+  // which is why "best of two by count" was the wrong selector.
+  const primary = parseOneReading(flat, kind, fileName);
+  const fallback = scoreParsed(primary) === 0 ? parseOneReading(split, kind, fileName) : null;
+  const winner = fallback && scoreParsed(fallback) > 0 ? fallback : primary;
 
   if (kindOverride && detected !== 'unknown' && detected !== kindOverride) {
     winner.notes.push(`This file looks like a ${detected.toUpperCase()} report but you selected ${kindOverride.toUpperCase()} — check before saving.`);

@@ -65,6 +65,36 @@ const lblCls = 'block text-[11px] uppercase tracking-wide text-gray-500 mb-1';
 // before it is read and posted.
 const MAX_FILE_BYTES = 18 * 1024 * 1024;
 
+// FIXED SHAPE PER REPORT TYPE. The review form always renders exactly these
+// rows, in this order, whatever the parser managed to read — so a CCAT always
+// looks like a CCAT and an EPP always looks like an EPP. Values are editable;
+// labels are not, because these are fixed vendor instruments, not free-form
+// data. A row the parser missed shows as an empty, flagged box rather than
+// vanishing, which is what previously made the form change shape file to file.
+const CCAT_ROWS: Array<{ label: string; hint: string }> = [
+  { label: 'Overall', hint: 'Raw /50' },
+  { label: 'Overall Percentile', hint: 'Percentile' },
+  { label: 'Spatial', hint: 'Percentile' },
+  { label: 'Verbal', hint: 'Percentile' },
+  { label: 'Math & Logic', hint: 'Percentile' },
+];
+
+const EPP_TRAITS = [
+  'Achievement', 'Assertiveness', 'Competitiveness', 'Conscientiousness',
+  'Cooperativeness', 'Extroversion', 'Managerial', 'Motivation',
+  'Openness', 'Patience', 'Self-Confidence', 'Stress Tolerance',
+];
+
+const INSIGHT_COLORS: InsightColor[] = ['blue', 'green', 'yellow', 'red'];
+
+/** Aligns a parsed list onto the fixed template, keyed by label. */
+function onTemplate<T extends { label?: string; name?: string; color?: string }>(
+  parsed: T[] | undefined, keys: string[], key: 'label' | 'name' | 'color',
+): Array<T | undefined> {
+  const by = new Map((parsed ?? []).map((r) => [String(r[key]).toLowerCase(), r]));
+  return keys.map((k) => by.get(k.toLowerCase()));
+}
+
 const KIND_LABEL: Record<Kind, string> = {
   ccat: 'CCAT — Criteria Cognitive Aptitude Test',
   epp: 'EPP — Criteria Employee Personality Profile',
@@ -265,23 +295,41 @@ export default function UploadAssessmentPanel({
   const patchDraft = (id: string, fn: (d: Draft) => Draft) =>
     setItems((prev) => prev.map((it) => (it.id === id && it.draft ? { ...it, draft: fn(it.draft) } : it)));
 
-  const patchCcat = (id: string, i: number, patch: Partial<CcatSection>) =>
-    patchDraft(id, (d) => (d.ccat
-      ? { ...d, ccat: { sections: d.ccat.sections.map((sec, idx) => (idx === i ? { ...sec, ...patch } : sec)) } }
-      : d));
+  // Rows are addressed by LABEL, not index: the form renders a fixed template
+  // and the parsed list may be shorter, longer, or differently ordered. A row
+  // the parser never produced is created on first edit.
+  const patchCcatRow = (id: string, label: string, score: number | null) =>
+    patchDraft(id, (d) => {
+      if (!d.ccat) return d;
+      const found = d.ccat.sections.some((sec) => sec.label.toLowerCase() === label.toLowerCase());
+      const sections = found
+        ? d.ccat.sections.map((sec) => (sec.label.toLowerCase() === label.toLowerCase() ? { ...sec, score } : sec))
+        : [...d.ccat.sections, { label, score }];
+      return { ...d, ccat: { sections } };
+    });
 
-  const patchEppAttr = (id: string, i: number, patch: Partial<EppAttribute>) =>
-    patchDraft(id, (d) => (d.epp
-      ? { ...d, epp: { ...d.epp, attributes: d.epp.attributes.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) } }
-      : d));
+  const patchEppTrait = (id: string, name: string, st6Score: number | null) =>
+    patchDraft(id, (d) => {
+      if (!d.epp) return d;
+      const found = d.epp.attributes.some((a) => a.name.toLowerCase() === name.toLowerCase());
+      const attributes = found
+        ? d.epp.attributes.map((a) => (a.name.toLowerCase() === name.toLowerCase() ? { ...a, st6Score } : a))
+        : [...d.epp.attributes, { name, st6Score }];
+      return { ...d, epp: { ...d.epp, attributes } };
+    });
+
+  const patchInsightColor = (id: string, color: InsightColor, patch: Partial<InsightProfile>) =>
+    patchDraft(id, (d) => {
+      if (!d.insights) return d;
+      const found = d.insights.profiles.some((pr) => pr.color === color);
+      const profiles = found
+        ? d.insights.profiles.map((pr) => (pr.color === color ? { ...pr, ...patch } : pr))
+        : [...d.insights.profiles, { color, consciousScore: null, lessConsciousScore: null, ...patch }];
+      return { ...d, insights: { ...d.insights, profiles } };
+    });
 
   const patchEpp = (id: string, patch: Partial<{ profileName: string | null; score: number | null }>) =>
     patchDraft(id, (d) => (d.epp ? { ...d, epp: { ...d.epp, ...patch } } : d));
-
-  const patchInsight = (id: string, i: number, patch: Partial<InsightProfile>) =>
-    patchDraft(id, (d) => (d.insights
-      ? { ...d, insights: { ...d.insights, profiles: d.insights.profiles.map((pr, idx) => (idx === i ? { ...pr, ...patch } : pr)) } }
-      : d));
 
   const patchInsightMeta = (id: string, patch: Record<string, unknown>) =>
     patchDraft(id, (d) => (d.insights ? { ...d, insights: { ...d.insights, ...patch } } : d));
@@ -310,7 +358,7 @@ export default function UploadAssessmentPanel({
             file. HR and admins only.
           </p>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-500">importer v2</span>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-500">importer v3</span>
       </div>
 
       {/* Step 1 — who these are for (required) */}
@@ -465,55 +513,60 @@ export default function UploadAssessmentPanel({
                       </div>
                     )}
 
-                    {/* CCAT */}
+                    {/* CCAT — fixed five rows */}
                     {d.kind === 'ccat' && d.ccat && (
                       <div className="space-y-2">
                         <div className="text-xs text-gray-500">
-                          <strong>Overall</strong> is the raw score out of 50. The other rows are 0–100 percentiles.
+                          <strong>Overall</strong> is the raw score out of 50. Everything else is a 0–100 percentile.
                         </div>
-                        {d.ccat.sections.map((sec, i) => (
-                          <div key={i} className="flex items-end gap-2">
-                            <div className="flex-1">
-                              <label className={lblCls}>Label</label>
-                              <input className={`${inputCls} w-full`} value={sec.label}
-                                onChange={(e) => patchCcat(it.id, i, { label: e.target.value })} />
+                        {CCAT_ROWS.map((row, i) => {
+                          const parsed = onTemplate(d.ccat!.sections, CCAT_ROWS.map((r) => r.label), 'label')[i];
+                          const value = parsed?.score ?? null;
+                          return (
+                            <div key={row.label} className="flex items-center gap-3">
+                              <span className="flex-1 text-sm text-gray-800">{row.label}</span>
+                              <span className="text-[11px] uppercase tracking-wide text-gray-400 w-20 text-right">{row.hint}</span>
+                              <input
+                                className={`${inputCls} w-24 ${value === null ? 'border-amber-400' : ''}`}
+                                value={str(value)} placeholder="—"
+                                onChange={(e) => patchCcatRow(it.id, row.label, toN(e.target.value))} />
                             </div>
-                            <div className="w-28">
-                              <label className={lblCls}>{sec.label.toLowerCase() === 'overall' ? 'Raw /50' : 'Percentile'}</label>
-                              <input className={`${inputCls} w-full ${sec.score === null ? 'border-amber-400' : ''}`}
-                                value={str(sec.score)} placeholder="—"
-                                onChange={(e) => patchCcat(it.id, i, { score: toN(e.target.value) })} />
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
-                    {/* EPP */}
+                    {/* EPP — fixed twelve traits */}
                     {d.kind === 'epp' && d.epp && (
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-end gap-3">
                           <div className="flex-1 min-w-[220px]">
                             <label className={lblCls}>EPP profile</label>
-                            <input className={`${inputCls} w-full`} value={str(d.epp.profileName)}
+                            <input className={`${inputCls} w-full ${!d.epp.profileName ? 'border-amber-400' : ''}`}
+                              value={str(d.epp.profileName)}
                               placeholder={"e.g. Analysis, Planning & Consulting"}
                               onChange={(e) => patchEpp(it.id, { profileName: e.target.value })} />
                           </div>
                           <div className="w-28">
                             <label className={lblCls}>Badge score</label>
-                            <input className={`${inputCls} w-full`} value={str(d.epp.score)} placeholder="0–100"
+                            <input className={`${inputCls} w-full ${d.epp.score === null ? 'border-amber-400' : ''}`}
+                              value={str(d.epp.score)} placeholder="0–100"
                               onChange={(e) => patchEpp(it.id, { score: toN(e.target.value) })} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {d.epp.attributes.map((a, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="flex-1 text-sm text-gray-800">{a.name}</span>
-                              <input className={`${inputCls} w-20 ${a.st6Score === null ? 'border-amber-400' : ''}`}
-                                value={str(a.st6Score)} placeholder="—"
-                                onChange={(e) => patchEppAttr(it.id, i, { st6Score: toN(e.target.value) })} />
-                            </div>
-                          ))}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          {EPP_TRAITS.map((name, i) => {
+                            const parsed = onTemplate(d.epp!.attributes, EPP_TRAITS, 'name')[i];
+                            const value = parsed?.st6Score ?? null;
+                            return (
+                              <div key={name} className="flex items-center gap-2">
+                                <span className="flex-1 text-sm text-gray-800">{name}</span>
+                                <input className={`${inputCls} w-20 ${value === null ? 'border-amber-400' : ''}`}
+                                  value={str(value)} placeholder="—"
+                                  onChange={(e) => patchEppTrait(it.id, name, toN(e.target.value))} />
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -555,16 +608,22 @@ export default function UploadAssessmentPanel({
                             <span className={lblCls}>Conscious %</span>
                             <span className={lblCls}>Less conscious %</span>
                           </div>
-                          {d.insights.profiles.map((pr, i) => (
-                            <div key={pr.color} className="grid grid-cols-[80px_1fr_1fr] gap-2 mb-1.5 items-center">
-                              <span className="text-sm text-gray-800 capitalize">{pr.color}</span>
-                              <input className={`${inputCls} w-full ${pr.consciousScore === null ? 'border-amber-400' : ''}`}
-                                value={str(pr.consciousScore)} placeholder="—"
-                                onChange={(e) => patchInsight(it.id, i, { consciousScore: toN(e.target.value) })} />
-                              <input className={`${inputCls} w-full`} value={str(pr.lessConsciousScore)} placeholder="—"
-                                onChange={(e) => patchInsight(it.id, i, { lessConsciousScore: toN(e.target.value) })} />
-                            </div>
-                          ))}
+                          {INSIGHT_COLORS.map((color, i) => {
+                            const pr = onTemplate(d.insights!.profiles, INSIGHT_COLORS, 'color')[i];
+                            const cons = pr?.consciousScore ?? null;
+                            const less = pr?.lessConsciousScore ?? null;
+                            return (
+                              <div key={color} className="grid grid-cols-[80px_1fr_1fr] gap-2 mb-1.5 items-center">
+                                <span className="text-sm text-gray-800 capitalize">{color}</span>
+                                <input className={`${inputCls} w-full ${cons === null ? 'border-amber-400' : ''}`}
+                                  value={str(cons)} placeholder="—"
+                                  onChange={(e) => patchInsightColor(it.id, color, { consciousScore: toN(e.target.value) })} />
+                                <input className={`${inputCls} w-full ${less === null ? 'border-amber-400' : ''}`}
+                                  value={str(less)} placeholder="—"
+                                  onChange={(e) => patchInsightColor(it.id, color, { lessConsciousScore: toN(e.target.value) })} />
+                              </div>
+                            );
+                          })}
                           <p className="text-[11px] text-gray-400 mt-1">
                             The highest conscious energy becomes the lead colour on the person card.
                           </p>
