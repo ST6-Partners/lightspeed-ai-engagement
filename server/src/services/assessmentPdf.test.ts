@@ -3,9 +3,11 @@
 // matching. Fixtures below mimic how pdfjs flattens a vendor report: labels and
 // values on adjacent lines, percent signs and stray whitespace intact.
 // Run: npx tsx server/src/services/assessmentPdf.test.ts
+import { readFileSync } from 'fs';
 import {
   detectKind, detectName, parseCcat, parseEpp, parseInsights,
-  normalizeDate, parseAssessmentPdf,
+  normalizeDate, parseAssessmentPdf, looksLikeHeading, extractPdfReadings,
+  splitFusedNumber,
 } from './assessmentPdf.js';
 
 let fails = 0;
@@ -148,6 +150,58 @@ eq('date null -> null', normalizeDate(null), null);
 await parseAssessmentPdf(Buffer.from('not a pdf at all').toString('base64'), 'notes.txt')
   .then(() => { console.log('FAIL non-PDF should reject'); fails++; })
   .catch((e: Error) => eq('non-PDF rejected with a plain-English reason', /does not look like a PDF/.test(e.message), true));
+
+// ---------- fused table columns (the real-report failure) ----------
+// A CCAT row holding a percentile of 88 and a raw score of 37 fuses to "8837"
+// in the flat reading when the columns sit flush. The percentile must not be
+// mistaken for the raw score, and the raw score must still be found.
+eq('raw-score lookup steps over an out-of-range percentile',
+  parseCcat('Criteria Cognitive Aptitude Test\nRaw Score\nOverall 88 37\n').sections[0].score, 37);
+eq('a percentile alone is not accepted as a raw score',
+  parseCcat('Criteria Cognitive Aptitude Test\nRaw Score\nOverall 88\n').sections[0].score, null);
+
+// ---------- heading filter ----------
+eq('table header rejected as a name', looksLikeHeading('PercentileRaw Score'), true);
+eq('section heading rejected as a name', looksLikeHeading('Score Summary'), true);
+eq('a real name is not a heading', looksLikeHeading('Brooke Friedman'), false);
+
+// ---------- positioned extraction beats fused columns, end to end ----------
+// /tmp/ccat_glued.pdf is generated with columns positioned flush, reproducing
+// the vendor layout that fused into "PercentileRaw Score" and "8837".
+try {
+  const glued = readFileSync('/tmp/ccat_glued.pdf').toString('base64');
+  const readings = await extractPdfReadings(glued, 'glued.pdf');
+  // pdfjs fuses flush runs upstream and v4 removed disableCombineTextItems, so
+  // NEITHER reading can separate them. Asserted so the limitation is recorded
+  // rather than rediscovered.
+  eq('flat reading fuses the header', /PercentileRaw Score/.test(readings.flat), true);
+  eq('positioned reading fuses it too (pdfjs merges upstream)', /PercentileRaw Score/.test(readings.split), true);
+
+  const r = await parseAssessmentPdf(glued, 'glued.pdf');
+  eq('fused-column PDF: kind', r.kind, 'ccat');
+  eq('fused-column PDF: raw /50 recovered by constrained split', r.ccat?.sections[0].score, 37);
+  eq('fused-column PDF: recovery is flagged for confirmation',
+    r.notes.some((n) => /columns ran together/.test(n)), true);
+  eq('fused-column PDF: sub-scores recovered',
+    r.ccat?.sections.slice(1).map((x) => x.score), [96, 95, 85]);
+  eq('fused-column PDF: header not mistaken for a name', r.detectedName, 'Brooke Friedman');
+} catch (e) {
+  console.log(`SKIP fused-column PDF test (fixture missing): ${(e as Error).message}`);
+}
+
+// ---------- constrained split of a fused numeric cell ----------
+eq('unique valid split accepted', splitFusedNumber('8837', [{ firstMax: 100, secondMax: 50 }]), { first: 88, second: 37 });
+// 4545 under (100,100) has exactly ONE valid cut (45|45) — 4|545 and 454|5 both
+// bust the range — so it is recovered, not refused.
+eq('single valid cut wins even when the halves match', splitFusedNumber('4545', [{ firstMax: 100, secondMax: 100 }]), { first: 45, second: 45 });
+// 1234 under (1000,1000) genuinely cuts three ways — that is ambiguous.
+eq('ambiguous split refused', splitFusedNumber('1234', [{ firstMax: 1000, secondMax: 1000 }]), null);
+// 88|07 is skipped for the leading zero, leaving 880|7 as the only valid cut.
+eq('leading-zero cut skipped, valid cut still found', splitFusedNumber('8807', [{ firstMax: 1000, secondMax: 50 }]), { first: 880, second: 7 });
+// No cut fits percentile/raw ranges, so nothing is invented.
+eq('no valid cut -> null', splitFusedNumber('8807', [{ firstMax: 100, secondMax: 50 }]), null);
+eq('too short to be fused', splitFusedNumber('88', [{ firstMax: 100, secondMax: 50 }]), null);
+eq('non-numeric refused', splitFusedNumber('88a7', [{ firstMax: 100, secondMax: 50 }]), null);
 
 console.log(fails === 0 ? '\nAll assessment PDF parser tests passed.' : `\n${fails} test(s) failed.`);
 process.exit(fails === 0 ? 0 : 1);
