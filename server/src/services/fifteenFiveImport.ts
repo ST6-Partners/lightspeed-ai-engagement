@@ -291,3 +291,166 @@ export function weightedMean(rows: { value: number | null; weight: number | null
   }
   return denominator > 0 ? Math.round((numerator / denominator) * 100) / 100 : null;
 }
+
+// ------------------------------------------------------------
+// DERIVATION — turns normalized export rows into the aggregate metric rows the
+// results tabs read (overall / driver / question, at company and department
+// scope). Kept pure and database-free so it can be tested directly.
+// ------------------------------------------------------------
+
+export type QuestionBankEntry = { id: string; driver: string | null };
+
+export type DerivedMetric = {
+  scope: 'company' | 'department';
+  department: string | null;
+  dimension: 'overall' | 'driver' | 'question';
+  metricKey: string | null;
+  mean: number | null;
+  favorablePct: number | null;
+  unfavorablePct: number | null;
+  responseCount: number;
+  eligibleCount: number | null;
+};
+
+type Bucket = { value: number | null; weight: number | null };
+type Agg = { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null };
+
+const emptyAgg = (): Agg => ({ mean: [], fav: [], unfav: [], responses: 0, eligible: null });
+
+function mergeAggs(parts: Agg[]): Agg {
+  const merged = emptyAgg();
+  for (const a of parts) {
+    merged.mean.push(...a.mean);
+    merged.fav.push(...a.fav);
+    merged.unfav.push(...a.unfav);
+    // Departments are disjoint, so respondents SUM rather than max.
+    merged.responses += a.responses;
+    if (a.eligible != null) merged.eligible = (merged.eligible ?? 0) + a.eligible;
+  }
+  return merged;
+}
+
+export function deriveMetrics(
+  norm: NormalizedRow[],
+  bankByText: Map<string, QuestionBankEntry>,
+): {
+  metrics: DerivedMetric[];
+  unmappedDimensions: string[];
+  unmatchedStatements: number;
+  derivedCompanyOverall: boolean;
+  companyResponses: number;
+  companyEligible: number | null;
+} {
+  const driverAgg = new Map<string, Agg>();
+  const overallAgg = new Map<string, Agg>();
+  const questionMetrics: DerivedMetric[] = [];
+  const unmapped = new Set<string>();
+  let unmatchedStatements = 0;
+
+  const bump = (store: Map<string, Agg>, key: string, r: NormalizedRow, favOverride?: number | null) => {
+    const cur = store.get(key) ?? emptyAgg();
+    cur.mean.push({ value: r.avgResponse, weight: r.totalResponses });
+    cur.fav.push({ value: favOverride !== undefined ? favOverride : r.favorablePct, weight: r.totalResponses });
+    cur.unfav.push({ value: r.unfavorablePct, weight: r.totalResponses });
+    cur.responses = Math.max(cur.responses, r.totalResponses ?? 0);
+    if (r.totalPossible != null) cur.eligible = Math.max(cur.eligible ?? 0, r.totalPossible);
+    store.set(key, cur);
+  };
+  const scopeKey = (r: NormalizedRow) => `${r.scope}|${r.groupName ?? ''}`;
+
+  for (const r of norm) {
+    if (!r.statement) {
+      // department-scores shape: the row IS that department's overall figure.
+      // 15Five's per-department "Score" has its own 0-100 basis; it lands in
+      // favorablePct because that is the cross-scale-safe comparison field.
+      if (r.scope === 'department') bump(overallAgg, scopeKey(r), r, r.favorablePct ?? r.score);
+      continue;
+    }
+
+    const hit = bankByText.get(statementKey(r.statement));
+    if (hit) {
+      questionMetrics.push({
+        scope: r.scope,
+        department: r.scope === 'department' ? r.groupName : null,
+        dimension: 'question',
+        metricKey: hit.id,
+        mean: r.avgResponse,
+        favorablePct: r.favorablePct,
+        unfavorablePct: r.unfavorablePct,
+        responseCount: r.totalResponses ?? 0,
+        eligibleCount: r.totalPossible,
+      });
+    } else {
+      unmatchedStatements++;
+    }
+
+    const driverKey = hit?.driver ?? mapDimension(r.dimension);
+    if (driverKey) bump(driverAgg, `${scopeKey(r)}|${driverKey}`, r);
+    else if (r.dimension) unmapped.add(r.dimension);
+
+    bump(overallAgg, scopeKey(r), r);
+  }
+
+  // An export carrying only a department breakdown leaves the company level
+  // empty, which renders as a blank Summary tab — the survey looks like it
+  // imported and then did nothing. Roll the departments up instead. A real
+  // company row always wins; this only fills a genuine gap.
+  let derivedCompanyOverall = false;
+  if (![...overallAgg.keys()].some((k) => k.startsWith('company|')) && overallAgg.size > 0) {
+    overallAgg.set('company|', mergeAggs([...overallAgg.values()]));
+    derivedCompanyOverall = true;
+  }
+
+  // Same gap at driver level.
+  for (const dk of new Set([...driverAgg.keys()].map((k) => k.split('|')[2]))) {
+    if (driverAgg.has(`company||${dk}`)) continue;
+    const parts = [...driverAgg.entries()]
+      .filter(([k]) => k.startsWith('department|') && k.endsWith(`|${dk}`))
+      .map(([, a]) => a);
+    if (parts.length) driverAgg.set(`company||${dk}`, mergeAggs(parts));
+  }
+
+  const metrics: DerivedMetric[] = [...questionMetrics];
+
+  for (const [key, agg] of driverAgg.entries()) {
+    const [scope, group, driverKey] = key.split('|');
+    metrics.push({
+      scope: scope as 'company' | 'department',
+      department: scope === 'department' ? (group || null) : null,
+      dimension: 'driver',
+      metricKey: driverKey,
+      mean: weightedMean(agg.mean),
+      favorablePct: weightedMean(agg.fav),
+      unfavorablePct: weightedMean(agg.unfav),
+      responseCount: agg.responses,
+      eligibleCount: agg.eligible,
+    });
+  }
+
+  let companyResponses = 0;
+  let companyEligible: number | null = null;
+  for (const [key, agg] of overallAgg.entries()) {
+    const [scope, group] = key.split('|');
+    if (scope === 'company') { companyResponses = agg.responses; companyEligible = agg.eligible; }
+    metrics.push({
+      scope: scope as 'company' | 'department',
+      department: scope === 'department' ? (group || null) : null,
+      dimension: 'overall',
+      metricKey: null,
+      mean: weightedMean(agg.mean),
+      favorablePct: weightedMean(agg.fav),
+      unfavorablePct: weightedMean(agg.unfav),
+      responseCount: agg.responses,
+      eligibleCount: agg.eligible,
+    });
+  }
+
+  return {
+    metrics,
+    unmappedDimensions: [...unmapped],
+    unmatchedStatements,
+    derivedCompanyOverall,
+    companyResponses,
+    companyEligible,
+  };
+}

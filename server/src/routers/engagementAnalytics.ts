@@ -12,7 +12,7 @@ import { users } from '../db/schema/core.js';
 import { departments } from '../db/schema/departments.js';
 import { eq } from 'drizzle-orm';
 import {
-  detectColumns, detectShape, normalizeRows, mapDimension, statementKey, weightedMean,
+  detectColumns, detectShape, normalizeRows, statementKey, deriveMetrics,
   type NormalizedRow,
 } from '../services/fifteenFiveImport.js';
 import { parseUploadedTable } from '../services/tableUpload.js';
@@ -1033,11 +1033,14 @@ export const engagementAnalyticsRouter = router({
         periodDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'periodDate must be YYYY-MM-DD'),
         scaleMax: z.number().int().min(2).max(11).default(5),
       }),
-      file: z.object({
+      // Several files import together into one survey — 15Five often splits the
+      // company sheet, the department breakdown and the scores into separate
+      // downloads. Each file may itself be a multi-sheet workbook.
+      files: z.array(z.object({
         name: z.string().min(1),
         // base64 of the raw upload; ~25MB of base64 is well past any real export
         base64: z.string().min(1).max(25_000_000),
-      }),
+      })).min(1).max(10),
       replace: z.boolean().default(true),
       makeCurrent: z.boolean().default(false),
     }))
@@ -1048,13 +1051,22 @@ export const engagementAnalyticsRouter = router({
       // A workbook may hold several differently-shaped sheets (company
       // statements, department statements, department scores). Each is detected
       // and normalised on its own, then merged into one import.
-      let sheets;
-      try {
-        sheets = await parseUploadedTable(input.file.base64, input.file.name);
-      } catch (e) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: e instanceof Error ? e.message : 'Could not read that file.' });
+      const sheets: Array<{ sheet: string; rows: Record<string, string>[] }> = [];
+      const multiFile = input.files.length > 1;
+      for (const f of input.files) {
+        let parsed;
+        try {
+          parsed = await parseUploadedTable(f.base64, f.name);
+        } catch (e) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `${f.name}: ${e instanceof Error ? e.message : 'could not be read.'}` });
+        }
+        // Label sheets with their file when more than one file is in play, so the
+        // result readout says which upload a sheet came from.
+        for (const sh of parsed) {
+          sheets.push({ sheet: multiFile ? `${f.name} — ${sh.sheet}` : sh.sheet, rows: sh.rows });
+        }
       }
-      if (sheets.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That file has no data rows.' });
+      if (sheets.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No data rows found in the file(s) you selected.' });
 
       const norm: NormalizedRow[] = [];
       const sheetReports: Array<{ sheet: string; shape: string; rows: number; columns: string[] }> = [];
@@ -1076,8 +1088,7 @@ export const engagementAnalyticsRouter = router({
         countsWerePercentages = countsWerePercentages || res.countsWerePercentages;
         sheetReports.push({ sheet: sheet.sheet, shape, rows: res.rows.length, columns: [] });
         for (const [field, header] of Object.entries(cols)) {
-          const line = sheets.length > 1 ? `${sheet.sheet}: ${field} \u2190 "${header}"` : `${field} \u2190 "${header}"`;
-          columnsDetected.push(line);
+          columnsDetected.push(sheets.length > 1 ? `${sheet.sheet}: ${field} \u2190 "${header}"` : `${field} \u2190 "${header}"`);
         }
       }
 
@@ -1085,7 +1096,7 @@ export const engagementAnalyticsRouter = router({
         const detail = sheetReports.map((r) => `"${r.sheet}" (columns: ${r.columns.join(', ') || 'none'})`).join('; ');
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: `Could not recognise any sheet in this file as a 15Five engagement export. Found ${detail}. A sheet needs a statement/question column, or a department/group column with a score.`,
+          message: `Could not recognise any sheet as a 15Five engagement export. Found ${detail}. A sheet needs a statement/question column, or a department/group column with a score.`,
         });
       }
 
@@ -1142,99 +1153,27 @@ export const engagementAnalyticsRouter = router({
       }
 
       // ---- derive aggregates ----
+      // Pure derivation lives in the service so it can be unit-tested without a
+      // database; this layer only persists the result.
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
-      const bankByText = new Map(qbank.map((q) => [statementKey(q.text), q]));
+      const bankByText = new Map(qbank.map((q) => [statementKey(q.text), { id: q.id, driver: q.driver }]));
+      const {
+        metrics, unmappedDimensions, unmatchedStatements,
+        derivedCompanyOverall, companyResponses, companyEligible,
+      } = deriveMetrics(norm, bankByText);
 
-      type Bucket = { value: number | null; weight: number | null };
-      const driverAgg = new Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>();
-      const overallAgg = new Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>();
-      const questionMetrics: Array<typeof surveyMetrics.$inferInsert> = [];
-      const unmappedDimensions = new Set<string>();
-      let unmatchedStatements = 0;
-
-      const bump = (
-        store: Map<string, { mean: Bucket[]; fav: Bucket[]; unfav: Bucket[]; responses: number; eligible: number | null }>,
-        key: string, r: NormalizedRow,
-      ) => {
-        const cur = store.get(key) ?? { mean: [], fav: [], unfav: [], responses: 0, eligible: null };
-        cur.mean.push({ value: r.avgResponse, weight: r.totalResponses });
-        cur.fav.push({ value: r.favorablePct, weight: r.totalResponses });
-        cur.unfav.push({ value: r.unfavorablePct, weight: r.totalResponses });
-        cur.responses = Math.max(cur.responses, r.totalResponses ?? 0);
-        if (r.totalPossible != null) cur.eligible = Math.max(cur.eligible ?? 0, r.totalPossible);
-        store.set(key, cur);
-      };
-      const scopeKey = (r: NormalizedRow) => `${r.scope}|${r.groupName ?? ''}`;
-
-      for (const r of norm) {
-        if (!r.statement) {
-          // department-scores shape: the row IS the department overall.
-          if (r.scope === 'department') {
-            const pctVal = r.score ?? r.favorablePct;
-            questionMetrics.push({
-              periodId, scope: 'department', department: r.groupName, dimension: 'overall', metricKey: null,
-              mean: r.avgResponse != null ? String(r.avgResponse) : null,
-              favorablePct: pctVal != null ? String(pctVal) : null,
-              unfavorablePct: r.unfavorablePct != null ? String(r.unfavorablePct) : null,
-              responseCount: r.totalResponses ?? 0,
-              eligibleCount: r.totalPossible,
-            });
-          }
-          continue;
-        }
-
-        const hit = bankByText.get(statementKey(r.statement));
-        if (hit) {
-          questionMetrics.push({
-            periodId, scope: r.scope, department: r.scope === 'department' ? r.groupName : null,
-            dimension: 'question', metricKey: hit.id,
-            mean: r.avgResponse != null ? String(r.avgResponse) : null,
-            favorablePct: r.favorablePct != null ? String(r.favorablePct) : null,
-            unfavorablePct: r.unfavorablePct != null ? String(r.unfavorablePct) : null,
-            responseCount: r.totalResponses ?? 0,
-            eligibleCount: r.totalPossible,
-          });
-        } else {
-          unmatchedStatements++;
-        }
-
-        const driverKey = (hit?.driver as string | null | undefined) ?? mapDimension(r.dimension);
-        if (driverKey) bump(driverAgg, `${scopeKey(r)}|${driverKey}`, r);
-        else if (r.dimension) unmappedDimensions.add(r.dimension);
-
-        bump(overallAgg, scopeKey(r), r);
-      }
-
-      const derived: Array<typeof surveyMetrics.$inferInsert> = [...questionMetrics];
-
-      for (const [key, agg] of driverAgg.entries()) {
-        const [scope, group, driverKey] = key.split('|');
-        derived.push({
-          periodId, scope, department: scope === 'department' ? (group || null) : null,
-          dimension: 'driver', metricKey: driverKey,
-          mean: weightedMean(agg.mean) != null ? String(weightedMean(agg.mean)) : null,
-          favorablePct: weightedMean(agg.fav) != null ? String(weightedMean(agg.fav)) : null,
-          unfavorablePct: weightedMean(agg.unfav) != null ? String(weightedMean(agg.unfav)) : null,
-          responseCount: agg.responses,
-          eligibleCount: agg.eligible,
-        });
-      }
-
-      let companyResponses = 0;
-      let companyEligible: number | null = null;
-      for (const [key, agg] of overallAgg.entries()) {
-        const [scope, group] = key.split('|');
-        if (scope === 'company') { companyResponses = agg.responses; companyEligible = agg.eligible; }
-        derived.push({
-          periodId, scope, department: scope === 'department' ? (group || null) : null,
-          dimension: 'overall', metricKey: null,
-          mean: weightedMean(agg.mean) != null ? String(weightedMean(agg.mean)) : null,
-          favorablePct: weightedMean(agg.fav) != null ? String(weightedMean(agg.fav)) : null,
-          unfavorablePct: weightedMean(agg.unfav) != null ? String(weightedMean(agg.unfav)) : null,
-          responseCount: agg.responses,
-          eligibleCount: agg.eligible,
-        });
-      }
+      const derived: Array<typeof surveyMetrics.$inferInsert> = metrics.map((m) => ({
+        periodId,
+        scope: m.scope,
+        department: m.department,
+        dimension: m.dimension,
+        metricKey: m.metricKey,
+        mean: m.mean != null ? String(m.mean) : null,
+        favorablePct: m.favorablePct != null ? String(m.favorablePct) : null,
+        unfavorablePct: m.unfavorablePct != null ? String(m.unfavorablePct) : null,
+        responseCount: m.responseCount,
+        eligibleCount: m.eligibleCount,
+      }));
 
       for (let i = 0; i < derived.length; i += CHUNK) {
         await ctx.db.insert(surveyMetrics).values(derived.slice(i, i + CHUNK));
@@ -1260,9 +1199,11 @@ export const engagementAnalyticsRouter = router({
         columnsDetected,
         statementRows: stmtRows.length,
         metricsAdded: derived.length,
-        questionMetrics: questionMetrics.filter((m) => m.dimension === 'question').length,
-        driverMetrics: driverAgg.size,
-        overallMetrics: overallAgg.size,
+        questionMetrics: derived.filter((m) => m.dimension === 'question').length,
+        driverMetrics: derived.filter((m) => m.dimension === 'driver').length,
+        overallMetrics: derived.filter((m) => m.dimension === 'overall').length,
+        departmentsCovered: new Set(derived.filter((m) => m.scope === 'department' && m.department).map((m) => m.department)).size,
+        derivedCompanyOverall,
         droppedRows: dropped,
         countsWerePercentages,
         unmatchedStatements,

@@ -26,6 +26,8 @@ type Result = {
   overallMetrics: number;
   droppedRows: number;
   countsWerePercentages: boolean;
+  departmentsCovered: number;
+  derivedCompanyOverall: boolean;
   unmatchedStatements: number;
   unmappedDimensions: string[];
 };
@@ -68,14 +70,16 @@ export default function ImportResultsPanel() {
   const ready = label.trim().length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(periodDate);
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
     setBusy(true); setErr(null); setResult(null);
     try {
-      const base64 = await toBase64(file);
+      const files = await Promise.all(
+        picked.map(async (f) => ({ name: f.name, base64: await toBase64(f) })),
+      );
       const res = await importer.mutateAsync({
         period: { label: label.trim(), periodDate, scaleMax: Number(scaleMax) },
-        file: { name: file.name, base64 },
+        files,
         replace, makeCurrent: false,
       });
       setResult(res as Result);
@@ -108,9 +112,10 @@ export default function ImportResultsPanel() {
       {open && (
         <div className="px-5 pb-5 pt-1 border-t border-ls-line">
           <p className="text-[13px] text-ls-ink-2 mt-3 mb-4 max-w-2xl">
-            Export your results from 15Five and upload the file as-is — Excel or CSV, no need to
-            rearrange columns. If the workbook has several sheets, they all load in one go. Name the
-            survey below and it appears alongside the in-app surveys, with department and statement
+            Export your results from 15Five and upload them as-is — Excel or CSV, no need to
+            rearrange columns. Select as many files as you like at once (hold Shift or Cmd in the
+            file picker); multi-sheet workbooks load whole. Everything merges into the one survey you
+            name below, and it appears alongside the in-app surveys with department and statement
             detail intact.
           </p>
 
@@ -144,6 +149,7 @@ export default function ImportResultsPanel() {
             ref={fileRef}
             type="file"
             accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            multiple
             className="hidden"
             onChange={onFile} />
           <div className="flex items-center gap-3 flex-wrap">
@@ -151,7 +157,7 @@ export default function ImportResultsPanel() {
               onClick={() => fileRef.current?.click()}
               disabled={!ready || busy}
               className="ls-btn ls-btn-primary inline-flex items-center gap-1.5 disabled:opacity-50">
-              <Upload size={15} /> {busy ? 'Importing…' : 'Choose file & import'}
+              <Upload size={15} /> {busy ? 'Importing…' : 'Choose file(s) & import'}
             </button>
             {!ready && <span className="text-[12px] text-ls-ink-3">Add a survey name and close date first.</span>}
           </div>
@@ -184,11 +190,25 @@ export default function ImportResultsPanel() {
                   {result.metricsAdded} result figure(s) calculated
                   {' '}({result.overallMetrics} overall, {result.driverMetrics} by driver, {result.questionMetrics} by question)
                 </li>
+                {result.departmentsCovered > 0 && <li>{result.departmentsCovered} department(s) covered</li>}
                 {result.replacedMetrics > 0 && <li>{result.replacedMetrics} previous figure(s) replaced</li>}
+                {result.derivedCompanyOverall && (
+                  <li className="text-ls-ink-3">
+                    No company-wide sheet was included, so the company figure was rolled up from the
+                    departments (weighted by respondents). Upload the company sheet too if you have it.
+                  </li>
+                )}
                 {result.droppedRows > 0 && <li>{result.droppedRows} blank/unlabelled row(s) skipped</li>}
                 {result.countsWerePercentages && (
                   <li className="text-ls-ink-3">
                     The favorable/neutral/unfavorable columns held percentages, not head counts — read as percentages.
+                  </li>
+                )}
+                {result.statementRows === 0 && (
+                  <li className="text-ls-ink-3">
+                    This file carried department totals only — no per-statement detail, so the
+                    Statements and Heatmap tabs stay empty for this survey. Add the statement-level
+                    export to fill them.
                   </li>
                 )}
                 {result.unmatchedStatements > 0 && (
