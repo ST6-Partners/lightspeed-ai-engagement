@@ -30,6 +30,7 @@ import {
   assessmentSummaries, assessmentCcatSections, assessmentEppAttributes,
   assessmentInsightProfiles, reviewCycles, reviewValueDetails,
 } from '../db/schema/orgScreen.js';
+import { parseAssessmentPdf, type AssessmentKind } from '../services/assessmentPdf.js';
 
 const itemType = z.enum(['objective', 'key_result', 'task', 'ktbr']);
 
@@ -784,5 +785,161 @@ export const orgScreenRouter = router({
   reviewValueDetailRemove: protectedProcedure.use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => { await ctx.db.delete(reviewValueDetails).where(eq(reviewValueDetails.id, input.id)); return { ok: true }; }),
+
+  // ================= Assessment PDF import (parse -> confirm -> commit) =================
+  // Two steps on purpose. `assessmentImportParse` NEVER writes: it extracts the
+  // vendor PDF, returns an editable draft plus notes on anything it could not
+  // find, and flags a name mismatch against the chosen person. The admin
+  // corrects the draft, then `assessmentImportCommit` writes it. A mis-parse
+  // therefore costs a correction, not wrong cognitive/personality data on a
+  // real person's record. See services/assessmentPdf.ts.
+
+  /** Parse only. Returns a draft for confirmation — writes nothing. */
+  assessmentImportParse: protectedProcedure.use(requireAdmin)
+    .input(z.object({
+      fileName: z.string().min(1),
+      fileBase64: z.string().min(1),
+      kind: z.enum(['ccat', 'epp', 'insights']).optional(),
+      userId: z.string().uuid().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const parsed = await parseAssessmentPdf(input.fileBase64, input.fileName, input.kind as AssessmentKind | undefined);
+
+      // Attribution safety net: warn (never block) when the name printed on the
+      // report doesn't look like the person selected. Compare on normalized
+      // first+last so "Brooke S. Friedman" still matches "Brooke Friedman".
+      let nameMismatch: { pdfName: string; personName: string } | null = null;
+      if (input.userId && parsed.detectedName) {
+        const person = await ctx.db.query.users.findFirst({
+          where: eq(users.id, input.userId), columns: { name: true, email: true },
+        });
+        const key = (v: string) => {
+          const parts = v.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+          return parts.length >= 2 ? `${parts[0]} ${parts[parts.length - 1]}` : parts.join(' ');
+        };
+        const personName = person?.name ?? '';
+        if (personName && key(personName) !== key(parsed.detectedName)) {
+          nameMismatch = { pdfName: parsed.detectedName, personName };
+        }
+      }
+      return { ...parsed, nameMismatch };
+    }),
+
+  /** Commit a confirmed draft. Replaces that assessment type for that person. */
+  assessmentImportCommit: protectedProcedure.use(requireAdmin)
+    .input(z.object({
+      userId: z.string().uuid(),
+      kind: z.enum(['ccat', 'epp', 'insights']),
+      sourceFile: z.string().optional(),
+      ccat: z.object({
+        sections: z.array(z.object({
+          label: z.string().min(1), score: numIn, sortOrder: z.number().int().optional(),
+        })),
+      }).optional(),
+      epp: z.object({
+        profileName: z.string().nullable().optional(),
+        score: numIn,
+        attributes: z.array(z.object({
+          name: z.string().min(1), st6Score: numIn, sortOrder: z.number().int().optional(),
+        })),
+      }).optional(),
+      insights: z.object({
+        insightsType: z.string().nullable().optional(),
+        consciousWheel: z.string().nullable().optional(),
+        lessWheel: z.string().nullable().optional(),
+        preferenceFlow: numIn,
+        completedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        profiles: z.array(z.object({
+          color: z.enum(['blue', 'green', 'yellow', 'red']),
+          consciousScore: numIn, lessConsciousScore: numIn,
+          isPrimary: z.boolean().optional(), sortOrder: z.number().int().optional(),
+        })),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Person attribution is the whole point of the flow — never infer it.
+      const person = await ctx.db.query.users.findFirst({
+        where: eq(users.id, input.userId), columns: { id: true, name: true, email: true },
+      });
+      if (!person) throw new TRPCError({ code: 'NOT_FOUND', message: 'That person no longer exists — pick someone else.' });
+
+      const payload = input[input.kind];
+      if (!payload) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `No ${input.kind.toUpperCase()} data was supplied to save.` });
+      }
+
+      // Every assessment type needs the summary row to exist (it holds the
+      // badge colours and the Insights header meta, and it is the FK parent
+      // the Organization card reads first).
+      const existingSummary = await ctx.db.query.assessmentSummaries.findFirst({
+        where: eq(assessmentSummaries.userId, input.userId),
+      });
+      if (!existingSummary) {
+        await ctx.db.insert(assessmentSummaries).values({ userId: input.userId }).onConflictDoNothing();
+      }
+
+      let rowsWritten = 0;
+
+      if (input.kind === 'ccat' && input.ccat) {
+        // Replace, don't append — re-uploading a corrected report should not
+        // leave the old bars behind next to the new ones.
+        await ctx.db.delete(assessmentCcatSections).where(eq(assessmentCcatSections.userId, input.userId));
+        const rows = input.ccat.sections
+          .filter((s) => s.label.trim() !== '')
+          .map((s, i) => ({
+            userId: input.userId, label: s.label.trim(),
+            score: toDb(s.score ?? null), sortOrder: s.sortOrder ?? i * 10,
+          }));
+        if (rows.length) await ctx.db.insert(assessmentCcatSections).values(rows);
+        rowsWritten = rows.length;
+      }
+
+      if (input.kind === 'epp' && input.epp) {
+        await ctx.db.delete(assessmentEppAttributes).where(eq(assessmentEppAttributes.userId, input.userId));
+        const rows = input.epp.attributes
+          .filter((a) => a.name.trim() !== '')
+          .map((a, i) => ({
+            userId: input.userId, name: a.name.trim(),
+            st6Score: toDb(a.st6Score ?? null), sortOrder: a.sortOrder ?? i * 10,
+          }));
+        if (rows.length) await ctx.db.insert(assessmentEppAttributes).values(rows);
+        rowsWritten = rows.length;
+        await ctx.db.update(assessmentSummaries).set({
+          eppProfile: input.epp.profileName?.trim() || null,
+          eppScore: toDb(input.epp.score ?? null),
+          updatedAt: new Date(),
+        }).where(eq(assessmentSummaries.userId, input.userId));
+      }
+
+      if (input.kind === 'insights' && input.insights) {
+        await ctx.db.delete(assessmentInsightProfiles).where(eq(assessmentInsightProfiles.userId, input.userId));
+        const rows = input.insights.profiles.map((p, i) => ({
+          userId: input.userId, color: p.color,
+          consciousScore: toDb(p.consciousScore ?? null),
+          lessConsciousScore: toDb(p.lessConsciousScore ?? null),
+          isPrimary: p.isPrimary ?? false, sortOrder: p.sortOrder ?? i * 10,
+        }));
+        if (rows.length) await ctx.db.insert(assessmentInsightProfiles).values(rows);
+        rowsWritten = rows.length;
+        await ctx.db.update(assessmentSummaries).set({
+          insightsType: input.insights.insightsType?.trim() || null,
+          insightsConsciousWheel: input.insights.consciousWheel?.trim() || null,
+          insightsLessWheel: input.insights.lessWheel?.trim() || null,
+          insightsPreferenceFlow: toDb(input.insights.preferenceFlow ?? null),
+          insightsCompletedAt: input.insights.completedAt || null,
+          insightsSource: 'uploaded',
+          updatedAt: new Date(),
+        }).where(eq(assessmentSummaries.userId, input.userId));
+      }
+
+      return {
+        ok: true as const,
+        kind: input.kind,
+        userId: input.userId,
+        personName: person.name ?? person.email ?? 'that person',
+        rowsWritten,
+        sourceFile: input.sourceFile ?? null,
+      };
+    }),
 
 });

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../../lib/trpc';
 import { Pencil, Trash2, Check, X } from 'lucide-react';
+import UploadAssessmentPanel from '../../components/assessments/UploadAssessmentPanel';
 
 const inputCls =
   'px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-600';
@@ -27,6 +28,7 @@ const INSIGHT_COLOR_OPTS = ['blue', 'green', 'yellow', 'red'];
 
 export default function Assessments() {
   const { data: users = [], isLoading: usersLoading } = trpc.auth.listUsers.useQuery();
+  const utils = trpc.useContext();
   const [searchParams] = useSearchParams();
   const [userId, setUserId] = useState(searchParams.get('userId') ?? '');
 
@@ -54,6 +56,17 @@ export default function Assessments() {
           conscious + less-conscious values.
         </p>
       </div>
+
+      {/* Upload a vendor PDF (parse -> confirm -> save). Prompts for the person. */}
+      <UploadAssessmentPanel
+        users={sorted}
+        selectedUserId={userId}
+        onSaved={(savedUserId) => {
+          // Show the person we just saved, and re-read the profiles below.
+          setUserId(savedUserId);
+          utils.orgScreen.invalidate();
+        }}
+      />
 
       {/* Person picker */}
       <div className="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex items-end gap-2">
