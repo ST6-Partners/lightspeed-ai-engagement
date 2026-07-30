@@ -680,6 +680,13 @@
       "when": 1784836205989,
       "tag": "0095_aie_priorities_period_key",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1784836206989,
+      "tag": "0096_aie_org_chart_full_supervisor_chain",
+      "breakpoints": true
     }
   ]
 }
