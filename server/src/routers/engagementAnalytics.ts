@@ -214,7 +214,7 @@ export const engagementAnalyticsRouter = router({
   results: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
-    const periodRows = await ctx.db.query.surveyPeriods.findMany();
+    const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
     // Question bank drives the driver map + question text (falls back to the built-in
     // 66 if the bank table is empty). New drivers (D&I, wellbeing, etc.) flow through here.
@@ -475,7 +475,7 @@ export const engagementAnalyticsRouter = router({
 
   // ── Period list for the Org-screen engagement selector ───────────────────
   periods: protectedProcedure.query(async ({ ctx }) => {
-    const periodRows = await ctx.db.query.surveyPeriods.findMany();
+    const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
     const responses = await ctx.db.query.engagementSurveyResponses.findMany();
     const historical = periodRows
       .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
@@ -500,7 +500,7 @@ export const engagementAnalyticsRouter = router({
       const viewerRole = (ctx.user?.role ?? 'user') as RoleTier;
       const canSeeIndividual = hasMinimumRole(viewerRole, 'admin');
 
-      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
       const metricRows = await ctx.db.query.surveyMetrics.findMany();
       const responses = await ctx.db.query.engagementSurveyResponses.findMany();
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
@@ -715,7 +715,7 @@ export const engagementAnalyticsRouter = router({
   rawResponses: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
       const responses = await ctx.db.query.engagementSurveyResponses.findMany();
       const hasLive = responses.length > 0;
       const hist = periodRows
@@ -765,7 +765,7 @@ export const engagementAnalyticsRouter = router({
       const allDepts = await ctx.db.query.departments.findMany();
       const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
       const active = allUsers.filter((u) => u.isActive);
-      const periodRows = await ctx.db.query.surveyPeriods.findMany();
+      const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
       const responses = await ctx.db.query.engagementSurveyResponses.findMany();
       const hist = periodRows.map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate })).sort((a, b) => a.periodDate.localeCompare(b.periodDate));
       const live = responses.length > 0 ? { id: 'live', label: 'Current survey', periodDate: new Date().toISOString().slice(0, 10) } : null;
@@ -1223,6 +1223,77 @@ export const engagementAnalyticsRouter = router({
   // A mismatch means the stored aggregates have drifted from their sources
   // (a partial re-import, a manual edit) and should be re-imported.
   // ------------------------------------------------------------
+  // ---- archive / restore ----------------------------------------------
+  // Archiving hides a survey from the list, the period pickers and the trend
+  // series. Nothing is deleted: source rows and metrics stay put, and restoring
+  // puts the survey back exactly as it was.
+  setArchived: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid(), archived: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+
+      const period = (await ctx.db.query.surveyPeriods.findMany()).find((p) => p.id === input.periodId);
+      if (!period) throw new TRPCError({ code: 'NOT_FOUND', message: 'Survey not found.' });
+      if (input.archived && period.isCurrent) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This is the current survey. Make another survey current before archiving it.' });
+      }
+
+      await ctx.db.update(surveyPeriods)
+        .set({ archivedAt: input.archived ? new Date() : null })
+        .where(eq(surveyPeriods.id, input.periodId));
+      return { ok: true as const, archived: input.archived };
+    }),
+
+  // Every survey including archived ones, for the admin archive manager.
+  listAllPeriods: protectedProcedure.query(async ({ ctx }) => {
+    const role = (ctx.user?.role ?? 'user') as RoleTier;
+    if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+    const rows = await ctx.db.query.surveyPeriods.findMany();
+    const metrics = await ctx.db.select({ periodId: surveyMetrics.periodId }).from(surveyMetrics);
+    const srcRows = await ctx.db.select({ periodId: engagementImportRows.periodId }).from(engagementImportRows);
+    const countBy = (list: { periodId: string }[], id: string) => list.filter((x) => x.periodId === id).length;
+    return rows
+      .map((p) => ({
+        id: p.id, label: p.label, periodDate: p.periodDate, source: p.source,
+        isCurrent: p.isCurrent, status: p.status,
+        responseCount: p.responseCount, eligibleCount: p.eligibleCount,
+        archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+        metricCount: countBy(metrics, p.id),
+        sourceRowCount: countBy(srcRows, p.id),
+      }))
+      .sort((a, b) => b.periodDate.localeCompare(a.periodDate));
+  }),
+
+  // Permanent removal, for clearing out test imports. Deliberately narrow:
+  // only imported surveys, never the current one, and cascade takes the metrics
+  // and source rows with it. Live in-app response data is never touched.
+  deletePeriod: protectedProcedure
+    .input(z.object({ periodId: z.string().uuid(), confirmLabel: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.user?.role ?? 'user') as RoleTier;
+      if (!hasMinimumRole(role, 'admin')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+
+      const period = (await ctx.db.query.surveyPeriods.findMany()).find((p) => p.id === input.periodId);
+      if (!period) throw new TRPCError({ code: 'NOT_FOUND', message: 'Survey not found.' });
+      if (period.source !== 'import') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only imported surveys can be deleted here. Archive this one instead.' });
+      }
+      if (period.isCurrent) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This is the current survey — it cannot be deleted.' });
+      }
+      // Typed confirmation: deletion is irreversible, so it should not be
+      // reachable by a single mis-click.
+      if (input.confirmLabel.trim().toLowerCase() !== period.label.trim().toLowerCase()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'The name you typed does not match this survey.' });
+      }
+
+      await ctx.db.delete(surveyMetrics).where(eq(surveyMetrics.periodId, input.periodId));
+      await ctx.db.delete(engagementImportRows).where(eq(engagementImportRows.periodId, input.periodId));
+      await ctx.db.delete(surveyPeriods).where(eq(surveyPeriods.id, input.periodId));
+      return { ok: true as const };
+    }),
+
   importAudit: protectedProcedure
     .input(z.object({ periodId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

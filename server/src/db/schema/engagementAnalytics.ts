@@ -24,6 +24,9 @@ export const surveyPeriods = pgTable('survey_periods', {
   releaseAt: timestamp('release_at', { withTimezone: true }),
   closeAt: timestamp('close_at', { withTimezone: true }),
   status: varchar('status', { length: 16 }).notNull().default('draft'), // 'draft' | 'open' | 'closed'
+  // Archived surveys keep all their data but drop out of the survey list,
+  // period pickers and trend series until restored (AIE 2026-07-30).
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

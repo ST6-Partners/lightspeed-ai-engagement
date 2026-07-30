@@ -174,7 +174,10 @@ export const engagementSurveyRouter = router({
   // ── Admin (HR/ELT only): manage the survey period window ──
   adminListPeriods: protectedProcedure.query(async ({ ctx }) => {
     await assertHrOrElt(ctx.db, ctx.user.id);
-    return ctx.db.query.surveyPeriods.findMany({ orderBy: [desc(surveyPeriods.createdAt)] });
+    // Archived surveys are managed from Engagement Surveys -> Manage surveys;
+    // they should not reappear in the period admin list.
+    const rows = await ctx.db.query.surveyPeriods.findMany({ orderBy: [desc(surveyPeriods.createdAt)] });
+    return rows.filter((p) => !p.archivedAt);
   }),
 
   adminCreatePeriod: protectedProcedure
