@@ -219,6 +219,8 @@ function CadencePanel() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.cadence.getSettings.useQuery();
   const update = trpc.cadence.updateSettings.useMutation({ onSuccess: () => utils.cadence.getSettings.invalidate() });
+  const { data: cp } = trpc.cadence.currentPeriods.useQuery();
+  const advance = trpc.cadence.advancePeriod.useMutation({ onSuccess: () => { utils.cadence.getSettings.invalidate(); utils.cadence.currentPeriods.invalidate(); } });
   const selStyle: React.CSSProperties = { padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#111827' };
   if (isLoading || !data) return <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Loading cadence…</div>;
   const rows: { label: string; field: 'ninebox' | 'priorities' | 'reviews'; value: CadenceValue }[] = [
@@ -232,6 +234,14 @@ function CadencePanel() {
         <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Completion cadence</div>
         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>How often each activity must be completed — at least once per period; more often is allowed. Drives the Due/Overdue badges and overdue notifications.</div>
       </div>
+      <label style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={data.autoAdvance ?? true} disabled={update.isLoading}
+          onChange={(e) => update.mutate({ autoAdvance: e.target.checked })} style={{ marginTop: 3 }} />
+        <span>
+          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827' }}>Auto-advance periods</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#6b7280' }}>On: the active period follows the calendar — everyone advances automatically and the prior period locks to view-only. Off: advance each activity manually below.</span>
+        </span>
+      </label>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
           {rows.map((r) => (
@@ -242,6 +252,15 @@ function CadencePanel() {
                   onChange={(e) => update.mutate({ [r.field]: e.target.value as CadenceValue })}>
                   {CADENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
+              </td>
+              <td style={{ padding: '12px 16px', fontSize: 12, color: '#6b7280' }}>
+                {cp ? <>Active: <strong style={{ color: '#111827' }}>{(cp as any)[r.field].activeLabel}</strong></> : null}
+                {cp && !cp.autoAdvance && (cp as any)[r.field].behind && (
+                  <button onClick={() => advance.mutate({ activity: r.field })} disabled={advance.isLoading}
+                    style={{ marginLeft: 10, fontSize: 12, color: '#2563eb', border: '1px solid #bfdbfe', background: '#eff6ff', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>
+                    Advance to {(cp as any)[r.field].calendarLabel}
+                  </button>
+                )}
               </td>
             </tr>
           ))}

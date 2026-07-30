@@ -14,13 +14,14 @@ const perfOf = (b: number) => (b - 1) % 3;
 const potOf = (b: number) => Math.floor((b - 1) / 3);
 const boxOf = (p: number, q: number) => q * 3 + p + 1;
 
-export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById }: {
+export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly }: {
   people: Person[];
   allPeople?: Person[];
   scope?: NineScope;
   canPlace?: (id: string) => boolean;
   companyWide?: boolean;
   statusById?: Map<string, 'done' | 'due' | 'overdue'>;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState<Person | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
 
   const ratingByUser = new Map<string, number>();
   for (const r of data?.people ?? []) if (r.box != null) ratingByUser.set(r.userId, r.box);
-  const editable = (id: string) => (canPlace ? canPlace(id) : true);
+  const editable = (id: string) => (readOnly ? false : (canPlace ? canPlace(id) : true));
 
   const centroidOf = (list: Person[]) => {
     const boxes = list.map((p) => ratingByUser.get(p.id)).filter((b): b is number => b != null);

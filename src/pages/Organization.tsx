@@ -364,10 +364,10 @@ export default function Organization() {
             {/* Body */}
             <div className="flex-1 overflow-auto" style={{ padding: 16 }}>
               {(tab === 'priorities' || tab === 'ninebox') && !goalPeriodIsCurrent && (
-                <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Not tracked by period yet — showing current.</div>
+                <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Past period — view-only. (9 Box &amp; Priorities aren’t period-scoped yet, so current data is shown.)</div>
               )}
               {tab === 'ninebox' ? (
-                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} />
+                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!goalPeriodIsCurrent} />
               ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
               ) : scoped.length === 0 ? (
@@ -379,13 +379,13 @@ export default function Organization() {
                       {rel === 1 ? 'Direct reports' : `Level ${rel}`}
                     </div>
                     <div className={grid}>
-                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                      {group.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !goalPeriodIsCurrent} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadenceForTab(p.id)} readOnly={tab === 'priorities' && !goalPeriodIsCurrent} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>

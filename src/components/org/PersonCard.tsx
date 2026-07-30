@@ -9,7 +9,7 @@ import ReviewTab from './ReviewTab';
 // fields (location, tenure, manager, reporting line, etc.) intentionally live on
 // the "Export talent profile" PDF, not on the card. The identity header (avatar,
 // name, title, leader badge) stays so the card is still attributable.
-export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPeriodId, cadence }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; okrPeriodId?: string; cadence?: 'done' | 'due' | 'overdue'; managerName?: string | null; reportingLine?: string | null }) {
+export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPeriodId, cadence, readOnly }: { person: Person; tab: TabKey; periodId?: string; reviewPeriod?: string | null; okrPeriodId?: string; cadence?: 'done' | 'due' | 'overdue'; readOnly?: boolean; managerName?: string | null; reportingLine?: string | null }) {
   const badge = person.leaderBadge ? TIER_BADGE[person.leaderBadge] : null;
   return (
     <div className="rounded-lg p-5" style={{ background: TOKENS.panel, border: `1px solid ${TOKENS.borderSoft}` }}>
@@ -39,7 +39,7 @@ export default function PersonCard({ person, tab, periodId, reviewPeriod, okrPer
         </div>
       </div>
       <div style={{ borderTop: `1px solid ${TOKENS.borderSoft}`, paddingTop: 14 }}>
-        {tab === 'priorities' && <PrioritiesTab employeeId={person.id} />}
+        {tab === 'priorities' && <PrioritiesTab employeeId={person.id} readOnly={readOnly} />}
         {tab === 'okrs' && <OkrsTab employeeId={person.id} name={person.name} periodId={okrPeriodId} />}
         {tab === 'engagement' && <EngagementTab employeeId={person.id} periodId={periodId} />}
         {tab === 'assessments' && <AssessmentsTab employeeId={person.id} />}

@@ -28,6 +28,9 @@ export default function WeeklyPlan() {
   const planActionItems = trpc.oneOnOne.myWeeklyPlanActionItems.useQuery();
   const planToggle = trpc.oneOnOne.actionItemsToggleDone.useMutation({ onSuccess: () => planActionItems.refetch() });
   const { data: me } = trpc.auth.me.useQuery();
+  const { data: curPeriods } = trpc.cadence.currentPeriods.useQuery();
+  const { data: cadStatus } = trpc.cadence.status.useQuery({ userIds: me?.id ? [me.id] : [] }, { enabled: !!me?.id });
+  const myPrioritiesStatus = cadStatus?.people?.[0]?.priorities;
   const isAdmin = !!me && (me.role === 'admin' || me.role === 'sysadmin');
   const seedSample = trpc.weeklyPlan.seedSampleData.useMutation({ onSuccess: () => { refetch(); refetchOkrs(); } });
 
@@ -217,6 +220,19 @@ export default function WeeklyPlan() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {(myPrioritiesStatus === 'due' || myPrioritiesStatus === 'overdue') && (
+        <div className="mb-4 rounded-lg px-4 py-3 text-[13px] flex items-center gap-2"
+          style={myPrioritiesStatus === 'overdue'
+            ? { background: '#fde2e0', color: '#b91c1c', border: '1px solid #f5b5ae' }
+            : { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd982' }}>
+          <span style={{ fontWeight: 700 }}>{myPrioritiesStatus === 'overdue' ? 'Priorities overdue' : 'New period'}</span>
+          <span>
+            {myPrioritiesStatus === 'overdue'
+              ? `Your priorities for ${curPeriods?.priorities?.activeLabel ?? 'this period'} are overdue — please set them below.`
+              : `A new period (${curPeriods?.priorities?.activeLabel ?? ''}) has started — set your priorities for it below.`}
+          </span>
+        </div>
+      )}
       <div className="ls-eyebrow mb-1">Planning</div>
       <div className="flex items-start justify-between">
         <div>

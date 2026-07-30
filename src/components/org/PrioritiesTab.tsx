@@ -20,12 +20,13 @@ const TYPE_ICON: Record<string, typeof Target> = {
 type OkrRow = { id: string; parentId: string | null; type: string; title: string };
 type ModalState = { mode: 'add' } | { mode: 'edit'; id: string; current: string | null } | null;
 
-export default function PrioritiesTab({ employeeId }: { employeeId: string }) {
+export default function PrioritiesTab({ employeeId, readOnly }: { employeeId: string; readOnly?: boolean }) {
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.orgScreen.prioritiesByUser.useQuery({ userId: employeeId });
   const { data: me } = trpc.auth.me.useQuery();
   const role = (me as { role?: string } | undefined)?.role ?? 'user';
   const canManage = ['manager', 'admin', 'sysadmin'].includes(role);
+  const canEdit = canManage && !readOnly;
 
   const [modal, setModal] = useState<ModalState>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export default function PrioritiesTab({ employeeId }: { employeeId: string }) {
         <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TOKENS.idle }}>
           Priorities {count}/{MAX}
         </span>
-        {canManage && (
+        {canEdit && (
           <button
             onClick={() => { setErr(null); setModal({ mode: 'add' }); }}
             disabled={count >= MAX}
@@ -81,7 +82,7 @@ export default function PrioritiesTab({ employeeId }: { employeeId: string }) {
       {err && <div className="text-[11px] mb-2" style={{ color: '#b91c1c' }}>{err}</div>}
 
       {count === 0 ? (
-        <Empty text={canManage ? 'No priorities set — click + to add one.' : 'No priorities set'} />
+        <Empty text={canEdit ? 'No priorities set — click + to add one.' : 'No priorities set'} />
       ) : (
         <div className="space-y-2">
           {items.map((it) => {
@@ -91,7 +92,7 @@ export default function PrioritiesTab({ employeeId }: { employeeId: string }) {
                 <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold shrink-0"
                   style={{ background: p.bg, color: p.fg }}>{p.label}</span>
                 <span className="text-[13px] min-w-0 truncate flex-1" style={{ color: '#1a1a2e' }}>{it.label}</span>
-                {canManage && (
+                {canEdit && (
                   <span className="flex items-center gap-1 shrink-0">
                     {/* Only OKR-backed items can be re-picked from the tree */}
                     {it.okrNodeId && (
