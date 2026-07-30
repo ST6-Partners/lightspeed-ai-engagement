@@ -9,7 +9,7 @@
 // Runs at boot (~30s) and daily via a setInterval in server.ts; also
 // manually triggerable from the System Jobs admin panel.
 // ============================================================
-import { and, eq, gte, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db.js';
 import { registerJob, type JobResult } from './job-runner.js';
 import { notifications } from '../db/schema/notifications.js';
@@ -52,7 +52,7 @@ async function handler(): Promise<JobResult> {
 
   const [nbRows, prRows, rvRows] = await Promise.all([
     db.query.nineBoxRatings.findMany({ where: inArray(nineBoxRatings.userId, ids), columns: { userId: true, ratedAt: true } }),
-    db.query.priorities.findMany({ where: inArray(priorities.userId, ids), columns: { userId: true, createdAt: true } }),
+    db.query.priorities.findMany({ where: and(inArray(priorities.userId, ids), isNull(priorities.weekStart)), columns: { userId: true, createdAt: true } }),
     db.query.reviews.findMany({ where: inArray(reviews.employeeId, ids), columns: { employeeId: true, evaluatedAt: true } }),
   ]);
   const nb = latestByUser(nbRows.map((r: any) => ({ id: r.userId, d: r.ratedAt })));

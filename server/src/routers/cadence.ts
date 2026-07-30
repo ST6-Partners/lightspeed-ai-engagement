@@ -13,7 +13,7 @@
 // "overdue" = none this period AND none last period (or never).
 // ============================================================
 import { z } from 'zod';
-import { inArray, eq } from 'drizzle-orm';
+import { inArray, eq, and, isNull } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireAdmin } from '../services/permissions.js';
 import { cadenceSettings } from '../db/schema/cadence.js';
@@ -154,7 +154,7 @@ export const cadenceRouter = router({
 
       const [nbRows, prRows, rvRows] = await Promise.all([
         ctx.db.query.nineBoxRatings.findMany({ where: inArray(nineBoxRatings.userId, ids), columns: { userId: true, ratedAt: true } }),
-        ctx.db.query.priorities.findMany({ where: inArray(priorities.userId, ids), columns: { userId: true, createdAt: true } }),
+        ctx.db.query.priorities.findMany({ where: and(inArray(priorities.userId, ids), isNull(priorities.weekStart)), columns: { userId: true, createdAt: true } }),
         ctx.db.query.reviews.findMany({ where: inArray(reviews.employeeId, ids), columns: { employeeId: true, evaluatedAt: true } }),
       ]);
       const nb = latestByUser(nbRows.map((r: any) => ({ u: r.userId, d: r.ratedAt })));
