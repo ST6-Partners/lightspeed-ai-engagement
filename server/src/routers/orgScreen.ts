@@ -8,7 +8,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, inArray, asc, desc, and, isNull, gte, lt } from 'drizzle-orm';
+import { eq, inArray, asc, desc, and, isNull, gte, lt, or } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireManager, requireAdmin, hasMinimumRole } from '../services/permissions.js';
@@ -93,10 +93,18 @@ export const orgScreenRouter = router({
   prioritiesByUser: protectedProcedure
     .input(z.object({ userId: z.string().uuid(), periodKey: z.string().max(32).optional() }))
     .query(async ({ ctx, input }) => {
+      let whereClause;
+      if (input.periodKey) {
+        const curKey = await currentPrioritiesKey(ctx.db);
+        // Untagged rows (legacy/seeded, period_key NULL) belong to the current period.
+        whereClause = input.periodKey === curKey
+          ? and(eq(priorities.userId, input.userId), or(eq(priorities.periodKey, input.periodKey), isNull(priorities.periodKey)))
+          : and(eq(priorities.userId, input.userId), eq(priorities.periodKey, input.periodKey));
+      } else {
+        whereClause = and(eq(priorities.userId, input.userId), isNull(priorities.weekStart));
+      }
       const rows = await ctx.db.query.priorities.findMany({
-        where: input.periodKey
-          ? and(eq(priorities.userId, input.userId), eq(priorities.periodKey, input.periodKey))
-          : and(eq(priorities.userId, input.userId), isNull(priorities.weekStart)),
+        where: whereClause,
         orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
       });
       const nodeIds = rows.map((r) => r.okrNodeId).filter((x): x is string => !!x);
