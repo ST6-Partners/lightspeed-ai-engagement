@@ -1,6 +1,6 @@
 // Organization — org tree + scope + tabbed person-card matrix + 9 Box.
 // Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { trpc } from '../lib/trpc';
 import { Printer } from 'lucide-react';
 import { openPrintDoc, escapeHtml } from '../lib/printDoc';
@@ -249,13 +249,24 @@ export default function Organization() {
     return descendantsOf(maps, selected.id);
   }, [selected, scope, maps, people]);
 
-  // Apply employment/org filters before rendering cards (spec: filter bar).
-  const visible: Person[] = useMemo(() => scoped.filter((p) =>
+  // Apply employment/org filters before rendering (spec: filter bar).
+  // One predicate, two populations:
+  //   `visible`    — the in-scope people that feed the person cards.
+  //   `visibleAll` — the company-wide population that feeds the 9 Box leadership
+  //                  aggregate views (Directs -> cohorts, Team -> department
+  //                  centroids). Those views are deliberately company-wide, but
+  //                  they must still honour the filter bar. Passing the raw
+  //                  `people` list is what made the filters look broken on the
+  //                  9 Box tab.
+  const filtersActive = !!(fElt || fLoc || fBu || fTen);
+  const passesFilters = useCallback((p: Person) => (
     (!fElt || p.eltLeader === fElt) &&
     (!fLoc || p.location === fLoc) &&
     (!fBu || p.businessUnit === fBu) &&
     (!fTen || tenureBand(p.hireYear) === fTen)
-  ), [scoped, fElt, fLoc, fBu, fTen]);
+  ), [fElt, fLoc, fBu, fTen]);
+  const visible: Person[] = useMemo(() => scoped.filter(passesFilters), [scoped, passesFilters]);
+  const visibleAll: Person[] = useMemo(() => people.filter(passesFilters), [people, passesFilters]);
 
   // Team scope → depth-banded groups.
   const banded = useMemo(() => {
@@ -386,11 +397,13 @@ export default function Organization() {
                 <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Past period — view-only.</div>
               )}
               {tab === 'ninebox' ? (
-                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!cadIsCurrent} periodStartISO={selectedCadPeriod?.startISO} periodEndISO={selectedCadPeriod?.endISO} />
+                <NineBox people={visible} allPeople={visibleAll} filtersActive={filtersActive} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!cadIsCurrent} periodStartISO={selectedCadPeriod?.startISO} periodEndISO={selectedCadPeriod?.endISO} />
               ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
-              ) : scoped.length === 0 ? (
-                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
+              ) : visible.length === 0 ? (
+                <div className="text-[13px]" style={{ color: TOKENS.idle }}>
+                  {scoped.length > 0 && filtersActive ? 'No one in this scope matches the current filters.' : 'No one in this scope.'}
+                </div>
               ) : banded ? (
                 banded.map(([rel, group]) => (
                   <div key={rel} className="mb-5">
