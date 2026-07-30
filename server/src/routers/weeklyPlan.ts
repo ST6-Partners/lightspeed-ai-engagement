@@ -1,6 +1,6 @@
 // Weekly Plan router — per-user weekly check-in: read current + upsert. (DD-002 Planning)
 import { z } from 'zod';
-import { and, eq, isNull, asc, inArray } from 'drizzle-orm';
+import { and, eq, isNull, asc, inArray, or } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { weeklyCheckins, type WeeklyPriority } from '../db/schema/weeklyPlan.js';
@@ -8,6 +8,7 @@ import { priorities } from '../db/schema/orgScreen.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { users } from '../db/schema/core.js';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
+import { periodKeyLabel, type Cadence } from './cadence.js';
 
 // Add `n` days to a YYYY-MM-DD string (UTC), returning YYYY-MM-DD.
 function addDays(iso: string, n: number): string {
@@ -44,8 +45,24 @@ export const weeklyPlanRouter = router({
       // Manager-assigned priorities (set from the Org screen; current-state,
       // weekStart NULL) for THIS user — surfaced read-only in the Weekly Plan
       // priorities box, badged "assigned by your manager".
+      // Scoped to the CURRENT cadence period. Priorities became period-scoped in
+      // migration 0095 and the Organization screen locks past periods, but this
+      // read had no periodKey filter — so a priority belonging to a closed,
+      // view-only period still showed as live work in the Weekly Plan box. That
+      // also contradicted the rollover prompt, which exists precisely because the
+      // new period starts empty. Untagged rows (legacy/seeded, period_key NULL)
+      // count as current, matching orgScreen.prioritiesByUser.
+      const cadSettings = await ctx.db.query.cadenceSettings.findFirst();
+      const curPeriodKey = periodKeyLabel(
+        (cadSettings?.prioritiesCadence ?? 'annual') as Cadence,
+        new Date(),
+      ).key;
       const assignedRows = await ctx.db.query.priorities.findMany({
-        where: and(eq(priorities.userId, ctx.user.id), isNull(priorities.weekStart)),
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          or(eq(priorities.periodKey, curPeriodKey), isNull(priorities.periodKey)),
+        ),
         orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
       });
       const nodeIds = assignedRows.map((r) => r.okrNodeId).filter((x): x is string => !!x);

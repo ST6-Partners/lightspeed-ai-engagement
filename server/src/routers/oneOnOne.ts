@@ -210,9 +210,17 @@ export const oneOnOneRouter = router({
       const existing = await ctx.db.query.actionItems.findMany({
         where: eq(actionItems.employeeId, input.employeeId),
       });
+      // A manager-assigned action item goes straight into the employee's Weekly
+      // Plan box. in_weekly_plan defaults to false and only the employee can flip
+      // it, so assigned work used to sit invisible in the 1:1 space until they
+      // went looking for it. For items the employee adds themselves the flag stays
+      // theirs — it is their choice what to pull into the week. Migration 0098
+      // backfills the already-assigned ones.
+      const managerAssigned = input.employeeId !== ctx.user.id;
       const [row] = await ctx.db.insert(actionItems).values({
         employeeId: input.employeeId, createdBy: ctx.user.id, text: input.text,
         dueDate: input.dueDate ?? null, sortOrder: existing.length,
+        inWeeklyPlan: managerAssigned,
       }).returning();
       // Mirror of the talking-point alert, pointing the other way: tell the
       // EMPLOYEE when someone else (i.e. their manager) puts an action item on
@@ -220,7 +228,7 @@ export const oneOnOneRouter = router({
       // Until now an assigned action item appeared silently and the employee had
       // no way to learn about it. referenceType is distinct from 'talking_point'
       // so the bell can deep-link it to the Weekly Plan, where they act on it.
-      if (input.employeeId !== ctx.user.id) {
+      if (managerAssigned) {
         const [assigner, snippetSrc] = [
           await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) }),
           input.text,
