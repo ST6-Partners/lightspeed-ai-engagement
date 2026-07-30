@@ -666,6 +666,13 @@
       "when": 1784836203989,
       "tag": "0093_aie_cadence_auto_advance",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1784836204989,
+      "tag": "0094_aie_authoritative_org_chart",
+      "breakpoints": true
     }
   ]
 }
