@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
+import { useNineBoxByIds } from '../../lib/chunkedQueries';
 import { Person, BOX_NAMES, boxPerformance, boxPotential, TOKENS } from './orgLib';
 import { Empty, TabState } from './atoms';
 
@@ -41,7 +42,9 @@ export default function NineBox({ people, allPeople, filtersActive, scope, canPl
 
   const ids = pool.map((p) => p.id);
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.orgScreen.nineboxByIds.useQuery({ ids, startISO: periodStartISO, endISO: periodEndISO }, { enabled: ids.length > 0 });
+  // Chunked: a single call with every company id produced a 431. See
+  // lib/chunkedQueries.ts for why this is not the tRPC hook.
+  const { data, isLoading, error } = useNineBoxByIds(ids, periodStartISO, periodEndISO);
   const rate = trpc.orgScreen.nineboxRate.useMutation({
     onSuccess: () => { utils.orgScreen.nineboxByIds.invalidate(); setEditing(null); },
     onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'You can only place people in your own reporting line.' : 'Could not save rating.'),

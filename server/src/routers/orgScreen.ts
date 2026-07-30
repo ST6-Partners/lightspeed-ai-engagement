@@ -337,6 +337,92 @@ export const orgScreenRouter = router({
       return { carried: toInsert.length };
     }),
 
+  // ---- Rollover demo seed (admin only, dev aid) ----
+  // Puts the caller's own account into the "period just rolled over" state so the
+  // Weekly Plan rollover modal can be seen without waiting for a real period
+  // boundary: re-stamps their current-period priorities to the previous period and
+  // adds two unfinished demo rows there, leaving the current period empty.
+  //
+  // Returns the ids it moved so the caller can hand them straight back to
+  // seedRolloverDemoUndo. Nothing is deleted and nothing is inferred on undo —
+  // guessing which previous-period rows "used to be" current would risk dragging
+  // genuinely old priorities into the live period.
+  seedRolloverDemo: protectedProcedure
+    .use(requireAdmin)
+    .mutation(async ({ ctx }) => {
+      const { cur, prev, prevLabel } = await prioritiesPeriodKeys(ctx.db);
+      const current = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          or(eq(priorities.periodKey, cur), isNull(priorities.periodKey)),
+        ),
+        columns: { id: true },
+      });
+      const movedIds = current.map((r: any) => r.id);
+      if (movedIds.length) {
+        await ctx.db.update(priorities).set({ periodKey: prev })
+          .where(inArray(priorities.id, movedIds));
+      }
+      const demo = [
+        'Demo · Draft the manager enablement guide',
+        'Demo · Rework the 9-box calibration deck',
+      ];
+      const inserted = await ctx.db.insert(priorities).values(
+        demo.map((label, i) => ({
+          userId: ctx.user.id,
+          itemType: 'ktbr' as const,
+          okrNodeId: null,
+          ktbrLabel: label,
+          weekStart: null,
+          periodKey: prev,
+          sortOrder: 90 + i,
+          assignedBy: null,
+          assignedAt: new Date(),
+          done: false,
+          archived: false,
+        })),
+      ).returning({ id: priorities.id });
+
+      return {
+        ok: true as const,
+        movedIds,
+        demoIds: inserted.map((r: any) => r.id),
+        previousPeriodLabel: prevLabel,
+      };
+    }),
+
+  seedRolloverDemoUndo: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ movedIds: z.array(z.string().uuid()), demoIds: z.array(z.string().uuid()) }))
+    .mutation(async ({ ctx, input }) => {
+      const { cur } = await prioritiesPeriodKeys(ctx.db);
+      // Remove anything carried over from the demo run, plus the demo rows.
+      if (input.demoIds.length) {
+        await ctx.db.delete(priorities).where(and(
+          eq(priorities.userId, ctx.user.id),
+          inArray(priorities.id, input.demoIds),
+        ));
+      }
+      const carried = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          eq(priorities.periodKey, cur),
+        ),
+        columns: { id: true, ktbrLabel: true },
+      });
+      const demoCarried = carried.filter((r: any) => (r.ktbrLabel ?? '').startsWith('Demo · ')).map((r: any) => r.id);
+      if (demoCarried.length) {
+        await ctx.db.delete(priorities).where(inArray(priorities.id, demoCarried));
+      }
+      if (input.movedIds.length) {
+        await ctx.db.update(priorities).set({ periodKey: cur })
+          .where(and(eq(priorities.userId, ctx.user.id), inArray(priorities.id, input.movedIds)));
+      }
+      return { ok: true as const, restored: input.movedIds.length, removed: input.demoIds.length + demoCarried.length };
+    }),
+
   prioritiesToggleDone: protectedProcedure
     .input(z.object({ id: z.string().uuid(), done: z.boolean() }))
     .mutation(async ({ ctx, input }) => {

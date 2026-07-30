@@ -33,7 +33,18 @@ export default function WeeklyPlan() {
   const { data: cadStatus } = trpc.cadence.status.useQuery({ userIds: me?.id ? [me.id] : [] }, { enabled: !!me?.id });
   const myPrioritiesStatus = cadStatus?.people?.[0]?.priorities;
   const isAdmin = !!me && (me.role === 'admin' || me.role === 'sysadmin');
+  const utils = trpc.useContext();
   const seedSample = trpc.weeklyPlan.seedSampleData.useMutation({ onSuccess: () => { refetch(); refetchOkrs(); } });
+  // Rollover demo (admin only). Holds the ids the seed touched so Undo can hand
+  // them straight back rather than guessing which past rows used to be current.
+  const [demoRun, setDemoRun] = useState<{ movedIds: string[]; demoIds: string[] } | null>(null);
+  const afterDemo = () => { utils.orgScreen.prioritiesRolloverPreview.invalidate(); utils.orgScreen.prioritiesByUser.invalidate(); utils.cadence.status.invalidate(); refetch(); };
+  const seedRollover = trpc.orgScreen.seedRolloverDemo.useMutation({
+    onSuccess: (r) => { setDemoRun({ movedIds: r.movedIds, demoIds: r.demoIds }); afterDemo(); },
+  });
+  const undoRollover = trpc.orgScreen.seedRolloverDemoUndo.useMutation({
+    onSuccess: () => { setDemoRun(null); afterDemo(); },
+  });
 
   const [priorities, setPriorities] = useState<Priority[]>([{ text: '', okrNodeId: null }]);
   const [wins, setWins] = useState('');
@@ -254,12 +265,33 @@ export default function WeeklyPlan() {
         {isAdmin && (
           <button
             onClick={() => seedSample.mutate()}
-            disabled={seedSample.isPending}
+            disabled={seedSample.isLoading}
             title="Admin only — populate sample past / completed / manager-assigned priorities for your account"
             className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
           >
-            {seedSample.isPending ? 'Loading…' : 'Load sample data'}
+            {seedSample.isLoading ? 'Loading…' : 'Load sample data'}
           </button>
+        )}
+        {isAdmin && (
+          demoRun ? (
+            <button
+              onClick={() => undoRollover.mutate(demoRun)}
+              disabled={undoRollover.isLoading}
+              title="Undo the rollover demo — restores your priorities to the current period and removes the demo rows"
+              className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
+            >
+              {undoRollover.isLoading ? 'Undoing…' : 'Undo rollover demo'}
+            </button>
+          ) : (
+            <button
+              onClick={() => seedRollover.mutate()}
+              disabled={seedRollover.isLoading}
+              title="Admin only — simulate a period rollover on your account so the carry-over popup appears"
+              className="text-xs border border-ls-line rounded-lg px-3 py-2 text-ls-ink-2 hover:bg-ls-bg-2 shrink-0 disabled:opacity-50"
+            >
+              {seedRollover.isLoading ? 'Loading…' : 'Demo period rollover'}
+            </button>
+          )
         )}
       </div>
 

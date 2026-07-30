@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import { useCadenceStatus } from '../lib/chunkedQueries';
 import { Printer } from 'lucide-react';
 import { openPrintDoc, escapeHtml } from '../lib/printDoc';
 import OrgTree from '../components/org/OrgTree';
@@ -128,7 +129,7 @@ export default function Organization() {
   // Cadence status (done/due/overdue per activity) for the loaded people, used
   // for the Due/Overdue badges on cards and 9-box chips (period cadence, 2026-07-27).
   const cadUserIds = useMemo(() => people.map((p) => p.id).slice(0, 2000), [people]);
-  const { data: cadenceData } = trpc.cadence.status.useQuery({ userIds: cadUserIds }, { enabled: cadUserIds.length > 0 });
+  const { data: cadenceData } = useCadenceStatus(cadUserIds);
   const cadenceByUser = useMemo(() => {
     const m = new Map<string, { ninebox: 'done' | 'due' | 'overdue'; priorities: 'done' | 'due' | 'overdue'; reviews: 'done' | 'due' | 'overdue' }>();
     for (const r of cadenceData?.people ?? []) m.set(r.userId, { ninebox: r.ninebox, priorities: r.priorities, reviews: r.reviews });
