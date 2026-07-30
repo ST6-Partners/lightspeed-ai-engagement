@@ -16,11 +16,15 @@ import {
 // Stage 2 added Assessments + Review. `minRole` HIDES (not disables) a tab the
 // viewer can't access (spec §7 tab strip): Review needs manager+ (performance
 // zone; compensation is further gated admin+ inside the tab).
-const ALL_TABS: { key: TabKey; label: string; minRole?: 'manager' }[] = [
+// `hrAdminOnly` is narrower than any role tier — HR or admin, so a manager is
+// excluded. Assessments (CCAT / EPP / Insights) is the most sensitive tab; the
+// real boundary is assertCanReadAssessments on the server, this just avoids
+// showing a tab that would 403.
+const ALL_TABS: { key: TabKey; label: string; minRole?: 'manager'; hrAdminOnly?: boolean }[] = [
   { key: 'priorities', label: 'Priorities' },
   { key: 'okrs', label: 'OKRs' },
   { key: 'engagement', label: 'Engagement' },
-  { key: 'assessments', label: 'Assessments' },
+  { key: 'assessments', label: 'Assessments', hrAdminOnly: true },
   { key: 'review', label: 'Review', minRole: 'manager' },
   { key: 'ninebox', label: '9 Box' },
 ];
@@ -58,7 +62,11 @@ export default function Organization() {
     while (cur && !seen.has(cur)) { if (cur === meId) return true; seen.add(cur); cur = maps.byId.get(cur)?.managerId ?? null; }
     return false;
   };
-  const TABS = ALL_TABS.filter((t) => !t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]);
+  // HR or admin only — deliberately not a role tier, so managers are excluded.
+  const canReadAssessments = role === 'admin' || role === 'sysadmin' || meHr;
+  const TABS = ALL_TABS.filter((t) =>
+    (!t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]) &&
+    (!t.hrAdminOnly || canReadAssessments));
   const people = (data?.people ?? []) as Person[];
   const maps = useMemo(() => buildMaps(people), [people]);
   // Reporting line (top-down to, not including, this person) — same logic as export.

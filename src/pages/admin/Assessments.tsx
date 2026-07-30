@@ -29,6 +29,11 @@ const INSIGHT_COLOR_OPTS = ['blue', 'green', 'yellow', 'red'];
 export default function Assessments() {
   const { data: users = [], isLoading: usersLoading } = trpc.auth.listUsers.useQuery();
   const utils = trpc.useContext();
+  // /core-data/* carries no route-level role guard, so this page gates itself.
+  // HR and admins only — the same rule the server enforces on every assessment
+  // procedure. Shown as a plain message rather than a redirect so it's obvious
+  // this is a permission boundary, not a broken link.
+  const { data: access, isLoading: accessLoading } = trpc.orgScreen.assessmentAccess.useQuery();
   const [searchParams] = useSearchParams();
   const [userId, setUserId] = useState(searchParams.get('userId') ?? '');
 
@@ -43,6 +48,21 @@ export default function Assessments() {
     [users],
   );
   const person = sorted.find((u) => u.id === userId);
+
+  if (accessLoading) {
+    return <div className="text-sm text-gray-400 px-1">Checking access…</div>;
+  }
+  if (!access?.canRead) {
+    return (
+      <div className="max-w-xl bg-white border border-gray-200 rounded-lg p-4">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Assessments</h2>
+        <p className="text-sm text-gray-600">
+          Assessment data (CCAT, EPP, Insights) is visible to HR and admins only. Ask an
+          administrator if you need access.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl">

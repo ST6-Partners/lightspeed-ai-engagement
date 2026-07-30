@@ -40,6 +40,25 @@ const toNum = (v: string | null | undefined) => (v == null ? null : Number(v));
 const toDb = (v: number | null | undefined) => (v == null ? null : String(v));
 const numIn = z.number().nullable().optional();
 
+// Who may READ assessments (CCAT / EPP / Insights): HR and admins ONLY.
+// Deliberately narrower than the other tabs — managers and ELT are excluded.
+// Cognitive and personality data is the most sensitive material on the person
+// card, and the Org Screen Spec (§ recommendation 5) called for gating it
+// server-side rather than only hiding the tab. Hiding a tab is not access
+// control: the procedure is reachable directly.
+async function assertCanReadAssessments(ctx: any): Promise<void> {
+  const viewer = await ctx.db.query.users.findFirst({
+    where: eq(users.id, ctx.user.id as string),
+    columns: { role: true, isHrAccess: true },
+  });
+  const role = (viewer?.role ?? 'user') as RoleTier;
+  if (viewer && (hasMinimumRole(role, 'admin') || viewer.isHrAccess)) return;
+  throw new TRPCError({
+    code: 'FORBIDDEN',
+    message: 'Assessments are visible to HR and admins only.',
+  });
+}
+
 // Who may PLACE (rate / clear) a given person on the 9 Box (Stage 2): admins,
 // HR-access users, and the person's PRIMARY-manager chain (their primary
 // manager or anyone above them). A non-primary (secondary) manager cannot.
@@ -480,6 +499,7 @@ export const orgScreenRouter = router({
   assessmentsByUser: protectedProcedure
     .input(z.object({ userId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await assertCanReadAssessments(ctx);
       const [summary, sections, attrs, profiles] = await Promise.all([
         ctx.db.query.assessmentSummaries.findFirst({ where: eq(assessmentSummaries.userId, input.userId) }),
         ctx.db.query.assessmentCcatSections.findMany({ where: eq(assessmentCcatSections.userId, input.userId), orderBy: [asc(assessmentCcatSections.sortOrder)] }),
@@ -785,6 +805,19 @@ export const orgScreenRouter = router({
   reviewValueDetailRemove: protectedProcedure.use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => { await ctx.db.delete(reviewValueDetails).where(eq(reviewValueDetails.id, input.id)); return { ok: true }; }),
+
+  /** Can the current viewer see assessments? Lets the UI hide the tab/page
+   *  instead of rendering something that will 403. Not a security boundary —
+   *  assertCanReadAssessments on each procedure is. */
+  assessmentAccess: protectedProcedure
+    .query(async ({ ctx }) => {
+      const viewer = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.user.id as string),
+        columns: { role: true, isHrAccess: true },
+      });
+      const role = (viewer?.role ?? 'user') as RoleTier;
+      return { canRead: !!viewer && (hasMinimumRole(role, 'admin') || !!viewer.isHrAccess) };
+    }),
 
   // ================= Assessment PDF import (parse -> confirm -> commit) =================
   // Two steps on purpose. `assessmentImportParse` NEVER writes: it extracts the
