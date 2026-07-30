@@ -12,6 +12,7 @@ import {
   UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3,
   ChevronDown, ChevronRight, Sparkles} from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import PeriodNoticeModal from './PeriodNoticeModal';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
@@ -317,6 +318,7 @@ export default function Layout() {
               <Bot className="w-5 h-5" />
             </Link>
             <NotificationBell />
+            <PeriodNoticeModal />
             <button
               onClick={() => setShowFeedback(true)}
               className="p-2 text-ls-ink-3 hover:text-ls-ink-2 rounded-lg hover:bg-ls-bg-2 transition-colors"

@@ -72,6 +72,27 @@ export const notificationsRouter = router({
       return updated;
     }),
 
+  // Dismiss the new-period notice. Marks only the unread `cadence_new_period`
+  // rows read — deliberately NOT markAllRead, which would also swallow unrelated
+  // unread notifications. `readAt` doubles as the "already saw the period modal"
+  // flag: it is server-side, so dismissing on a laptop also dismisses on a phone,
+  // which a localStorage flag could not do. The rows stay in the bell as read, so
+  // the notice is recoverable rather than destroyed.
+  markPeriodNoticesRead: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const updated = await ctx.db
+        .update(notifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(notifications.userId, ctx.user.id),
+          eq(notifications.type, 'cadence_new_period'),
+          isNull(notifications.readAt)
+        ))
+        .returning({ id: notifications.id });
+
+      return { dismissed: updated.length };
+    }),
+
   markAllRead: protectedProcedure
     .mutation(async ({ ctx }) => {
       await ctx.db

@@ -4,6 +4,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
@@ -14,7 +15,35 @@ const TYPE_ICONS: Record<string, string> = {
   system_broadcast: '📢',
   mention: '💬',
   talking_point: '🗣️',
+  cadence_new_period: '📅',
+  cadence_overdue: '⏰',
 };
+
+// Human-readable captions. The old code printed the raw type with underscores
+// swapped for spaces, so every employee read "· cadence new period" under their
+// notification. Unmapped types now show NO caption rather than leaking a slug.
+const TYPE_LABELS: Record<string, string> = {
+  feedback_resolved: 'Feedback resolved',
+  feedback_submitted: 'Feedback submitted',
+  system: 'System',
+  system_broadcast: 'Announcement',
+  mention: 'Mention',
+  talking_point: 'Talking point',
+  cadence_new_period: 'New period',
+  cadence_overdue: 'Overdue',
+};
+
+// Deep-link a notification to where its work is done, using the referenceType
+// already stored on every row. Previously clicking only marked a row read, so a
+// notice telling someone to set priorities led nowhere.
+function linkFor(n: { referenceType?: string | null }): string | null {
+  switch (n.referenceType) {
+    case 'ninebox': return '/organization?tab=ninebox';
+    case 'reviews': return '/organization?tab=review';
+    case 'priorities': return '/organization?tab=priorities';
+    default: return null;
+  }
+}
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -30,15 +59,14 @@ function timeAgo(dateStr: string) {
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const utils = trpc.useContext();
 
   const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30000,
   });
-  const { data: notifications } = trpc.notifications.list.useQuery(undefined, {
-    enabled: isOpen,
-  });
+  const { data: notifications } = trpc.notifications.list.useQuery();
 
   // Optimistic updates — matches RCDO pattern: update local cache immediately
   // instead of refetching, which avoids flash/disappear on mark-read
@@ -150,12 +178,15 @@ export default function NotificationBell() {
             ) : (
               notifications.map((n: any) => {
                 const icon = TYPE_ICONS[n.type] || '🔔';
+                const href = linkFor(n);
                 return (
                   <div
                     key={n.id}
                     onClick={() => {
                       if (!n.readAt) markReadMutation.mutate({ id: n.id });
+                      if (href) { setIsOpen(false); navigate(href); }
                     }}
+                    title={href ? 'Open' : undefined}
                     className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${
                       n.readAt ? 'bg-white hover:bg-gray-50' : 'bg-blue-50 hover:bg-blue-100'
                     }`}
@@ -171,7 +202,7 @@ export default function NotificationBell() {
                         </div>
                         <div className="text-xs text-gray-400 mt-1">
                           {timeAgo(n.createdAt)}
-                          {n.type && ` · ${n.type.replace(/_/g, ' ')}`}
+                          {TYPE_LABELS[n.type] ? ` · ${TYPE_LABELS[n.type]}` : ''}
                         </div>
                       </div>
                     </div>

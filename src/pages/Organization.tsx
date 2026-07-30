@@ -1,6 +1,7 @@
 // Organization — org tree + scope + tabbed person-card matrix + 9 Box.
 // Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { Printer } from 'lucide-react';
 import { openPrintDoc, escapeHtml } from '../lib/printDoc';
@@ -81,7 +82,13 @@ export default function Organization() {
   const [fLoc, setFLoc] = useState<string>(() => ls.get('org.filter.loc') ?? '');
   const [fBu, setFBu] = useState<string>(() => ls.get('org.filter.bu') ?? '');
   const [fTen, setFTen] = useState<string>(() => ls.get('org.filter.tenure') ?? '');
-  const [tab, setTab] = useState<TabKey>((ls.get('org.tab') as TabKey) || 'priorities');
+  // Tab honours ?tab= first so notification deep links land on the right tab,
+  // then falls back to the last tab this user was on. Without the URL check the
+  // links from the notification centre would silently open whatever tab happened
+  // to be in localStorage.
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab') as TabKey | null;
+  const [tab, setTab] = useState<TabKey>(urlTab || (ls.get('org.tab') as TabKey) || 'priorities');
   const [periodId, setPeriodId] = useState<string | null>(ls.get('org.engPeriod'));
   const { data: periodsData } = trpc.engagementAnalytics.periods.useQuery();
   const engPeriodOptions = periodsData?.periods ?? [];
