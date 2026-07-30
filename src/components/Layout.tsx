@@ -319,8 +319,6 @@ export default function Layout() {
               <Bot className="w-5 h-5" />
             </Link>
             <NotificationBell />
-            <PeriodNoticeModal />
-            <AssignmentNoticeModal />
             <button
               onClick={() => setShowFeedback(true)}
               className="p-2 text-ls-ink-3 hover:text-ls-ink-2 rounded-lg hover:bg-ls-bg-2 transition-colors"
@@ -344,6 +342,12 @@ export default function Layout() {
       </div>
 
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />
+      {/* App-wide modals. Mounted at the root ON PURPOSE: <header> carries
+          backdrop-blur, and backdrop-filter establishes a containing block for
+          position:fixed descendants — mounted inside it, a fixed overlay centres
+          on the 56px header and is clipped off the top of the screen. */}
+      <PeriodNoticeModal />
+      <AssignmentNoticeModal />
     </div>
   );
 }
