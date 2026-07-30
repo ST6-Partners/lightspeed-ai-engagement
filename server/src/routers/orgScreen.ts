@@ -233,8 +233,25 @@ export const orgScreenRouter = router({
           referenceType: 'assigned_priority',
         });
       }
+      // Re-pointing a priority at a DIFFERENT OKR makes it different work, so the
+      // completion state must not carry over. Without this the edit kept done /
+      // completedAt from the old item, so the "new" priority was born already
+      // finished and weeklyPlan.getCurrent filed it into Completed for whatever
+      // week the OLD one was ticked off in — never appearing in the employee's
+      // active Priorities box. That is exactly the "I added a priority and it
+      // never showed up in my Weekly Plan" report. Same-node edits keep their
+      // state, so this cannot un-complete work by accident.
+      const repointed = existing.okrNodeId !== node.id;
       const [row] = await ctx.db.update(priorities)
-        .set({ okrNodeId: node.id, itemType: node.type, assignedBy: ctx.user.id, assignedAt: new Date() })
+        .set({
+          okrNodeId: node.id,
+          itemType: node.type,
+          assignedBy: ctx.user.id,
+          assignedAt: new Date(),
+          ...(repointed
+            ? { done: false, completedAt: null, archived: false, archivedAt: null }
+            : {}),
+        })
         .where(eq(priorities.id, input.id))
         .returning();
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
