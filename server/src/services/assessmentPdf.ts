@@ -255,6 +255,27 @@ function fusedTokenNear(text: string, label: RegExp, window = 40): string | null
   return null;
 }
 
+/**
+ * Lines consisting of nothing but standalone numbers.
+ *
+ * Criteria reports print their score values with NO adjacent labels — the text
+ * stream is emitted in drawing order, so a CCAT's three sub-scores arrive as a
+ * bare "96 95 85" and an EPP's twelve traits as a bare column of numbers. The
+ * only way to read them is to find these numeric-only rows and map them onto
+ * the vendor's fixed running order.
+ */
+function numericRows(text: string, max = 100): Array<{ line: number; values: number[] }> {
+  return text.split('\n').map((raw, i) => {
+    const line = raw.trim();
+    if (line === '') return null;
+    // Reject anything that isn't purely numbers and separators.
+    if (!/^[\d\s.%+-]+$/.test(line)) return null;
+    const values = [...line.matchAll(/(?<![\d.])(\d{1,3})(?![\d])/g)].map((m) => Number(m[1]));
+    if (values.length === 0 || values.some((v) => v < 0 || v > max)) return null;
+    return { line: i, values };
+  }).filter((r): r is { line: number; values: number[] } => r !== null);
+}
+
 // ---------- report-type detection ----------
 
 const KIND_SIGNALS: Record<AssessmentKind, RegExp[]> = {
@@ -418,9 +439,30 @@ export function parseCcat(text: string): { sections: ParsedCcatSection[]; notes:
 
   const subs = new Map<string, number | null>();
   for (const sub of CCAT_SUB_PATTERNS) {
-    const v = firstNum(text, sub.res, 100);
-    subs.set(sub.label, v);
-    if (v === null) notes.push(`CCAT "${sub.label}" percentile not found.`);
+    subs.set(sub.label, firstNum(text, sub.res, 100));
+  }
+
+  // The real report prints the three sub-scores as a bare row — "96 95 85" —
+  // with their labels nowhere near them in the text stream. The vendor template
+  // lays the cards out left to right as Spatial, Verbal, Math & Logic, and the
+  // numbers are emitted in that same order, so a row of exactly three numbers is
+  // unambiguous. Guarded on three counts: the row must contain ONLY numbers, it
+  // must hold exactly three (the raw-score chart axis has fifty and the
+  // position-range rows have six), and it must come after the sentence that
+  // introduces the sub-categories.
+  if ([...subs.values()].every((v) => v === null)) {
+    const marker = text.search(/sub\s*categories/i);
+    const region = marker >= 0 ? text.slice(marker) : text;
+    const triple = numericRows(region).find((r) => r.values.length === 3);
+    if (triple) {
+      const order = ['Spatial', 'Verbal', 'Math & Logic'];
+      order.forEach((label, i) => subs.set(label, triple.values[i]));
+      notes.push(`Sub-scores read as Spatial ${triple.values[0]}, Verbal ${triple.values[1]}, Math & Logic ${triple.values[2]} — the report lists them without labels, so please confirm the order.`);
+    }
+  }
+
+  for (const [label, v] of subs) {
+    if (v === null) notes.push(`CCAT "${label}" percentile not found.`);
   }
 
   // Always emit the full fixed row set, in order, blanks included.
@@ -460,26 +502,86 @@ export function parseEpp(text: string): {
   notes: string[];
 } {
   const notes: string[] = [];
-  const attributes: ParsedEppAttribute[] = [];
-  let found = 0;
+  const found = new Map<string, number | null>();
 
-  EPP_TRAITS.forEach((t, i) => {
-    const v = findLabelled(text, t);
-    if (v !== null) found++;
-    attributes.push({ name: t.canonical, st6Score: v, sortOrder: (i + 1) * 10 });
-  });
+  // 1. PER-TRAIT PROSE, the most trustworthy source. The later pages carry a
+  //    paragraph per trait naming it with its three-letter code and stating the
+  //    value in ordinal words: "The ACH score in the 89th percentile ...".
+  //    Ordinals cannot be confused with anything else on the page.
+  for (const t of EPP_TRAITS) {
+    const names = [t.canonical, ...t.aliases].map((n) => escapeRe(n)).join('|');
+    const re = new RegExp(`\\b(?:${names})\\s*\\([A-Z]{2,5}\\)[\\s\\S]{0,900}?(?<![\\d.])(\\d{1,3})(?![\\d])\\s*(?:st|nd|rd|th)\\s+percentile`, 'i');
+    const m = text.match(re);
+    const v = m ? Number(m[1]) : null;
+    found.set(t.canonical, v !== null && v >= 0 && v <= 100 ? v : null);
+  }
 
-  if (found === 0) notes.push('No EPP trait percentiles were found — check this is the EPP report.');
-  else if (found < EPP_TRAITS.length) notes.push(`${EPP_TRAITS.length - found} of ${EPP_TRAITS.length} EPP traits not found — fill the blanks in.`);
+  // 2. LABEL-ADJACENT FALLBACK, for simpler exports that print "Achievement 89"
+  //    on one line. Gated on the prose pass finding NOTHING, because on a real
+  //    Criteria report the trait names appear in a labels-only block far from
+  //    their values, where a windowed search would risk pairing a trait with a
+  //    neighbour's number.
+  if ([...found.values()].every((v) => v === null)) {
+    for (const t of EPP_TRAITS) found.set(t.canonical, findLabelled(text, t));
+  }
 
-  const profileName = firstMatch(text, [
-    /job\s*match(?:\s*profile)?\s*[:\-–]\s*([A-Z][A-Za-z,&'’\-/ ]{4,60})/i,
-    /profile\s*[:\-–]\s*([A-Z][A-Za-z,&'’\-/ ]{4,60})/i,
-  ]);
-  if (!profileName) notes.push('EPP profile name not found — enter it by hand (e.g. "Analysis, Planning & Consulting").');
+  // 3. THE SUMMARY COLUMN. Page 1 charts all twelve traits, and the values are
+  //    emitted as a bare column of numbers with no labels attached — the trait
+  //    names live in the graphic, not the text. The vendor template runs the
+  //    traits in the canonical (alphabetical) order below, so a run of exactly
+  //    twelve numeric-only rows maps straight onto it. Used to fill whatever the
+  //    prose pass missed; some traits state their value without an ordinal.
+  const missing = EPP_TRAITS.filter((t) => found.get(t.canonical) === null);
+  if (missing.length > 0) {
+    const rows = numericRows(text).filter((r) => r.values.length === 1);
+    // Longest consecutive run of single-number rows.
+    let best: number[] = [];
+    let run: number[] = [];
+    let prevLine = -99;
+    for (const r of rows) {
+      if (r.line === prevLine + 1) run.push(r.values[0]);
+      else run = [r.values[0]];
+      prevLine = r.line;
+      if (run.length > best.length) best = [...run];
+    }
+    if (best.length >= EPP_TRAITS.length) {
+      const column = best.slice(0, EPP_TRAITS.length);
+      let filled = 0;
+      EPP_TRAITS.forEach((t, i) => {
+        if (found.get(t.canonical) === null) { found.set(t.canonical, column[i]); filled++; }
+      });
+      if (filled > 0) {
+        notes.push(`${filled} EPP trait${filled === 1 ? '' : 's'} read from the page-1 summary chart, which lists values without labels — please confirm them.`);
+      }
+    }
+  }
 
-  const score = numberNear(text, /job\s*match\s*score/i) ?? numberNear(text, /overall\s*(?:score|match)/i);
-  if (score === null) notes.push('EPP badge score not found.');
+  const attributes: ParsedEppAttribute[] = EPP_TRAITS.map((t, i) => ({
+    name: t.canonical,
+    st6Score: found.get(t.canonical) ?? null,
+    sortOrder: (i + 1) * 10,
+  }));
+
+  const blanks = attributes.filter((a) => a.st6Score === null);
+  if (blanks.length === EPP_TRAITS.length) notes.push('No EPP trait percentiles were found — check this is the EPP report.');
+  else if (blanks.length > 0) notes.push(`${blanks.length} of ${EPP_TRAITS.length} EPP traits not found (${blanks.map((b) => b.name).join(', ')}) — fill the blanks in.`);
+
+  // Job family drives the badge score. A report run without one says so, and
+  // that is a real answer rather than a parse failure.
+  let profileName: string | null = null;
+  let score: number | null = null;
+  if (/no\s+job\s+family\s+selected/i.test(text)) {
+    notes.push('This EPP was run without a job family, so it carries no profile name or match score. Leave those blank, or type them in if you have them.');
+  } else {
+    profileName = firstMatch(text, [
+      /job\s*match(?:\s*profile)?\s*[:\-–]\s*([A-Z][A-Za-z,&’\'\-/ ]{4,60})/i,
+      /job\s+family\s*[:\-–]?\s*([A-Z][A-Za-z,&’\'\-/ ]{4,60})/i,
+    ]);
+    if (profileName && looksLikeHeading(profileName)) profileName = null;
+    score = numberNear(text, /job\s*match\s*score/i) ?? numberNear(text, /overall\s*(?:score|match)/i);
+    if (!profileName) notes.push('EPP profile name not found — enter it by hand (e.g. "Analysis, Planning & Consulting").');
+    if (score === null) notes.push('EPP badge score not found.');
+  }
 
   return { profileName, score, attributes, notes };
 }
@@ -510,35 +612,86 @@ export function parseInsights(text: string): {
 } {
   const notes: string[] = [];
 
-  // Scope to the Colour Dynamics section first. "Less Conscious Wheel Position"
-  // appears in the header, well above the energies, so splitting on the first
-  // "less conscious" in the whole document lands on the wrong line and reads
-  // the conscious column as the less-conscious one.
+  // ---- Wheel positions ----
+  // "Less Conscious Wheel Position" contains "Conscious Wheel Position", so the
+  // less-conscious label has to be excluded explicitly or it matches twice.
+  const wheelValue = (label: RegExp): string | null => {
+    const m = text.match(label);
+    if (!m || m.index === undefined) return null;
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 120);
+    // The value may sit on the same line after a colon ("Position: 22 Reformer")
+    // or on the next line entirely ("Position\n22: Reformer"). Take the first
+    // non-empty line and drop a leading separator either way.
+    const line = after.split('\n').map((l) => l.trim()).find((l) => l !== '');
+    return line ? line.replace(/^[:\-–]\s*/, '').trim() || null : null;
+  };
+  const consciousWheel = wheelValue(/(?<!less\s)conscious\s+wheel\s+position/i);
+  const lessWheel = wheelValue(/less\s*[-\s]?conscious\s+wheel\s+position/i);
+  if (!consciousWheel) notes.push('Insights conscious wheel position not found.');
+
+  // The persona type is the wheel position with its number and variant stripped:
+  // "22: Reforming Director (Classic)" -> "Reforming Director".
+  const typeFromWheel = (v: string | null): string | null => {
+    if (!v) return null;
+    const cleaned = v.replace(/^\s*\d{1,2}\s*[:.\-]?\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return cleaned || null;
+  };
+  let insightsType = typeFromWheel(consciousWheel);
+  if (!insightsType) {
+    const typeRe = new RegExp(`\\b((?:\\w+ing\\s+)?(?:${INSIGHT_TYPES.join('|')}))\\b`);
+    insightsType = firstMatch(text, [typeRe]);
+  }
+  if (!insightsType) notes.push('Insights persona type not found (e.g. "Reforming Director").');
+
+  // ---- Colour Dynamics ----
+  // The section prints the four energies twice: conscious first, then less
+  // conscious. Each block is headed "BLUE GREEN YELLOW RED" and followed by a
+  // row of raw scores then a row of percentages. Read percentages only, and only
+  // the first four — the last one runs straight into the axis label ("97%100")
+  // and into a caption ("91%Conscious"), so a greedy read would pick up noise.
   const dynIdx = text.search(/colou?r\s+dynamics/i);
   const region = dynIdx >= 0 ? text.slice(dynIdx) : text;
-  if (dynIdx < 0) {
-    notes.push('No "Colour Dynamics" section found — verify both columns of percentages.');
-  }
-  const relIdx = region.search(/less\s*[-\s]?conscious/i);
-  const consciousBlock = relIdx > 0 ? region.slice(0, relIdx) : region;
-  const lessBlock = relIdx > 0 ? region.slice(relIdx) : '';
-  if (relIdx < 0) {
-    notes.push('Could not tell the conscious and less-conscious blocks apart — check both columns of percentages.');
-  }
+  if (dynIdx < 0) notes.push('No "Colour Dynamics" section found — check both columns of percentages.');
 
-  const readColors = (block: string): Record<InsightColor, number | null> => {
-    const out = { blue: null, green: null, yellow: null, red: null } as Record<InsightColor, number | null>;
-    for (const c of INSIGHT_ORDER) {
-      out[c] = numberNear(block, new RegExp(`\\b${c}\\b`, 'i'), { window: 40 });
-    }
-    return out;
+  const blocks = [...region.matchAll(/blue\s+green\s+yellow\s+red/gi)];
+  const readBlock = (i: number): number[] | null => {
+    const m = blocks[i];
+    if (!m || m.index === undefined) return null;
+    const after = region.slice(m.index + m[0].length, m.index + m[0].length + 160);
+    const pcts = [...after.matchAll(/(?<![\d.])(\d{1,3})\s*%/g)].map((x) => Number(x[1]));
+    return pcts.length >= 4 ? pcts.slice(0, 4) : null;
   };
+  let consPcts = readBlock(0);
+  let lessPcts = readBlock(1);
 
-  const cons = readColors(consciousBlock);
-  const less = lessBlock ? readColors(lessBlock) : { blue: null, green: null, yellow: null, red: null };
+  const cons: Record<InsightColor, number | null> = { blue: null, green: null, yellow: null, red: null };
+  const less: Record<InsightColor, number | null> = { blue: null, green: null, yellow: null, red: null };
 
-  const missing = INSIGHT_ORDER.filter((c) => cons[c] === null);
-  if (missing.length) notes.push(`Conscious colour energy not found for: ${missing.join(', ')}.`);
+  if (consPcts) {
+    INSIGHT_ORDER.forEach((c, i) => { cons[c] = consPcts![i]; });
+  } else {
+    // Fallback for layouts without the vendor's colour header row: read each
+    // energy by its own name, splitting on the "less conscious" heading.
+    const relIdx = region.search(/less\s*[-\s]?conscious/i);
+    const consBlock = relIdx > 0 ? region.slice(0, relIdx) : region;
+    for (const c of INSIGHT_ORDER) {
+      cons[c] = numberNear(consBlock, new RegExp(`\\b${c}\\b`, 'i'), { window: 40 });
+    }
+    if (relIdx > 0) {
+      const lessBlock = region.slice(relIdx);
+      for (const c of INSIGHT_ORDER) {
+        less[c] = numberNear(lessBlock, new RegExp(`\\b${c}\\b`, 'i'), { window: 40 });
+      }
+      lessPcts = INSIGHT_ORDER.every((c) => less[c] !== null) ? INSIGHT_ORDER.map((c) => less[c]!) : null;
+    }
+    consPcts = INSIGHT_ORDER.every((c) => cons[c] !== null) ? INSIGHT_ORDER.map((c) => cons[c]!) : null;
+  }
+  if (lessPcts && !Object.values(less).some((v) => v !== null)) {
+    INSIGHT_ORDER.forEach((c, i) => { less[c] = lessPcts![i]; });
+  }
+
+  if (!consPcts) notes.push('Insights conscious colour energies not found.');
+  if (!lessPcts) notes.push('Insights less-conscious colour energies not found.');
 
   // Lead colour = highest conscious energy; drives the badge dot on the card.
   const ranked = [...INSIGHT_ORDER].sort((a, b) => (cons[b] ?? -1) - (cons[a] ?? -1));
@@ -552,28 +705,27 @@ export function parseInsights(text: string): {
     sortOrder: (i + 1) * 10,
   }));
 
-  const typeRe = new RegExp(`\\b((?:${INSIGHT_TYPES.join('|')})|(?:\\w+ing\\s+(?:${INSIGHT_TYPES.join('|')})))\\b`);
-  const insightsType = firstMatch(text, [
-    /insights\s+discovery\s+profile\s*[:\-–]?\s*([A-Z][A-Za-z ]{3,40})/i,
-    typeRe,
-  ]);
-  if (!insightsType) notes.push('Insights persona type not found (e.g. "Reforming Director").');
-
-  const consciousWheel = firstMatch(text, [
-    /conscious\s+wheel\s+position\s*[:\-–]?\s*([0-9]{0,2}\s*[A-Za-z][A-Za-z ]{2,40})/i,
-  ]);
-  const lessWheel = firstMatch(text, [
-    /less\s*[-\s]?conscious\s+wheel\s+position\s*[:\-–]?\s*([0-9]{0,2}\s*[A-Za-z][A-Za-z ]{2,40})/i,
-  ]);
-  const preferenceFlow = numberNear(text, /preference\s+flow/i);
+  // Preference flow is the one SIGNED / decimal percentage in the section
+  // ("-15.1%"); the colour energies are all plain integers.
+  let preferenceFlow: number | null = null;
+  const flowMatch = region.match(/(-?\d{1,3}\.\d+)\s*%/);
+  if (flowMatch) preferenceFlow = Number(flowMatch[1]);
+  else {
+    const labelled = text.match(/preference\s+flow[^\d-]{0,40}(-?\d{1,3}(?:\.\d+)?)\s*%?/i);
+    if (labelled) preferenceFlow = Number(labelled[1]);
+  }
+  if (preferenceFlow === null) notes.push('Insights preference flow not found.');
 
   const completedAt = normalizeDate(
     firstMatch(text, [
-      /(?:date|completed|profile\s+date)\s*[:\-–]\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i,
+      /date\s+completed\s*[:\-–]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i,
+      /completed\s+on\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i,
       /(?:date|completed)\s*[:\-–]\s*(\d{4}-\d{2}-\d{2})/i,
+      /(?:date|completed)\s*[:\-–]\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i,
       /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})/i,
     ]),
   );
+  if (!completedAt) notes.push('Insights completion date not found.');
 
   return { insightsType, consciousWheel, lessWheel, preferenceFlow, completedAt, profiles, notes };
 }
