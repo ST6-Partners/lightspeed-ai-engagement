@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Hand, Link2, X, Trash2, Pencil, Archive, ChevronRight, ChevronDown } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import PeriodRolloverModal from '../components/PeriodRolloverModal';
 import { fmtDate } from '../lib/date';
 import { fireConfetti } from '../lib/confetti';
 
@@ -220,6 +221,7 @@ export default function WeeklyPlan() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      <PeriodRolloverModal />
       {(myPrioritiesStatus === 'due' || myPrioritiesStatus === 'overdue') && (
         <div className="mb-4 rounded-lg px-4 py-3 text-[13px] flex items-center gap-2"
           style={myPrioritiesStatus === 'overdue'
@@ -227,9 +229,14 @@ export default function WeeklyPlan() {
             : { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd982' }}>
           <span style={{ fontWeight: 700 }}>{myPrioritiesStatus === 'overdue' ? 'Priorities overdue' : 'New period'}</span>
           <span>
+            {/* Deliberately does NOT say "set them below". The weekly priorities
+                below are stored on weekly_checkins.priorities (jsonb) and do not
+                satisfy the priorities cadence, which reads period-scoped rows in
+                the priorities table. Telling someone to type them below meant the
+                banner never cleared however much work they did. */}
             {myPrioritiesStatus === 'overdue'
-              ? `Your priorities for ${curPeriods?.priorities?.activeLabel ?? 'this period'} are overdue — please set them below.`
-              : `A new period (${curPeriods?.priorities?.activeLabel ?? ''}) has started — set your priorities for it below.`}
+              ? `Your period priorities for ${curPeriods?.priorities?.activeLabel ?? 'this period'} are overdue.`
+              : `A new period (${curPeriods?.priorities?.activeLabel ?? ''}) has started and your period priorities aren't set yet.`}
           </span>
         </div>
       )}

@@ -19,12 +19,22 @@ import { departments } from '../db/schema/departments.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { priorities, nineBoxRatings, engagementSnapshots } from '../db/schema/orgScreen.js';
 import { cadenceSettings } from '../db/schema/cadence.js';
-import { periodKeyLabel, type Cadence } from './cadence.js';
+import { periodKeyLabel, prevPeriodStart, type Cadence } from './cadence.js';
 
 async function currentPrioritiesKey(db: any): Promise<string> {
   const s = await db.query.cadenceSettings.findFirst();
   const cad = (s?.prioritiesCadence ?? 'annual') as Cadence;
   return periodKeyLabel(cad, new Date()).key;
+}
+
+// Current + previous priorities period keys, for the rollover carry-over.
+async function prioritiesPeriodKeys(db: any): Promise<{ cur: string; prev: string; curLabel: string; prevLabel: string }> {
+  const s = await db.query.cadenceSettings.findFirst();
+  const cad = (s?.prioritiesCadence ?? 'annual') as Cadence;
+  const now = new Date();
+  const c = periodKeyLabel(cad, now);
+  const p = periodKeyLabel(cad, prevPeriodStart(cad, now));
+  return { cur: c.key, prev: p.key, curLabel: c.label, prevLabel: p.label };
 }
 import {
   assessmentSummaries, assessmentCcatSections, assessmentEppAttributes,
@@ -214,6 +224,119 @@ export const orgScreenRouter = router({
 
   // Toggle completion on a priority. The assignee (owner) OR a manager can do
   // this — the person completes their own assigned priority from the Weekly Plan.
+  // ---- Period rollover carry-over (self-service) ----
+  //
+  // Priorities are period-scoped (periodKey, migration 0095) and a past period is
+  // locked server-side. So the instant a period rolls over the person's list is
+  // empty — and they cannot populate it themselves, because prioritiesAdd is
+  // requireManager and takes an okrNodeId. That leaves an employee staring at an
+  // empty locked-out list with no action available.
+  //
+  // Carry-over resolves that WITHOUT granting authoring rights: it only copies
+  // forward rows a manager already approved in the previous period, and preserves
+  // assignedBy/assignedAt so a manager-assigned priority stays attributed rather
+  // than being laundered into a self-set one. Creating genuinely new priorities
+  // remains manager-only.
+  prioritiesRolloverPreview: protectedProcedure
+    .query(async ({ ctx }) => {
+      const { cur, prev, curLabel, prevLabel } = await prioritiesPeriodKeys(ctx.db);
+      // Untagged rows (legacy/seeded, period_key NULL) count as current — same
+      // convention as prioritiesByUser, so this cannot double-prompt.
+      const curRows = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          or(eq(priorities.periodKey, cur), isNull(priorities.periodKey)),
+        ),
+        columns: { id: true },
+      });
+      const empty = { showPrompt: false as const, currentPeriodKey: cur, currentPeriodLabel: curLabel, previousPeriodLabel: prevLabel, items: [] as Array<{ id: string; label: string; assigned: boolean }> };
+      if (curRows.length > 0) return empty;
+
+      const prevRows = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          eq(priorities.periodKey, prev),
+          eq(priorities.done, false),
+        ),
+        orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
+      });
+      if (!prevRows.length) return empty;
+
+      const nodeIds = prevRows.map((r: any) => r.okrNodeId).filter((x: any): x is string => !!x);
+      const nodes = nodeIds.length ? await ctx.db.query.okrNodes.findMany({ where: inArray(okrNodes.id, nodeIds) }) : [];
+      const nodeById = new Map(nodes.map((n: any) => [n.id, n]));
+      return {
+        showPrompt: true as const,
+        currentPeriodKey: cur,
+        currentPeriodLabel: curLabel,
+        previousPeriodLabel: prevLabel,
+        items: prevRows.map((r: any) => ({
+          id: r.id,
+          label: r.itemType === 'ktbr' ? (r.ktbrLabel ?? '') : (nodeById.get(r.okrNodeId)?.title ?? '(missing item)'),
+          assigned: !!r.assignedBy,
+        })),
+      };
+    }),
+
+  prioritiesCarryOver: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const { cur, prev } = await prioritiesPeriodKeys(ctx.db);
+      // Source rows must be the caller's own, from the previous period, unfinished.
+      const src = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          eq(priorities.periodKey, prev),
+          eq(priorities.done, false),
+          inArray(priorities.id, input.ids),
+        ),
+        orderBy: [asc(priorities.sortOrder), asc(priorities.createdAt)],
+      });
+      if (!src.length) return { carried: 0 };
+
+      const existing = await ctx.db.query.priorities.findMany({
+        where: and(
+          eq(priorities.userId, ctx.user.id),
+          isNull(priorities.weekStart),
+          or(eq(priorities.periodKey, cur), isNull(priorities.periodKey)),
+        ),
+        columns: { id: true, okrNodeId: true, ktbrLabel: true },
+      });
+      // Honour the same 3-priority cap the manager path enforces.
+      const room = Math.max(0, 3 - existing.length);
+      if (room === 0) return { carried: 0 };
+
+      const seen = new Set(existing.map((e: any) => e.okrNodeId ?? `ktbr:${e.ktbrLabel ?? ''}`));
+      const toInsert = [];
+      for (const r of src) {
+        const key = r.okrNodeId ?? `ktbr:${r.ktbrLabel ?? ''}`;
+        if (seen.has(key)) continue; // idempotent across repeat clicks
+        seen.add(key);
+        toInsert.push({
+          userId: ctx.user.id,
+          itemType: r.itemType,
+          okrNodeId: r.okrNodeId,
+          ktbrLabel: r.ktbrLabel,
+          weekStart: null,
+          periodKey: cur,
+          sortOrder: existing.length + toInsert.length,
+          // Preserve provenance: a manager-assigned priority carried forward is
+          // still that manager's assignment, not a self-set item.
+          assignedBy: r.assignedBy,
+          assignedAt: r.assignedAt,
+          done: false,
+          archived: false,
+        });
+        if (toInsert.length >= room) break;
+      }
+      if (!toInsert.length) return { carried: 0 };
+      await ctx.db.insert(priorities).values(toInsert);
+      return { carried: toInsert.length };
+    }),
+
   prioritiesToggleDone: protectedProcedure
     .input(z.object({ id: z.string().uuid(), done: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
