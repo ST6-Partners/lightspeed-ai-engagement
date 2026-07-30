@@ -14,6 +14,7 @@ import { router, protectedProcedure } from '../trpc.js';
 import { requireManager, requireAdmin, hasMinimumRole } from '../services/permissions.js';
 import type { RoleTier } from '../services/permissions.js';
 import { users } from '../db/schema/core.js';
+import { notifications } from '../db/schema/notifications.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 import { okrNodes } from '../db/schema/okr.js';
@@ -188,6 +189,22 @@ export const orgScreenRouter = router({
         assignedBy: ctx.user.id,
         assignedAt: new Date(),
       }).returning();
+      // Tell the assignee. Priorities are manager-assigned, so before this the
+      // only signal an employee got was a chip quietly appearing in their Weekly
+      // Plan. Self-assignment (a manager setting their own) is not notified.
+      // referenceType routes to the Weekly Plan, where the employee sees their
+      // manager-assigned priorities — NOT the Organization tab, which is the
+      // manager's authoring surface and read-only to them.
+      if (input.userId !== ctx.user.id) {
+        const assigner = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+        await ctx.db.insert(notifications).values({
+          userId: input.userId,
+          type: 'priority_assigned',
+          message: `${assigner?.name ?? 'Your manager'} assigned you a priority: ${node.title}`,
+          referenceId: row.id,
+          referenceType: 'assigned_priority',
+        });
+      }
       return row;
     }),
 

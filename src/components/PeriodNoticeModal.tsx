@@ -38,7 +38,7 @@ export default function PeriodNoticeModal() {
   const [closed, setClosed] = useState(false);
 
   const { data: notifications } = trpc.notifications.list.useQuery();
-  const dismiss = trpc.notifications.markPeriodNoticesRead.useMutation({
+  const dismiss = trpc.notifications.markNoticesRead.useMutation({
     onSettled: () => {
       utils.notifications.list.invalidate();
       utils.notifications.unreadCount.invalidate();
@@ -51,8 +51,8 @@ export default function PeriodNoticeModal() {
 
   if (closed || notices.length === 0) return null;
 
-  const close = () => { setClosed(true); dismiss.mutate(); };
-  const go = (to: string) => { setClosed(true); dismiss.mutate(); navigate(to); };
+  const close = () => { setClosed(true); dismiss.mutate({ types: ['cadence_new_period'] }); };
+  const go = (to: string) => { setClosed(true); dismiss.mutate({ types: ['cadence_new_period'] }); navigate(to); };
 
   // One action button per distinct activity present, in a stable order.
   const activities = ['ninebox', 'reviews', 'priorities'].filter((a) =>

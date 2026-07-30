@@ -4,7 +4,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, and, desc, isNull, count } from 'drizzle-orm';
+import { eq, and, desc, isNull, count, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { notifications } from '../db/schema/notifications.js';
@@ -72,20 +72,26 @@ export const notificationsRouter = router({
       return updated;
     }),
 
-  // Dismiss the new-period notice. Marks only the unread `cadence_new_period`
-  // rows read — deliberately NOT markAllRead, which would also swallow unrelated
-  // unread notifications. `readAt` doubles as the "already saw the period modal"
-  // flag: it is server-side, so dismissing on a laptop also dismisses on a phone,
-  // which a localStorage flag could not do. The rows stay in the bell as read, so
-  // the notice is recoverable rather than destroyed.
-  markPeriodNoticesRead: protectedProcedure
-    .mutation(async ({ ctx }) => {
+  // Dismiss the modal-backed notices of one or more types. Deliberately NOT
+  // markAllRead, which would also swallow unrelated unread notifications.
+  // `readAt` doubles as the "already saw this modal" flag: it is server-side, so
+  // dismissing on a laptop also dismisses on a phone, which a localStorage flag
+  // could not do. Rows stay in the bell as read, so a notice is recoverable
+  // rather than destroyed.
+  //
+  // The type list is an allow-list, not free text — a caller must not be able to
+  // silently clear arbitrary notification types through this endpoint.
+  markNoticesRead: protectedProcedure
+    .input(z.object({
+      types: z.array(z.enum(['cadence_new_period', 'priority_assigned', 'action_item_assigned'])).min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
       const updated = await ctx.db
         .update(notifications)
         .set({ readAt: new Date() })
         .where(and(
           eq(notifications.userId, ctx.user.id),
-          eq(notifications.type, 'cadence_new_period'),
+          inArray(notifications.type, input.types),
           isNull(notifications.readAt)
         ))
         .returning({ id: notifications.id });

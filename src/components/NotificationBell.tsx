@@ -17,6 +17,8 @@ const TYPE_ICONS: Record<string, string> = {
   talking_point: '🗣️',
   cadence_new_period: '📅',
   cadence_overdue: '⏰',
+  priority_assigned: '🎯',
+  action_item_assigned: '📌',
 };
 
 // Human-readable captions. The old code printed the raw type with underscores
@@ -31,6 +33,8 @@ const TYPE_LABELS: Record<string, string> = {
   talking_point: 'Talking point',
   cadence_new_period: 'New period',
   cadence_overdue: 'Overdue',
+  priority_assigned: 'Assigned to you',
+  action_item_assigned: 'Assigned to you',
 };
 
 // Deep-link a notification to where its work is done, using the referenceType
@@ -41,6 +45,11 @@ function linkFor(n: { referenceType?: string | null }): string | null {
     case 'ninebox': return '/organization?tab=ninebox';
     case 'reviews': return '/organization?tab=review';
     case 'priorities': return '/organization?tab=priorities';
+    // Assignment notices belong to the EMPLOYEE, so they route to the Weekly Plan
+    // where manager-assigned priorities and action items are surfaced to them —
+    // not the Organization tab, which is the manager's authoring surface.
+    case 'assigned_priority': return '/weekly-plan';
+    case 'assigned_action_item': return '/weekly-plan';
     default: return null;
   }
 }

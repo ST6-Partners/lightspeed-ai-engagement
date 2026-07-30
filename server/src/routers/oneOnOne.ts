@@ -214,6 +214,26 @@ export const oneOnOneRouter = router({
         employeeId: input.employeeId, createdBy: ctx.user.id, text: input.text,
         dueDate: input.dueDate ?? null, sortOrder: existing.length,
       }).returning();
+      // Mirror of the talking-point alert, pointing the other way: tell the
+      // EMPLOYEE when someone else (i.e. their manager) puts an action item on
+      // them. Either side may add here, so self-added items are not notified.
+      // Until now an assigned action item appeared silently and the employee had
+      // no way to learn about it. referenceType is distinct from 'talking_point'
+      // so the bell can deep-link it to the Weekly Plan, where they act on it.
+      if (input.employeeId !== ctx.user.id) {
+        const [assigner, snippetSrc] = [
+          await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) }),
+          input.text,
+        ];
+        const snippet = snippetSrc.length > 80 ? snippetSrc.slice(0, 77) + '…' : snippetSrc;
+        await ctx.db.insert(notifications).values({
+          userId: input.employeeId,
+          type: 'action_item_assigned',
+          message: `${assigner?.name ?? 'Your manager'} assigned you an action item: ${snippet}`,
+          referenceId: row.id,
+          referenceType: 'assigned_action_item',
+        });
+      }
       return row;
     }),
 
