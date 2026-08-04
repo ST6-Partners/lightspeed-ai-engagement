@@ -750,6 +750,13 @@
       "when": 1785861121351,
       "tag": "0105_aie_demo_manager_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1785861121352,
+      "tag": "0106_aie_manager_brief_assigned_actions_in_weekly_plan",
+      "breakpoints": true
     }
   ]
 }

@@ -550,9 +550,9 @@ export default function WeeklyPlan() {
       <div className="grid md:grid-cols-2 gap-4 mt-4">
         <section className="ls-card p-5 mt-4">
           <h2 className="font-bold mb-1">Action Items</h2>
-          <p className="text-xs text-ls-ink-3 mb-3">Pulled in from your 1:1s with your manager (Reviews → Action Items).</p>
+          <p className="text-xs text-ls-ink-3 mb-3">Assigned to you by your manager, plus anything you pulled in from your 1:1s (Reviews → Action Items).</p>
           {(planActionItems.data ?? []).length === 0 ? (
-            <div className="text-sm text-ls-ink-3">Nothing pulled in yet. In Reviews, use the &ldquo;&rarr; Weekly Plan&rdquo; button on an action item.</div>
+            <div className="text-sm text-ls-ink-3">Nothing here yet. Actions your manager assigns you show up automatically; to add one of your own 1:1 items, use the &ldquo;&rarr; Weekly Plan&rdquo; button in Reviews.</div>
           ) : (
             <ul>
               {(planActionItems.data ?? []).map((it: any) => (
@@ -560,6 +560,15 @@ export default function WeeklyPlan() {
                   <input type="checkbox" checked={it.done} onChange={() => planToggle.mutate({ id: it.id, done: !it.done })}
                     className="mt-1 w-4 h-4 accent-blue-600 shrink-0" />
                   <span className={`text-sm flex-1 ${it.done ? 'line-through text-ls-ink-3' : 'text-ls-ink'}`}>
+                    {/* Attribution mirrors the assigned-priorities badge above, so an
+                        employee can see who put the item on them. Absent for items
+                        they added themselves. */}
+                    {it.assignedByName && (
+                      <span className="ls-chip inline-flex items-center whitespace-nowrap mr-1.5"
+                        style={{ background: '#f3e8ff', color: '#6d28d9', fontWeight: 600 }}>
+                        Assigned by {it.assignedByName}
+                      </span>
+                    )}
                     {it.text}{it.dueDate ? <span className="text-ls-ink-3"> · due {it.dueDate}</span> : null}
                   </span>
                 </li>

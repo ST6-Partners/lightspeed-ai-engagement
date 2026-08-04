@@ -61,20 +61,33 @@ export const actionsRouter = router({
       });
       if (!assignee) throw new TRPCError({ code: 'NOT_FOUND', message: 'Assignee not found.' });
       const title = input.title.trim();
+      // Same rule as the 1:1 surface (oneOnOne.actionItemsAdd + migration 0098):
+      // an action someone ELSE puts on you lands in your Weekly Plan straight
+      // away. in_weekly_plan defaults to false and only the employee can flip it,
+      // so without this an action assigned from the Insights Dashboard sat
+      // invisible — the notification arrived but the Weekly Plan never showed it.
+      // Self-assignment keeps the flag as the assignee's own choice.
+      const managerAssigned = input.assigneeId !== ctx.user.id;
       const [row] = await ctx.db.insert(actionItems).values({
         employeeId: input.assigneeId,
         createdBy: ctx.user.id,
         text: title,
         priority: input.priority,
         dueDate: input.dueDate ?? null,
+        inWeeklyPlan: managerAssigned,
       }).returning();
-      // Notify the assignee — the manager-to-report ping.
+      // Notify the assignee — the manager-to-report ping. type/referenceType match
+      // the 1:1 path exactly so this notice gets the bell icon + "Assigned to you"
+      // label, fires the assignment popup (AssignmentNoticeModal), and deep-links
+      // to /weekly-plan (NotificationBell.linkFor). The former 'action_assigned' /
+      // 'action_item' pair was in none of those maps, so the notice was unstyled
+      // and clicking it went nowhere.
       await ctx.db.insert(notifications).values({
         userId: input.assigneeId,
-        type: 'action_assigned',
+        type: 'action_item_assigned',
         message: `${ctx.user.name ?? 'Your manager'} assigned you an action: “${title}”`,
         referenceId: row.id,
-        referenceType: 'action_item',
+        referenceType: 'assigned_action_item',
       });
       return row;
     }),

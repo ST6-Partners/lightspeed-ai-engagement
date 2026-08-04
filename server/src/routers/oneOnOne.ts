@@ -298,7 +298,17 @@ export const oneOnOneRouter = router({
       ),
       orderBy: [asc(actionItems.sortOrder), asc(actionItems.createdAt)],
     });
-    return rows.map((r) => ({ id: r.id, text: r.text, done: r.done, dueDate: r.dueDate }));
+    // Resolve who assigned each item so the Weekly Plan can attribute it, the way
+    // manager-assigned priorities already say "Assigned by …". Only items created
+    // by someone else are attributed — an item the employee added themselves needs
+    // no badge.
+    const names = await nameMap(ctx, rows.map((r) => (r.createdBy === ctx.user.id ? null : r.createdBy)));
+    return rows.map((r) => ({
+      id: r.id, text: r.text, done: r.done, dueDate: r.dueDate,
+      assignedByName: r.createdBy && r.createdBy !== ctx.user.id
+        ? (names.get(r.createdBy) || null)
+        : null,
+    }));
   }),
 
   // ================= Notes (shared + private) =================
