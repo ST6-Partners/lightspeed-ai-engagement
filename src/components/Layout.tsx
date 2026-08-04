@@ -149,7 +149,11 @@ export default function Layout() {
   // sees most of Core Data but not the instruments, and two of the three tabs
   // on Reviews. Same table the server enforces, so hiding never drifts from it.
   const { data: caps } = trpc.accessControl.myCapabilities.useQuery(undefined, { enabled: !!user });
-  const has = (list: readonly string[] | undefined, v: string) => !list || list.includes(v);
+  // The sidebar waits for capabilities rather than guessing: `caps` undefined
+  // means "not known yet", and visibleGroups below renders nothing until it is.
+  // Guessing open would flash links the viewer cannot use; guessing closed
+  // would flash an empty sidebar on every page load.
+  const has = (list: readonly string[] | undefined, v: string) => !!list && list.includes(v);
   const pageVisible = (pg?: string) => (pg ? has(caps?.pages, pg) : true);
   const childVisible = (item?: string) => {
     if (!item || !caps) return true;
@@ -163,7 +167,7 @@ export default function Layout() {
     (user as { accessLevel?: string } | undefined)?.accessLevel ?? 'user',
   );
 
-  const visibleGroups = navGroups
+  const visibleGroups = !caps || !areas ? [] : navGroups
     .filter((g) => (g.label === 'System' ? showSystemGroup : areaVisible(g.area)))
     .map((g) => ({
       ...g,

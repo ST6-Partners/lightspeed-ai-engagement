@@ -74,6 +74,12 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
   // one addressed to them (2026-08-03).
   const { can } = useCapabilities();
   const canSend = can('exitSurvey.send');
+  // An employee still has to be able to FILL ONE IN. Hiding the send card left
+  // them with a list and no way to start their own, which is the ordinary case
+  // for a resignation (PM clarification, 2026-08-03).
+  const startOwn = trpc.exitSurvey.createOwn.useMutation({
+    onSuccess: (row: any) => { refetch(); if (row?.id) onOpen(row.id); },
+  });
   const create = trpc.exitSurvey.create.useMutation({ onSuccess: () => { setName(''); setRole(''); setMgr(''); refetch(); } });
   const [name, setName] = useState(''); const [role, setRole] = useState(''); const [mgr, setMgr] = useState(''); const [type, setType] = useState<Mode>('vol');
   const { data: org } = trpc.organization.list.useQuery();
@@ -127,6 +133,21 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
           <button disabled={!name.trim() || create.isPending} onClick={() => create.mutate({ subjectName: name.trim(), subjectRole: role.trim() || undefined, managerName: mgr.trim() || undefined, exitType: type })} className="ls-btn ls-btn-primary disabled:opacity-50">Create exit</button>
         </div>
       </div>
+      )}
+
+      {!canSend && (
+        <div className="ls-card p-4 mb-5 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-[13px] font-semibold text-ls-ink">Filling in your own exit survey?</div>
+            <p className="text-[12px] text-ls-ink-3 mt-0.5">
+              Start it here. You can save and come back — it is not shared until you complete it.
+            </p>
+          </div>
+          <button onClick={() => startOwn.mutate()} disabled={startOwn.isPending}
+            className="ls-btn ls-btn-primary shrink-0">
+            {startOwn.isPending ? 'Starting…' : 'Start my exit survey'}
+          </button>
+        </div>
       )}
 
       <div className="font-semibold mb-2">{canSend ? 'All exits' : 'Your exit surveys'}</div>

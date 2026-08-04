@@ -4,11 +4,13 @@
 // surprise scores are promoted to columns for the HR comparison read. Status is
 // derived from response completion: draft -> part_a_done -> complete.
 import { z } from 'zod';
-import { requireAction } from '../services/access.js';
-import { desc, eq } from 'drizzle-orm';
+import { requireAction, effectiveLevelOf } from '../services/access.js';
+import { canDo } from '../services/capabilities.js';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { exitSurveys } from '../db/schema/exitSurvey.js';
+import { users } from '../db/schema/core.js';
 
 const answersSchema = z.record(z.string(), z.union([z.number(), z.string()]));
 
@@ -21,10 +23,15 @@ function deriveStatus(a: unknown, b: unknown): 'draft' | 'part_a_done' | 'comple
 }
 
 export const exitSurveyRouter = router({
+  // Anyone who cannot send exit surveys sees only their own. This returned
+  // every departure record in the company to every signed-in employee.
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.exitSurveys.findMany({
+    const rows = await ctx.db.query.exitSurveys.findMany({
       orderBy: [desc(exitSurveys.leftOn), desc(exitSurveys.createdAt)],
     });
+    const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+    if (level && canDo(level, 'exitSurvey.send')) return rows;
+    return rows.filter((r) => r.createdById === ctx.user.id);
   }),
 
   get: protectedProcedure
@@ -32,6 +39,30 @@ export const exitSurveyRouter = router({
     .query(async ({ ctx, input }) => {
       const row = await ctx.db.query.exitSurveys.findFirst({ where: eq(exitSurveys.id, input.id) });
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      return row;
+    }),
+
+  // Starting your OWN exit survey. Open to everyone: an employee has to be
+  // able to fill one in even when nobody has opened one for them, which is the
+  // ordinary case for a resignation (PM clarification, 2026-08-03).
+  // The subject is taken from the signed-in user and cannot be supplied, so
+  // this cannot be used to open a record on somebody else.
+  createOwn: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const me = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+      if (!me) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Reuse an unfinished one rather than stacking duplicates each time the
+      // button is pressed.
+      const open = await ctx.db.query.exitSurveys.findFirst({
+        where: and(eq(exitSurveys.createdById, ctx.user.id), ne(exitSurveys.status, 'complete')),
+      });
+      if (open) return open;
+      const [row] = await ctx.db.insert(exitSurveys).values({
+        subjectName: me.name ?? me.email,
+        subjectRole: me.title ?? undefined,
+        exitType: 'vol',
+        createdById: ctx.user.id,
+      }).returning();
       return row;
     }),
 

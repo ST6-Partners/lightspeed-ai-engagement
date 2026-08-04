@@ -136,6 +136,41 @@ async function readResponses(ctx: any): Promise<ResponseRow[]> {
   return rows.filter((r) => (r.managerPath ?? []).some((id: string) => scope.has(id)));
 }
 
+
+/**
+ * Historical results live in `survey_metrics` as PRE-COMPUTED aggregates, one
+ * row per (period, scope, department, dimension). Scoping raw responses did
+ * nothing for them — this is the table the results page actually reads for any
+ * past period, which is why a manager still saw the whole company.
+ *
+ * They cannot be re-scoped by subtree, because the numbers were rolled up at
+ * import time. So for a narrower viewer we drop every company-scope row and
+ * keep only departments that exist inside their own branch. What is left is
+ * genuinely theirs; anything else would be the organisation's figures wearing
+ * a manager's label.
+ */
+type MetricRow = typeof surveyMetrics.$inferSelect;
+
+async function readMetrics(ctx: any): Promise<MetricRow[]> {
+  const rows: MetricRow[] = await ctx.db.query.surveyMetrics.findMany();
+  const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'insights', ctx.req.session?.previewLevel);
+  if (acc.reach === 'all') return rows;
+
+  const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+  const [people, depts] = await Promise.all([
+    ctx.db.query.users.findMany(),
+    ctx.db.query.departments.findMany(),
+  ]);
+  const deptNameById = new Map(depts.map((d: any) => [d.id, d.name]));
+  const myDepts = new Set(
+    people
+      .filter((u: any) => scope.has(u.id) && u.departmentId)
+      .map((u: any) => deptNameById.get(u.departmentId))
+      .filter(Boolean),
+  );
+  return rows.filter((m) => m.scope === 'department' && !!m.department && myDepts.has(m.department));
+}
+
 export const engagementAnalyticsRouter = router({
   // ── Filter options for the analytics filter bar (from in-app responses + roster) ──
   filterOptions: protectedProcedure.query(async ({ ctx }) => {
@@ -328,7 +363,7 @@ export const engagementAnalyticsRouter = router({
     .query(async ({ ctx, input }) => {
     await assertCanViewResults(ctx);
     const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
-    const metricRows = await ctx.db.query.surveyMetrics.findMany();
+    const metricRows = await readMetrics(ctx);
     // Question bank drives the driver map + question text (falls back to the built-in
     // 66 if the bank table is empty). New drivers (D&I, wellbeing, etc.) flow through here.
     const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
@@ -615,7 +650,7 @@ export const engagementAnalyticsRouter = router({
       const canSeeIndividual = hasMinimumRole(viewerRole, 'admin');
 
       const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
-      const metricRows = await ctx.db.query.surveyMetrics.findMany();
+      const metricRows = await readMetrics(ctx);
       const responses = await readResponses(ctx);
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
       const Q_DRIVER: Record<string, DriverKey> = qbank.length
@@ -890,7 +925,7 @@ export const engagementAnalyticsRouter = router({
 
       if (input.groupBy === 'dept') {
         if (target && target.id !== 'live') {
-          const metricRows = await ctx.db.query.surveyMetrics.findMany();
+          const metricRows = await readMetrics(ctx);
           const groups: Grp[] = metricRows
             .filter((m) => m.periodId === target.id && m.scope === 'department' && m.dimension === 'overall')
             .map((m) => ({ name: m.department ?? '', people: m.eligibleCount ?? 0, responseCount: m.responseCount, responseRatePct: m.eligibleCount ? r1((m.responseCount / m.eligibleCount) * 100) : null }))

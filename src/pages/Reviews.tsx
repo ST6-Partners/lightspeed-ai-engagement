@@ -37,7 +37,7 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
   // Authoring a regular review is a capability, not a rank. The old test read
   // role >= manager, which after Admin folded into Sysadmin was both too wide
   // and too vague.
-  const { can } = useCapabilities();
+  const { can, ready } = useCapabilities();
   const canEdit = can('review.author');
 
   const { data: employees } = trpc.values.listEmployees.useQuery();
@@ -87,6 +87,10 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
     if (tab === 'values') { setValEditingId(null); setValMode('edit'); }
     else { setPerfEditingId(null); setPerfMode('edit'); }
   };
+
+  // Render nothing until we know — opening on the authoring screen and then
+  // swapping it out is what made this look like it had not been built.
+  if (!ready && !hidePicker) return null;
 
   // Anyone who does not author reviews gets the history screen instead.
   if (!canEdit && !hidePicker) {
