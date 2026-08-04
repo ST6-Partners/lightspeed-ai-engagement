@@ -15,12 +15,10 @@ const perfOf = (b: number) => (b - 1) % 3;
 const potOf = (b: number) => Math.floor((b - 1) / 3);
 const boxOf = (p: number, q: number) => q * 3 + p + 1;
 
-export default function NineBox({ people, allPeople, filtersActive, scope, canPlace, companyWide, statusById, readOnly, periodStartISO, periodEndISO }: {
+export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly, periodStartISO, periodEndISO }: {
   people: Person[];
-  // Company-wide population for the leadership aggregate views. The caller is
-  // responsible for having already applied the filter bar to BOTH lists.
+  // Company-wide population for the leadership aggregate views.
   allPeople?: Person[];
-  filtersActive?: boolean;
   scope?: NineScope;
   canPlace?: (id: string) => boolean;
   companyWide?: boolean;
@@ -54,7 +52,7 @@ export default function NineBox({ people, allPeople, filtersActive, scope, canPl
     onError: (e) => setErr(e.data?.code === 'FORBIDDEN' ? 'You can only place people in your own reporting line.' : 'Could not remove rating.'),
   });
 
-  if (ids.length === 0) return <Empty text={filtersActive ? 'No one matches the current filters' : 'No one in this scope'} />;
+  if (ids.length === 0) return <Empty text="No one in this scope" />;
   if (isLoading) return <TabState kind="loading" />;
   if (error) return <div className="text-[12px]" style={{ color: TOKENS.idle }}>Could not load ratings.</div>;
 

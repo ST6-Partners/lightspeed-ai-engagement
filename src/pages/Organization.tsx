@@ -1,6 +1,6 @@
 // Organization — org tree + scope + tabbed person-card matrix + 9 Box.
 // Spec: AIE Org Screen Spec v1. Stage 1 (Assessments/Review = Stage 2).
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useCadenceStatus } from '../lib/chunkedQueries';
@@ -11,7 +11,7 @@ import PersonCard from '../components/org/PersonCard';
 import NineBox from '../components/org/NineBox';
 import {
   buildMaps, directsOf, descendantsOf, depthOf, Person, Scope, TabKey, TOKENS,
-  tenureLabel, tenureBand,
+  tenureLabel,
 } from '../components/org/orgLib';
 
 // Stage 2 added Assessments + Review. `minRole` HIDES (not disables) a tab the
@@ -72,25 +72,9 @@ export default function Organization() {
   const maps = useMemo(() => buildMaps(people), [people]);
   // Reporting line (top-down to, not including, this person) — same logic as export.
   const chainOf = (id: string) => { const c: string[] = []; const seen = new Set<string>(); let cur = maps.byId.get(id)?.managerId ?? null; while (cur && !seen.has(cur)) { seen.add(cur); const m = maps.byId.get(cur); if (m) c.unshift(m.name); cur = m?.managerId ?? null; } return c.join(' › '); };
-  // Distinct, sorted filter options derived from loaded people.
-  const uniqSorted = (vals: (string | null | undefined)[]) => [...new Set(vals.filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b));
-  const eltOptions = useMemo(() => uniqSorted(people.map((p) => p.eltLeader)), [people]);
-  const locOptions = useMemo(() => uniqSorted(people.map((p) => p.location)), [people]);
-  const buOptions = useMemo(() => uniqSorted(people.map((p) => p.businessUnit)), [people]);
-  const TENURE_OPTIONS: { value: string; label: string }[] = [
-    { value: '<1', label: '<1 yr' }, { value: '1-3', label: '1\u20133 yrs' },
-    { value: '3-5', label: '3\u20135 yrs' }, { value: '5-10', label: '5\u201310 yrs' },
-    { value: '10+', label: '10+ yrs' }, { value: 'unknown', label: 'Unknown' },
-  ];
-  const chooseFilter = (setter: (v: string) => void, key: string) => (v: string) => { setter(v); ls.set(key, v); };
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>(() => { const s = ls.get('org.scope') as Scope; return s && s !== 'organization' ? s : 'individual'; });
-  // Employment / org filters (spec: filter bar). '' = All. Persisted in localStorage.
-  const [fElt, setFElt] = useState<string>(() => ls.get('org.filter.elt') ?? '');
-  const [fLoc, setFLoc] = useState<string>(() => ls.get('org.filter.loc') ?? '');
-  const [fBu, setFBu] = useState<string>(() => ls.get('org.filter.bu') ?? '');
-  const [fTen, setFTen] = useState<string>(() => ls.get('org.filter.tenure') ?? '');
   // Tab honours ?tab= first so notification deep links land on the right tab,
   // then falls back to the last tab this user was on. Without the URL check the
   // links from the notification centre would silently open whatever tab happened
@@ -265,39 +249,26 @@ export default function Organization() {
     return descendantsOf(maps, selected.id);
   }, [selected, scope, maps, people]);
 
-  // Apply employment/org filters before rendering (spec: filter bar).
-  // One predicate, two populations:
-  //   `visible`    — the in-scope people that feed the person cards.
-  //   `visibleAll` — the company-wide population that feeds the 9 Box leadership
-  //                  aggregate views (Directs -> cohorts, Team -> department
-  //                  centroids). Those views are deliberately company-wide, but
-  //                  they must still honour the filter bar. Passing the raw
-  //                  `people` list is what made the filters look broken on the
-  //                  9 Box tab.
-  const filtersActive = !!(fElt || fLoc || fBu || fTen);
-  const passesFilters = useCallback((p: Person) => (
-    (!fElt || p.eltLeader === fElt) &&
-    (!fLoc || p.location === fLoc) &&
-    (!fBu || p.businessUnit === fBu) &&
-    (!fTen || tenureBand(p.hireYear) === fTen)
-  ), [fElt, fLoc, fBu, fTen]);
-  const visible: Person[] = useMemo(() => scoped.filter(passesFilters), [scoped, passesFilters]);
-  const visibleAll: Person[] = useMemo(() => people.filter(passesFilters), [people, passesFilters]);
+  // The employment/org filter bar (ELT leader / location / business unit /
+  // tenure) was removed 2026-07-30. Hierarchy is expressed by the tree + scope
+  // toggle, and filtering a 9 Box silently changed the calibration denominator,
+  // which is the one population a 9 Box placement is only meaningful against.
+  // Person cards read `scoped`; the 9 Box leadership aggregate views (Directs ->
+  // cohorts, Team -> department centroids) read the full company `people` list.
 
   // Team scope → depth-banded groups.
   const banded = useMemo(() => {
     if (scope !== 'descendants' || !selected) return null;
     const base = depthOf(maps, selected.id);
     const groups = new Map<number, Person[]>();
-    for (const p of visible) {
+    for (const p of scoped) {
       const rel = depthOf(maps, p.id) - base;
       (groups.get(rel) ?? groups.set(rel, []).get(rel)!).push(p);
     }
     return [...groups.entries()].sort((a, b) => a[0] - b[0]);
-  }, [scope, selected, visible, maps]);
+  }, [scope, selected, scoped, maps]);
 
   const grid = 'grid gap-4 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3';
-  const filterSelStyle: React.CSSProperties = { color: TOKENS.activeText, background: '#fff', border: `1px solid ${TOKENS.border}`, padding: '4px 6px', borderRadius: 6 };
 
   return (
     <div ref={containerRef} className="flex" style={{ height: 'calc(100vh - 7.5rem)', background: TOKENS.bg, borderRadius: 10, overflow: 'hidden', border: `1px solid ${TOKENS.border}`, userSelect: dragging ? 'none' : undefined }}>
@@ -323,26 +294,6 @@ export default function Organization() {
                 ))}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                <select value={fElt} onChange={(e) => chooseFilter(setFElt, 'org.filter.elt')(e.target.value)}
-                  className="text-[11px]" style={filterSelStyle} title="Filter by ELT leader">
-                  <option value="">All ELT leaders</option>
-                  {eltOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <select value={fLoc} onChange={(e) => chooseFilter(setFLoc, 'org.filter.loc')(e.target.value)}
-                  className="text-[11px]" style={filterSelStyle} title="Filter by location">
-                  <option value="">All locations</option>
-                  {locOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <select value={fBu} onChange={(e) => chooseFilter(setFBu, 'org.filter.bu')(e.target.value)}
-                  className="text-[11px]" style={filterSelStyle} title="Filter by business unit">
-                  <option value="">All business units</option>
-                  {buOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <select value={fTen} onChange={(e) => chooseFilter(setFTen, 'org.filter.tenure')(e.target.value)}
-                  className="text-[11px]" style={filterSelStyle} title="Filter by tenure">
-                  <option value="">All tenures</option>
-                  {TENURE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
                 {selected && (
                   <button onClick={exportTalentProfile}
                     className="inline-flex items-center gap-1 text-[12px] font-medium rounded-md px-2.5 py-1.5"
@@ -413,13 +364,11 @@ export default function Organization() {
                 <div className="text-[11px] mb-3" style={{ color: TOKENS.idle }}>Past period — view-only.</div>
               )}
               {tab === 'ninebox' ? (
-                <NineBox people={visible} allPeople={visibleAll} filtersActive={filtersActive} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!cadIsCurrent} periodStartISO={selectedCadPeriod?.startISO} periodEndISO={selectedCadPeriod?.endISO} />
+                <NineBox people={scoped} allPeople={people} scope={scope} canPlace={canPlace} companyWide={canSeeCompanyWide} statusById={nineboxStatusById} readOnly={!cadIsCurrent} periodStartISO={selectedCadPeriod?.startISO} periodEndISO={selectedCadPeriod?.endISO} />
               ) : !selected ? (
                 <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope. Select a person in the tree.</div>
-              ) : visible.length === 0 ? (
-                <div className="text-[13px]" style={{ color: TOKENS.idle }}>
-                  {scoped.length > 0 && filtersActive ? 'No one in this scope matches the current filters.' : 'No one in this scope.'}
-                </div>
+              ) : scoped.length === 0 ? (
+                <div className="text-[13px]" style={{ color: TOKENS.idle }}>No one in this scope.</div>
               ) : banded ? (
                 banded.map(([rel, group]) => (
                   <div key={rel} className="mb-5">
@@ -433,7 +382,7 @@ export default function Organization() {
                 ))
               ) : (
                 <div className={grid}>
-                  {visible.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadIsCurrent ? cadenceForTab(p.id) : undefined} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
+                  {scoped.map((p) => <PersonCard key={p.id} person={p} tab={tab} periodId={effectivePeriodId} reviewPeriod={reviewPeriod} okrPeriodId={effectiveGoalPeriodId ?? undefined} cadence={cadIsCurrent ? cadenceForTab(p.id) : undefined} readOnly={tab === 'priorities' && !cadIsCurrent} prioritiesPeriodKey={tab === 'priorities' ? (effectiveCadKey ?? undefined) : undefined} managerName={p.managerId ? (maps.byId.get(p.managerId)?.name ?? null) : null} reportingLine={chainOf(p.id) || null} />)}
                 </div>
               )}
             </div>
