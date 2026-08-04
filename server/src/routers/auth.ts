@@ -390,6 +390,8 @@ export const authRouter = router({
         email: z.string(),
         name: z.string().optional(),
         role: z.string().optional(),
+        accesslevel: z.string().optional(),
+        accessLevel: z.string().optional(),
         title: z.string().optional(),
         department: z.string().optional(),
         manager: z.string().optional(),
@@ -406,8 +408,16 @@ export const authRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       let added = 0; let updated = 0; let skipped = 0; const errors: string[] = [];
-      const ROLES = new Set(['user', 'manager', 'admin', 'sysadmin']);
-      const BADGES = new Set(['ELT', 'SLT', 'ST6']);
+      const LEVELS = new Set(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']);
+      // Legacy columns still accepted so existing CSVs keep working: a file with
+      // role=manager or leaderBadge=ELT maps onto the new single level. An
+      // explicit accessLevel column wins. ST6 is retired and maps to admin.
+      const fromLegacy = (role: string, badge: string): string => {
+        if (badge === 'ELT') return 'elt';
+        if (badge === 'SLT') return 'slt';
+        if (badge === 'ST6') return 'admin';
+        return LEVELS.has(role) ? role : 'user';
+      };
 
       const [allUsers, allTitles, allDepts] = await Promise.all([
         ctx.db.query.users.findMany(),
@@ -433,6 +443,7 @@ export const authRouter = router({
       };
       const norm = input.rows.map((r) => {
         const roleRaw = (r.role ?? '').trim().toLowerCase();
+        const levelRaw = (r.accessLevel ?? r.accesslevel ?? '').trim().toLowerCase();
         const start = parseStart(r.startDate ?? r.startdate ?? r.start_date);
         const badgeRaw = (r.leaderBadge ?? r.leaderbadge ?? '').trim().toUpperCase();
         const titleRaw = (r.title ?? '').trim();
@@ -440,13 +451,12 @@ export const authRouter = router({
         return {
           email: (r.email ?? '').trim().toLowerCase(),
           name: r.name?.trim() || '',
-          roleProvided: !!roleRaw,
-          role: ROLES.has(roleRaw) ? roleRaw : 'user',
+          levelProvided: !!(levelRaw || roleRaw || badgeRaw),
+          accessLevel: levelRaw && LEVELS.has(levelRaw) ? levelRaw : fromLegacy(roleRaw, badgeRaw),
           titleRaw, jobTitleId: titleRaw ? (titleId.get(titleRaw.toLowerCase()) ?? null) : null,
           deptRaw, departmentId: deptRaw ? (deptId.get(deptRaw.toLowerCase()) ?? null) : null,
           managerRef: r.manager?.trim() || '',
-          badgeProvided: !!badgeRaw,
-          leaderBadge: BADGES.has(badgeRaw) ? badgeRaw : null,
+
           team: (r.team ?? '').trim() || null,
           location: (r.location ?? '').trim() || null,
           businessUnit: (r.businessUnit ?? r.businessunit ?? '').trim() || null,
@@ -465,10 +475,9 @@ export const authRouter = router({
           if (existingId) {
             const upd: Record<string, unknown> = { updatedAt: new Date() };
             if (r.name) upd.name = r.name;
-            if (r.roleProvided) upd.role = r.role;
+            if (r.levelProvided) Object.assign(upd, { accessLevel: r.accessLevel }, legacyFieldsFor(r.accessLevel as AccessLevel));
             if (r.titleRaw) upd.jobTitleId = r.jobTitleId;
             if (r.deptRaw) upd.departmentId = r.departmentId;
-            if (r.badgeProvided) upd.leaderBadge = r.leaderBadge;
             if (r.team !== null) upd.team = r.team;
             if (r.location !== null) upd.location = r.location;
             if (r.businessUnit !== null) upd.businessUnit = r.businessUnit;
@@ -477,9 +486,10 @@ export const authRouter = router({
             updated++;
           } else {
             const [u] = await ctx.db.insert(users).values({
-              sub: `local:${r.email}`, email: r.email, name: r.name || null, role: r.role,
+              sub: `local:${r.email}`, email: r.email, name: r.name || null,
+              ...legacyFieldsFor(r.accessLevel as AccessLevel),
+              accessLevel: r.accessLevel,
               jobTitleId: r.jobTitleId, departmentId: r.departmentId,
-              leaderBadge: r.leaderBadge as 'ELT' | 'SLT' | 'ST6' | null,
               team: r.team, location: r.location, businessUnit: r.businessUnit,
               hireYear: r.hireYear, hireMonth: r.hireMonth, hireDay: r.hireDay,
               isActive: true, passwordHash: null,

@@ -17,9 +17,11 @@ const ACCESS_LEVEL_OPTIONS = [
   { id: 'user', label: 'User' },
 ];
 
-const ROLE_OPTIONS = ['user', 'manager', 'admin', 'sysadmin'] as const;
-const ROLE_COLORS: Record<string, string> = {
+const ACCESS_LEVEL_COLORS: Record<string, string> = {
   sysadmin: 'bg-purple-100 text-purple-800',
+  elt: 'bg-indigo-100 text-indigo-800',
+  slt: 'bg-sky-100 text-sky-800',
+  hr: 'bg-amber-100 text-amber-800',
   admin: 'bg-blue-100 text-blue-800',
   manager: 'bg-green-100 text-green-800',
   user: 'bg-gray-100 text-gray-800',
@@ -74,7 +76,7 @@ export default function Employees() {
   });
 
   // ── Edit Employee (click a name → full edit modal, one Save) ──
-  const EDIT_EMPTY = { name: '', email: '', externalId: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', leaderBadge: '', isActive: true, isBeta: false, isHrAccess: false };
+  const EDIT_EMPTY = { name: '', email: '', externalId: '', accessLevel: 'user', jobTitleId: '', departmentId: '', managerId: '', location: '', businessUnit: '', eltLeader: '', hireDate: '', isActive: true, isBeta: false };
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(EDIT_EMPTY);
   const [editError, setEditError] = useState<string | null>(null);
@@ -82,13 +84,12 @@ export default function Employees() {
   const openEdit = (u: any) => {
     setEditError(null);
     setEditForm({
-      name: u.name ?? '', email: u.email ?? '', externalId: u.externalId ?? '', role: u.role ?? 'user',
+      name: u.name ?? '', email: u.email ?? '', externalId: u.externalId ?? '', accessLevel: u.accessLevel ?? 'user',
       jobTitleId: u.jobTitleId ?? '', departmentId: u.departmentId ?? '',
       managerId: u.managerId ?? '',
       location: u.location ?? '', businessUnit: u.businessUnit ?? '', eltLeader: u.eltLeader ?? '',
       hireDate: (u.hireYear ? `${u.hireYear}-${String(u.hireMonth ?? 1).padStart(2, '0')}-${String(u.hireDay ?? 1).padStart(2, '0')}` : ''),
-      leaderBadge: u.leaderBadge ?? '',
-      isActive: !!u.isActive, isBeta: !!u.isBeta, isHrAccess: !!u.isHrAccess,
+      isActive: !!u.isActive, isBeta: !!u.isBeta,
     });
     setEditUser(u);
   };
@@ -106,7 +107,7 @@ export default function Employees() {
       name: editForm.name.trim() || null,
       email: editForm.email.trim(),
       externalId: editForm.externalId.trim() || null,
-      role: editForm.role as any,
+      accessLevel: editForm.accessLevel as any,
       jobTitleId: editForm.jobTitleId || null,
       departmentId: editForm.departmentId || null,
       managerId: editForm.managerId || null,
@@ -114,10 +115,8 @@ export default function Employees() {
       businessUnit: editForm.businessUnit || null,
       eltLeader: editForm.eltLeader || null,
       hireYear: (hy ?? null), hireMonth: (hm ?? null), hireDay: (hd ?? null),
-      leaderBadge: (editForm.leaderBadge || null) as any,
       isActive: editForm.isActive,
       isBeta: editForm.isBeta,
-      isHrAccess: editForm.isHrAccess,
     } as any);
   };
 
@@ -139,8 +138,8 @@ export default function Employees() {
           <h2 className="text-lg font-bold text-gray-900">Employees</h2>
           <p className="text-sm text-gray-500">The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and app role here. Title and Department come from the Core Data lookups.</p>
         </div>
-        <ImportButton label="Import employees" hint="CSV: email, name, role, title, department, manager, leaderBadge, team, location, businessUnit, startDate"
-          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />
+        <ImportButton label="Import employees" hint="CSV: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
+          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, accessLevel: r.accesslevel ?? r['access level'] ?? r.role, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
@@ -241,8 +240,7 @@ export default function Employees() {
                 <th className="px-3 py-3 w-[170px]">Title</th>
                 <th className="px-3 py-3 w-[150px]">Department</th>
                 <th className="px-3 py-3 w-[170px]">Manager</th>
-                <th className="px-3 py-3 w-[110px]">Role</th>
-                <th className="px-3 py-3 w-[90px]">Badge</th>
+                <th className="px-3 py-3 w-[120px]">Access</th>
                 <th className="px-3 py-3 w-12">Remove</th>
               </tr>
             </thead>
@@ -296,21 +294,12 @@ export default function Employees() {
                     </div>
                   </td>
 
-                  {/* Role */}
+                  {/* Access level — one field. Supersedes the old Role dropdown,
+                      Leader badge dropdown and HR tick-box (AIE 2026-08-03). */}
                   <td className="px-3 py-3 text-sm">
-                    <select value={user.role} onChange={(e) => set(user.id, { role: e.target.value })}
-                      className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${ROLE_COLORS[user.role] || 'bg-gray-100'}`}>
-                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-                    </select>
-                  </td>
-
-                  {/* Leader badge — Org tree tier (ELT/SLT) */}
-                  <td className="px-3 py-3 text-sm">
-                    <select value={user.leaderBadge ?? ''} onChange={(e) => set(user.id, { leaderBadge: e.target.value || null })}
-                      className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
-                      <option value="">—</option>
-                      <option value="ELT">ELT</option>
-                      <option value="SLT">SLT</option>
+                    <select value={user.accessLevel ?? 'user'} onChange={(e) => set(user.id, { accessLevel: e.target.value })}
+                      className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${ACCESS_LEVEL_COLORS[user.accessLevel ?? 'user'] || 'bg-gray-100'}`}>
+                      {ACCESS_LEVEL_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                     </select>
                   </td>
 
@@ -372,10 +361,10 @@ export default function Employees() {
                 <input type="email" value={editForm.email} onChange={(e) => ef({ email: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="name@company.com" />
               </label>
-              <label className="text-xs text-gray-600">Role
-                <select value={editForm.role} onChange={(e) => ef({ role: e.target.value })}
+              <label className="text-xs text-gray-600">Access level
+                <select value={editForm.accessLevel} onChange={(e) => ef({ accessLevel: e.target.value })}
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                  {ACCESS_LEVEL_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </select>
               </label>
               <label className="text-xs text-gray-600">Title
@@ -418,18 +407,6 @@ export default function Employees() {
                   className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">— (top of tree)</option>
                   {employeesByFirstName.filter((m: any) => m.id !== editUser?.id).map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
-                <input type="checkbox" checked={editForm.isHrAccess} onChange={(e) => ef({ isHrAccess: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /> HR access (company-wide view)
-              </label>
-              <label className="text-xs text-gray-600">Leader badge
-                <select value={editForm.leaderBadge} onChange={(e) => ef({ leaderBadge: e.target.value })}
-                  className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="">—</option>
-                  <option value="ELT">ELT</option>
-                  <option value="SLT">SLT</option>
                 </select>
               </label>
               <label className="text-xs text-gray-600 flex items-center gap-2 mt-5">
