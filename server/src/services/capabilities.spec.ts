@@ -1,6 +1,6 @@
 // Capability assertions, checked against the PM spec agreed 2026-08-03.
 // Run: npx tsx server/src/services/capabilities.spec.ts
-import { canDo, canSeeCoreDataItem, canSeeReviewTab, canSeePage } from './capabilities.js';
+import { canDo, canSeeCoreDataItem, canSeeReviewTab, canSeePage, canSeeExitPart } from './capabilities.js';
 
 let fail = 0;
 const t = (name: string, got: boolean, want: boolean) => {
@@ -82,6 +82,16 @@ t('User cannot send an exit survey (Development create hidden)', canDo('user', '
 t('Manager reads Core Data — org data', canSeeCoreDataItem('manager', 'org-data'), true);
 t('Manager reads Core Data — assessments', canSeeCoreDataItem('manager', 'assessments'), true);
 t('Manager reads Core Data — pulse questions', canSeeCoreDataItem('manager', 'checkin-questions'), true);
+
+// ── Exit-survey sides, 2026-08-03 ────────────────────────────
+// Two blind halves plus a comparison; each level sees exactly one.
+t('User sees Part A only — not B', canSeeExitPart('user', 'a') && !canSeeExitPart('user', 'b'), true);
+t('User does NOT see the HR comparison', canSeeExitPart('user', 'comparison'), false);
+t('Manager sees Part B only — not A', canSeeExitPart('manager', 'b') && !canSeeExitPart('manager', 'a'), true);
+t('Manager does NOT see the HR comparison', canSeeExitPart('manager', 'comparison'), false);
+t('HR sees the comparison', canSeeExitPart('hr', 'comparison'), true);
+t('HR does NOT fill in Part A', canSeeExitPart('hr', 'a'), false);
+t('HR does NOT fill in Part B', canSeeExitPart('hr', 'b'), false);
 
 console.log(fail ? `\n${fail} FAILED` : `\nAll ${'assertions'} passed`);
 process.exit(fail ? 1 : 0);

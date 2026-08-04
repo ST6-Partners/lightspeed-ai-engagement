@@ -32,6 +32,15 @@ export type Page = (typeof PAGES)[number];
 export const REVIEW_TABS = ['reviews', 'manager', 'peer'] as const;
 export type ReviewTab = (typeof REVIEW_TABS)[number];
 
+// ── Exit-survey sides ────────────────────────────────────────
+// The instrument has two halves and a comparison, and each level sees exactly
+// one of them (PM, 2026-08-03): the departing employee answers Part A, their
+// manager answers Part B without seeing Part A, and HR reads the two side by
+// side without filling in either. Anyone who can see both halves could infer
+// the other party's answers, which is the whole point of the instrument.
+export const EXIT_PARTS = ['a', 'b', 'comparison'] as const;
+export type ExitPart = (typeof EXIT_PARTS)[number];
+
 // ── Core Data items ──────────────────────────────────────────
 export const CORE_DATA_ITEMS = [
   'employees', 'job-titles', 'departments', 'values', 'performance-criteria',
@@ -72,6 +81,7 @@ interface Caps {
   pages: readonly Page[];
   reviewTabs: readonly ReviewTab[];
   coreDataItems: readonly CoreDataItem[];
+  exitParts: readonly ExitPart[];
   actions: readonly Action[];
 }
 
@@ -97,17 +107,18 @@ const CAPS: Record<AccessLevel, Caps> = {
   // Runs the system. Everything except addressing the company.
   sysadmin: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
-    coreDataItems: ALL_CORE_DATA, actions: SYSADMIN_ACTIONS,
+    coreDataItems: ALL_CORE_DATA, exitParts: EXIT_PARTS, actions: SYSADMIN_ACTIONS,
   },
   // Runs the company. Everything, survey included.
   elt: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
-    coreDataItems: ALL_CORE_DATA, actions: SURVEY_OWNER_ACTIONS,
+    coreDataItems: ALL_CORE_DATA, exitParts: EXIT_PARTS, actions: SURVEY_OWNER_ACTIONS,
   },
   // Owns the people processes alongside ELT.
+  // HR reads the comparison and fills in neither half.
   hr: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
-    coreDataItems: ALL_CORE_DATA, actions: SURVEY_OWNER_ACTIONS,
+    coreDataItems: ALL_CORE_DATA, exitParts: ['comparison'], actions: SURVEY_OWNER_ACTIONS,
   },
   // Everything their branch of the tree can justify — but not the instruments,
   // and they do not send surveys.
@@ -116,6 +127,9 @@ const CAPS: Record<AccessLevel, Caps> = {
   manager: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
     coreDataItems: ALL_CORE_DATA,
+    // The manager answers Part B only — seeing Part A first would defeat the
+    // instrument, and the comparison is HR's read.
+    exitParts: ['b'],
     // managerSurvey.submit is absent by PM ruling (2026-08-03): on the Manager
     // Review tab a manager reads what they were given, they do not author.
     // NOTE this also means a manager cannot review their own manager — flagged
@@ -138,6 +152,8 @@ const CAPS: Record<AccessLevel, Caps> = {
             'development', 'engagement-survey', 'core-data'],
     reviewTabs: ALL_REVIEW_TABS,
     coreDataItems: ALL_CORE_DATA.filter((i) => !USER_HIDDEN_CORE_DATA.includes(i)),
+    // The departing employee answers Part A only.
+    exitParts: ['a'],
     actions: ['exitSurvey.submitOwn', 'survey.takeOwn', 'managerSurvey.submit'],
   },
 };
@@ -162,6 +178,10 @@ export function canSeeReviewTab(level: AccessLevel, tab: ReviewTab): boolean {
   return capsFor(level).reviewTabs.includes(tab);
 }
 
+export function canSeeExitPart(level: AccessLevel, part: ExitPart): boolean {
+  return capsFor(level).exitParts.includes(part);
+}
+
 /** One payload the client can mirror, so hiding and enforcing never drift. */
 export function capabilityPayload(level: AccessLevel) {
   const c = capsFor(level);
@@ -170,6 +190,7 @@ export function capabilityPayload(level: AccessLevel) {
     pages: [...c.pages],
     reviewTabs: [...c.reviewTabs],
     coreDataItems: [...c.coreDataItems],
+    exitParts: [...c.exitParts],
     actions: [...c.actions],
   };
 }

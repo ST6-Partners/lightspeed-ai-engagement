@@ -4,7 +4,7 @@
 // matrix, auto-flags, coaching brief, anonymity guard). People leave bosses, so
 // the questions diagnose manager quality; the signature mechanic is "surprise",
 // which flips owner by exit type.
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useCapabilities } from '../lib/useCapabilities';
 import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -181,6 +181,27 @@ type DTab = (typeof DTABS)[number];
 
 function Detail({ record, all, onBack, refetch }: { record: ExitRow; all: ExitRow[]; onBack: () => void; refetch: () => void }) {
   const [tab, setTab] = useState<DTab>('Overview');
+  // Each level sees exactly one side of the instrument (PM, 2026-08-03): the
+  // departing employee answers Part A, their manager answers Part B without
+  // seeing Part A, HR reads the comparison and fills in neither. Anyone able to
+  // see both halves could infer the other party's answers, which is the whole
+  // point of running it as two blind halves.
+  const { can, canSeeExitPart, ready } = useCapabilities();
+  const seeA = canSeeExitPart('a');
+  const seeB = canSeeExitPart('b');
+  const seeC = canSeeExitPart('comparison');
+  const canDelete = can('exitSurvey.send');
+  const visibleTabs = DTABS.filter((t) =>
+    t === 'Overview' ? true
+      : t === 'Part A · Employee' ? seeA
+      : t === 'Part B · Manager' ? seeB
+      : seeC);
+
+  // Never leave the viewer parked on a tab they cannot see.
+  useEffect(() => {
+    if (ready && !visibleTabs.includes(tab)) setTab('Overview');
+  }, [ready, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const remove = trpc.exitSurvey.remove.useMutation({ onSuccess: () => { refetch(); onBack(); } });
   const vol = record.exitType === 'vol';
   const aDone = !!record.partA && Object.keys(record.partA).length > 0;
@@ -195,29 +216,29 @@ function Detail({ record, all, onBack, refetch }: { record: ExitRow; all: ExitRo
           <h1 className="text-2xl font-bold tracking-tight">{record.subjectName}</h1>
           <p className="text-sm text-ls-ink-3">{[record.subjectRole, vol ? 'Resignation' : 'Termination', record.managerName ? `reports to ${record.managerName}` : null].filter(Boolean).join(' · ')}</p>
         </div>
-        <button onClick={() => { if (confirm('Delete this exit record?')) remove.mutate({ id: record.id }); }} className="ls-btn ls-btn-ghost text-[13px] text-ls-risk">Delete</button>
+        {canDelete && <button onClick={() => { if (confirm('Delete this exit record?')) remove.mutate({ id: record.id }); }} className="ls-btn ls-btn-ghost text-[13px] text-ls-risk">Delete</button>}
       </div>
 
       <div className="flex gap-1 border-b border-ls-line mb-5 mt-3 flex-wrap">
-        {DTABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`text-sm font-semibold px-3.5 py-2.5 -mb-px border-b-2 ${tab === t ? 'text-ls-blue-deep border-ls-blue' : 'text-ls-ink-3 border-transparent hover:text-ls-ink-2'}`}>{t}</button>
         ))}
       </div>
 
       {tab === 'Overview' && (
         <div className="grid sm:grid-cols-2 gap-4">
-          <StatusCard title="Part A · Employee" done={aDone} blurb="Confidential to the People Team." onClick={() => setTab('Part A · Employee')} />
-          <StatusCard title="Part B · Manager" done={bDone} blurb="Asked first, within 24h, before seeing Part A." onClick={() => setTab('Part B · Manager')} />
-          <div className="ls-card p-5 sm:col-span-2">
+          {seeA && <StatusCard title="Part A · Employee" done={aDone} blurb="Confidential to the People Team." onClick={() => setTab('Part A · Employee')} />}
+          {seeB && <StatusCard title="Part B · Manager" done={bDone} blurb="Asked first, within 24h, before seeing Part A." onClick={() => setTab('Part B · Manager')} />}
+          {seeC && <div className="ls-card p-5 sm:col-span-2">
             <div className="flex items-center justify-between mb-1"><h3 className="font-bold">Comparison</h3><span className={`ls-chip ${aDone && bDone ? 'bg-ls-blue-50 text-ls-blue-deep' : 'bg-ls-bg-2 text-ls-ink-3'}`}>{aDone && bDone ? 'Ready' : 'Needs both responses'}</span></div>
             <p className="text-sm text-ls-ink-2">{aDone && bDone ? 'Both responses are in — open the comparison for divergence, the surprise quadrant, and the coaching brief.' : 'The comparison unlocks once both Part A and Part B are saved.'}</p>
             {aDone && bDone && <button onClick={() => setTab('HR Comparison')} className="ls-btn ls-btn-primary mt-3 text-[13px]">Open comparison →</button>}
-          </div>
+          </div>}
         </div>
       )}
-      {tab === 'Part A · Employee' && <SurveyForm record={record} part="A" refetch={refetch} />}
-      {tab === 'Part B · Manager' && <SurveyForm record={record} part="B" refetch={refetch} />}
-      {tab === 'HR Comparison' && <Comparison record={record} all={all} />}
+      {tab === 'Part A · Employee' && seeA && <SurveyForm record={record} part="A" refetch={refetch} />}
+      {tab === 'Part B · Manager' && seeB && <SurveyForm record={record} part="B" refetch={refetch} />}
+      {tab === 'HR Comparison' && seeC && <Comparison record={record} all={all} />}
     </div>
   );
 }

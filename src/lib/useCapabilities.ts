@@ -26,6 +26,7 @@ export function useCapabilities() {
     can: (action: string) => has(data?.actions, action),
     canSeePage: (page: string) => has(data?.pages, page),
     canSeeReviewTab: (tab: string) => has(data?.reviewTabs, tab),
+    canSeeExitPart: (part: string) => has((data as { exitParts?: string[] } | undefined)?.exitParts, part),
     canSeeCoreDataItem: (item: string) => has(data?.coreDataItems, item),
   };
 }

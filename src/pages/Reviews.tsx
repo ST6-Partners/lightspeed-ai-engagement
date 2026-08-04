@@ -88,15 +88,6 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
     else { setPerfEditingId(null); setPerfMode('edit'); }
   };
 
-  // Render nothing until we know — opening on the authoring screen and then
-  // swapping it out is what made this look like it had not been built.
-  if (!ready && !hidePicker) return null;
-
-  // Anyone who does not author reviews gets the history screen instead.
-  if (!canEdit && !hidePicker) {
-    return <MyReviewHistory employeeId={me?.id ?? ''} employeeName={me?.name ?? ''} />;
-  }
-
   return (
     <div className={hidePicker ? '' : 'max-w-4xl mx-auto'}>
       {!hidePicker && (<>
@@ -697,6 +688,12 @@ function ppInitials(name?: string) {
 
 function ReviewsHub() {
   const { data: me } = trpc.auth.me.useQuery();
+  // Authoring a review is a capability, not a rank. Anyone without it gets the
+  // history of reviews they were GIVEN — this tab is where they receive, not
+  // where they write. Held until capabilities resolve so the page never opens
+  // on the 1:1 workbench and then swaps.
+  const { can, ready } = useCapabilities();
+  const canAuthor = can('review.author');
   const role = (me?.role as keyof typeof RANK) ?? 'user';
   const isManager = (RANK[role] ?? 0) >= RANK.manager;
 
@@ -725,8 +722,12 @@ function ReviewsHub() {
     if (isManager && selectedId) markSeen.mutate({ employeeId: selectedId });
   }, [isManager, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!me) {
+  if (!me || !ready) {
     return <div className="max-w-4xl mx-auto"><div className="ls-card p-10 text-center text-sm text-ls-ink-3">Loading…</div></div>;
+  }
+
+  if (!canAuthor) {
+    return <MyReviewHistory employeeId={me.id} />;
   }
 
   const selectedName = isManager ? (reports.find((r) => r.id === selectedId)?.name ?? '') : (me.name ?? '');
@@ -982,88 +983,98 @@ function PrivateNotesSection({ employeeId }: { employeeId: string }) {
 // ============================================================
 
 // ── Reviews you have been given (read-only) ──────────────────
-// Shown to anyone without review.author. Deliberately a different SCREEN, not
-// the authoring page with pieces hidden — the instrument tabs and period bar
-// are the authoring workflow, and leaving them up kept reading as "score
-// someone". Same shape as the Development lists: a list, click to read.
-function MyReviewHistory({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [kind, setKind] = useState<'values' | 'performance'>('values');
+// Shown on the Reviews sub-tab to anyone without review.author. Deliberately
+// modelled on the Manager Review history tab: a list of cards, each one a
+// review someone gave you, with the scores on it. No period picker, no
+// employee picker, no instrument tabs — those are the authoring workflow, and
+// leaving any of them up reads as "review somebody".
+function MyReviewCard({ row, kind }: { row: any; kind: 'values' | 'performance' }) {
+  const [open, setOpen] = useState(false);
+  const detail = kind === 'values'
+    ? trpc.values.getEvaluation.useQuery({ id: row.id }, { enabled: open })
+    : trpc.performance.getEvaluation.useQuery({ id: row.id }, { enabled: open });
 
+  const items: any[] = (detail.data as any)?.items ?? [];
+  const scored = items.filter((i) => typeof i.score === 'number');
+  const avg = scored.length ? scored.reduce((a, i) => a + i.score, 0) / scored.length : null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-900">
+              {kind === 'values' ? 'Company values' : 'Performance criteria'}
+              {row.periodLabel ? ` · ${row.periodLabel}` : ''}
+            </div>
+            <div className="text-xs text-gray-500">
+              by {row.reviewerName ?? '—'}
+              {row.status ? ` · ${row.status.replace('_', ' ')}` : ''}
+            </div>
+          </div>
+          {avg != null && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              avg {avg.toFixed(1)}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {detail.isLoading && <div className="text-xs text-gray-400">Loading…</div>}
+          {!detail.isLoading && items.length === 0 && (
+            <div className="text-xs text-gray-500">Nothing recorded on this review.</div>
+          )}
+          <div className="space-y-1.5">
+            {items.map((i: any) => (
+              <div key={i.id ?? i.label} className="text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-gray-700 min-w-0">{i.label ?? i.name}</span>
+                  {typeof i.score === 'number' && (
+                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{i.score}</span>
+                  )}
+                </div>
+                {i.note && <div className="text-xs text-gray-500 italic mt-0.5">&ldquo;{i.note}&rdquo;</div>}
+              </div>
+            ))}
+          </div>
+          {(detail.data as any)?.overallNotes && (
+            <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-700">
+              {(detail.data as any).overallNotes}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MyReviewHistory({ employeeId }: { employeeId: string }) {
   const valuesQ = trpc.values.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
   const perfQ = trpc.performance.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
-
-  const rows = [
-    ...(valuesQ.data ?? []).map((r: any) => ({ ...r, _kind: 'values' as const })),
-    ...(perfQ.data ?? []).map((r: any) => ({ ...r, _kind: 'performance' as const })),
-  ].sort((a, b) => String(b.periodLabel ?? '').localeCompare(String(a.periodLabel ?? '')));
-
   const loading = valuesQ.isLoading || perfQ.isLoading;
 
-  if (openId) {
+  const rows = [
+    ...(valuesQ.data ?? []).map((r: any) => ({ row: r, kind: 'values' as const })),
+    ...(perfQ.data ?? []).map((r: any) => ({ row: r, kind: 'performance' as const })),
+  ].sort((a, b) => String(b.row.periodLabel ?? '').localeCompare(String(a.row.periodLabel ?? '')));
+
+  if (loading) {
+    return <div className="bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-400">Loading reviews…</div>;
+  }
+  if (rows.length === 0) {
     return (
-      <div>
-        <button onClick={() => setOpenId(null)} className="text-[13px] font-semibold text-ls-blue-deep mb-3">‹ All reviews</button>
-        {kind === 'values' ? (
-          <ValuesEvaluationForm
-            key={openId}
-            employeeId={employeeId}
-            employeeName={employeeName}
-            editingId={openId}
-            newPeriodLabel={''}
-            values={[]}
-            pillars={[]}
-            readOnly
-            onDone={() => setOpenId(null)}
-            onCancel={() => setOpenId(null)}
-          />
-        ) : (
-          <PerformanceEvaluationForm
-            key={openId}
-            employeeId={employeeId}
-            employeeName={employeeName}
-            editingId={openId}
-            newPeriodLabel={''}
-            criteria={[]}
-            readOnly
-            onDone={() => setOpenId(null)}
-            onCancel={() => setOpenId(null)}
-          />
-        )}
+      <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+        <Star className="mx-auto text-gray-300 mb-2" size={32} />
+        <p className="text-sm text-gray-500">You have not been given a review yet.</p>
       </div>
     );
   }
-
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="ls-eyebrow mb-1">Engagement</div>
-      <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-        <Star size={22} className="text-amber-500" /> Reviews
-      </h1>
-      <p className="text-sm text-ls-ink-3 mb-5">The reviews you have been given. Open one to read it.</p>
-
-      <div className="ls-card overflow-hidden">
-        {loading && <div className="text-sm text-ls-ink-3 p-8 text-center">Loading…</div>}
-        {!loading && rows.length === 0 && (
-          <div className="text-sm text-ls-ink-3 p-8 text-center">You have not been given a review yet.</div>
-        )}
-        {rows.map((r: any) => (
-          <button
-            key={`${r._kind}-${r.id}`}
-            onClick={() => { setKind(r._kind); setOpenId(r.id); }}
-            className="w-full text-left px-4 py-3 border-b border-ls-line last:border-0 hover:bg-ls-bg-2 flex items-center justify-between gap-3"
-          >
-            <div>
-              <div className="text-sm font-semibold text-ls-ink">{r.periodLabel ?? 'Review'}</div>
-              <div className="text-[12px] text-ls-ink-3 mt-0.5">
-                {r._kind === 'values' ? 'Company values' : 'Performance criteria'}
-                {r.reviewerName ? ` · ${r.reviewerName}` : ''}
-              </div>
-            </div>
-            <span className="text-[13px] text-ls-blue-deep font-semibold shrink-0">Open ›</span>
-          </button>
-        ))}
-      </div>
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500">{rows.length} {rows.length === 1 ? 'review' : 'reviews'} received</p>
+      {rows.map(({ row, kind }) => <MyReviewCard key={`${kind}-${row.id}`} row={row} kind={kind} />)}
     </div>
   );
 }

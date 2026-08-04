@@ -5,7 +5,7 @@
 // derived from response completion: draft -> part_a_done -> complete.
 import { z } from 'zod';
 import { requireAction, effectiveLevelOf } from '../services/access.js';
-import { canDo } from '../services/capabilities.js';
+import { canDo, canSeeExitPart } from '../services/capabilities.js';
 import { and, desc, eq, ne } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -114,6 +114,8 @@ export const exitSurveyRouter = router({
 
   // Persist one side's answers. Promotes the surprise score to its column and
   // re-derives status from whether both sides are now present.
+  // Hiding a tab is not enforcement. A user saving Part B, or a manager saving
+  // Part A, is refused here regardless of what the UI offered.
   saveResponse: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -124,6 +126,14 @@ export const exitSurveyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.exitSurveys.findFirst({ where: eq(exitSurveys.id, input.id) });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+      if (!level || !canSeeExitPart(level, input.part === 'A' ? 'a' : 'b')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You are not the one who fills in this part of the exit survey.',
+        });
+      }
 
       const partA = input.part === 'A' ? input.answers : existing.partA;
       const partB = input.part === 'B' ? input.answers : existing.partB;
