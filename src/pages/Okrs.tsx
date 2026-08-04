@@ -138,9 +138,10 @@ export default function Okrs() {
   const unassignedCount = rows.filter(isUnassigned).length;
   // Weighted progress rollup: a leaf reads its status; a parent is the
   // weight-weighted average of its children, recursively up the tree.
+  // The roll-up wins — marking a parent Complete no longer forces it to 100%,
+  // so a goal can only read done once the work underneath it actually is.
   const statusPct = (n: OkrRow) => (n.status === 'complete' ? 100 : n.status === 'in_progress' ? 50 : 0);
   const progressOf = (n: OkrRow): number => {
-    if (n.status === 'complete') return 100; // explicit completion overrides rollup
     const kids = childrenOf(n.id);
     if (!kids.length) return statusPct(n);
     const totW = kids.reduce((a, k) => a + (k.weight || 1), 0) || 1;
