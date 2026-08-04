@@ -77,9 +77,12 @@ export default function Okrs() {
   const { data: org } = trpc.organization.list.useQuery();
   const { data: depts } = trpc.departments.list.useQuery();
 
-  const bump = () => { refetch(); archivedQ.refetch(); };
-  const create = trpc.okrs.create.useMutation({ onSuccess: () => refetch() });
-  const update = trpc.okrs.update.useMutation({ onSuccess: () => refetch() });
+  // One refresh path for every OKR query (Plan tree, Archived list) so a write
+  // never leaves one pane current and another showing pre-save data.
+  const utils = trpc.useUtils();
+  const bump = () => { utils.okrs.invalidate(); };
+  const create = trpc.okrs.create.useMutation({ onSuccess: bump });
+  const update = trpc.okrs.update.useMutation({ onSuccess: bump });
   const archive = trpc.okrs.archive.useMutation({ onSuccess: () => { setSelected(null); setDetailOpen(false); bump(); } });
   const unarchive = trpc.okrs.unarchive.useMutation({ onSuccess: bump });
   const remove = trpc.okrs.remove.useMutation({ onSuccess: bump });
@@ -95,6 +98,7 @@ export default function Okrs() {
     title: '', ownerUserId: '', status: 'not_started', light: '', startDate: '', dueDate: '', description: '', departmentId: '', weight: '1',
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [archiveQuery, setArchiveQuery] = useState('');
   const [archivePerson, setArchivePerson] = useState('');
   const [archiveDate, setArchiveDate] = useState('');
@@ -179,7 +183,7 @@ export default function Okrs() {
     setEditing(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!sel) return;
     const missing: string[] = [];
     if (!form.title.trim()) missing.push('Title');
@@ -206,8 +210,14 @@ export default function Okrs() {
     }
     setFormError(null);
     const owner = members.find((m) => m.id === form.ownerUserId)?.name ?? null;
-    update.mutate(
-      {
+    const wasComplete = sel.status === 'complete';
+    // A save is one unit of work: the node itself plus any sub-goal / task
+    // weights changed in the nested editor. Every write has to land AND the
+    // OKR queries have to be re-read before edit mode closes — otherwise the
+    // Plan tree can repaint from a copy of the data taken mid-save and sit
+    // there showing pre-save rollups.
+    const writes: Promise<unknown>[] = [
+      update.mutateAsync({
         id: sel.id,
         title: form.title.trim(),
         ownerUserId: form.ownerUserId,
@@ -219,15 +229,26 @@ export default function Okrs() {
         dueDate: form.dueDate,
         description: form.description.trim(),
         weight: Math.max(1, parseInt(form.weight, 10) || 1),
-      },
-      { onSuccess: () => { setNewNodeId(null); setEditing(false); if (form.status === 'complete' && sel.status !== 'complete') fireConfetti(); } },
-    );
-    // Persist any changed sub-goal / task weights entered in the nested editor.
+      }),
+    ];
     [...direct, ...direct.flatMap((c) => childrenOf(c.id))].forEach((n) => {
       const w = Math.max(1, wOf(n) || 1);
-      if (w !== (n.weight ?? 1)) update.mutate({ id: n.id, weight: w });
+      if (w !== (n.weight ?? 1)) writes.push(update.mutateAsync({ id: n.id, weight: w }));
     });
+    setSaving(true);
+    try {
+      await Promise.all(writes);
+      await utils.okrs.invalidate();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Save failed — your changes are still here. Try again.');
+      return;
+    } finally {
+      setSaving(false);
+    }
     setWDraft({});
+    setNewNodeId(null);
+    setEditing(false);
+    if (form.status === 'complete' && !wasComplete) fireConfetti();
   };
 
   const missingField = (empty: boolean) => (formError && empty ? ' border-ls-risk ring-1 ring-ls-risk' : '');
@@ -327,7 +348,7 @@ export default function Okrs() {
           <Icon size={14} className="shrink-0 text-ls-blue-deep" />
           <span className={`flex-1 text-[13px] truncate ${n.type === 'objective' ? 'font-semibold' : ''}`}>{n.title}</span>
           {isUnassigned(n) && <span title="Unassigned — needs an owner" className="w-1.5 h-1.5 rounded-full bg-ls-watch shrink-0" />}
-          {kids.length > 0 && <span className="text-[11px] text-ls-ink-3 shrink-0 tabular-nums">{Math.round(progressOf(n))}%</span>}
+          <span className="text-[11px] text-ls-ink-3 shrink-0 tabular-nums">{Math.round(progressOf(n))}%</span>
           {n.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[n.light as Light] }} />}
         </div>
         {isExp && kids.map((c) => renderNode(c, depth + 1))}
@@ -398,8 +419,8 @@ export default function Okrs() {
             <div className="flex gap-2">
               <button onClick={() => { const nid = newNodeId; setEditing(false); setFormError(null); if (nid) { remove.mutate({ id: nid }); setNewNodeId(null); setSelected(null); } }}
                 className="ls-btn ls-btn-ghost text-xs py-1.5 px-2.5">Cancel</button>
-              <button onClick={saveEdit} disabled={update.isPending}
-                className="ls-btn ls-btn-primary text-xs py-1.5 px-3">{update.isPending ? 'Saving…' : 'Save'}</button>
+              <button onClick={saveEdit} disabled={saving}
+                className="ls-btn ls-btn-primary text-xs py-1.5 px-3">{saving ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
           <div className="space-y-4">
@@ -685,7 +706,7 @@ export default function Okrs() {
                             style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm text-ls-ink">{n.title}</div>
-                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}{childrenOf(n.id).length > 0 ? ` · ${Math.round(progressOf(n))}%` : ''}</div>
+                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status} · {Math.round(progressOf(n))}%</div>
                             {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
                           </div>
                         </div>
