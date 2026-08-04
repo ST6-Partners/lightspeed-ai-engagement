@@ -237,7 +237,7 @@ export const authRouter = router({
             id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true, accessLevel: true,
             jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
             location: true, businessUnit: true, eltLeader: true, hireYear: true, hireMonth: true, hireDay: true,
-            connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true,
+            connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true, archivedAt: true,
             lastActiveAt: true, lastLoginAt: true,
           },
         }),
@@ -358,6 +358,28 @@ export const authRouter = router({
   // audit trails) cannot be hard-deleted — Postgres raises a FK violation, which
   // we surface as a friendly "set them Inactive instead" message so live history
   // is never silently destroyed.
+  // Archive / restore an employee. The safe counterpart to deleteUser: the person
+  // drops out of the working directory and every headcount, but their reviews,
+  // coaching plans, PIPs and survey responses are left untouched. Archiving also
+  // clears isActive, so the surfaces that already filter on it (org tree,
+  // engagement eligibility, assignment pickers) exclude archived people for free.
+  setUserArchived: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ id: z.string().uuid(), archived: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "You can't archive your own account." });
+      }
+      const target = await ctx.db.query.users.findFirst({ where: eq(users.id, input.id) });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Employee not found.' });
+      await ctx.db.update(users)
+        .set(input.archived
+          ? { archivedAt: new Date(), isActive: false, updatedAt: new Date() }
+          : { archivedAt: null, isActive: true, updatedAt: new Date() })
+        .where(eq(users.id, input.id));
+      return { success: true, id: input.id, archived: input.archived };
+    }),
+
   deleteUser: protectedProcedure
     .use(requireAdmin)
     .input(z.object({ id: z.string().uuid() }))

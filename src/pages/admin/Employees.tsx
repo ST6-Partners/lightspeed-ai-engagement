@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { trpc } from '../../lib/trpc';
-import { Search, Info, UserPlus, X, Trash2 } from 'lucide-react';
+import { Search, Info, UserPlus, X, Trash2, Archive, ArchiveRestore } from 'lucide-react';
 import ImportButton from '../../components/ImportButton';
 
 // One field per person (AIE 2026-08-03). Supersedes the separate Role dropdown,
@@ -28,6 +28,9 @@ const ACCESS_LEVEL_COLORS: Record<string, string> = {
 // employee). Accounts are still created at sign-up; this screen curates them.
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState('');
+  // Current staff vs past employees. Archived people keep their history but are
+  // out of the working directory and out of every count on this screen.
+  const [view, setView] = useState<'current' | 'past'>('current');
   const utils = trpc.useContext();
   const { data: userList = [], isLoading } = trpc.auth.listUsers.useQuery();
   const { data: titles = [] } = trpc.jobTitles.list.useQuery();
@@ -66,6 +69,9 @@ export default function Employees() {
   // ── Remove Employee (admin hard delete) ──────────────────────
   const [pendingDelete, setPendingDelete] = useState<any | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const archiveMutation = trpc.auth.setUserArchived.useMutation({
+    onSuccess: () => utils.auth.listUsers.invalidate(),
+  });
   const deleteMutation = trpc.auth.deleteUser.useMutation({
     onSuccess: () => { utils.auth.listUsers.invalidate(); setPendingDelete(null); setDeleteError(null); },
     onError: (e: any) => setDeleteError(e.message ?? 'Could not remove employee.'),
@@ -116,15 +122,18 @@ export default function Employees() {
     } as any);
   };
 
-  const filtered = userList.filter((u: any) => {
+  const currentStaff = userList.filter((u: any) => !u.archivedAt);
+  const pastStaff = userList.filter((u: any) => !!u.archivedAt);
+  const inView = view === 'current' ? currentStaff : pastStaff;
+  const filtered = inView.filter((u: any) => {
     const q = searchQuery.toLowerCase();
     return (u.name ?? '').toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q);
   });
-  const activeCount = userList.filter((u: any) => u.isActive).length;
+  const activeCount = currentStaff.filter((u: any) => u.isActive).length;
   const nameById = new Map<string, string>(userList.map((u: any) => [u.id, u.name ?? u.email ?? '—']));
   // Manager picker on the Add Employee form, sorted by first name.
   const firstName = (n: string) => (n ?? '').trim().split(/\s+/)[0].toLowerCase();
-  const employeesByFirstName = [...userList].sort((a: any, b: any) =>
+  const employeesByFirstName = [...currentStaff].sort((a: any, b: any) =>
     firstName(a.name ?? a.email ?? '').localeCompare(firstName(b.name ?? b.email ?? '')));
 
   return (
@@ -144,8 +153,15 @@ export default function Employees() {
       </div>
 
       <div className="flex gap-3 flex-wrap items-center">
-        <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{userList.length} total</div>
+        <button type="button" onClick={() => setView('current')}
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${view === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          {currentStaff.length} current
+        </button>
         <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">{activeCount} active</div>
+        <button type="button" onClick={() => setView('past')}
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${view === 'past' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          {pastStaff.length} past
+        </button>
         <button onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
           className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
           {showAdd ? <X size={14} /> : <UserPlus size={14} />}{showAdd ? 'Cancel' : 'Add Employee'}
@@ -225,7 +241,7 @@ export default function Employees() {
         {isLoading ? (
           <div className="p-8 text-center text-gray-500">Loading employees...</div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">{searchQuery ? `No employees matching "${searchQuery}"` : 'No employees yet.'}</div>
+          <div className="p-8 text-center text-gray-500">{searchQuery ? `No employees matching "${searchQuery}"` : view === 'past' ? 'No past employees yet. Archive someone to keep their record without showing them in the directory.' : 'No employees yet.'}</div>
         ) : (
           <table className="w-full divide-y divide-gray-200">
             <thead>
@@ -237,7 +253,7 @@ export default function Employees() {
                 <th className="px-3 py-3 w-[150px]">Department</th>
                 <th className="px-3 py-3 w-[170px]">Manager</th>
                 <th className="px-3 py-3 w-[120px]">Access</th>
-                <th className="px-3 py-3 w-12">Remove</th>
+                <th className="px-3 py-3 w-24">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -299,13 +315,30 @@ export default function Employees() {
                     </select>
                   </td>
 
-                  {/* Remove — hard delete with confirm */}
+                  {/* Archive (reversible, keeps history) + Remove (hard delete) */}
                   <td className="px-3 py-3">
-                    <button type="button" onClick={() => { setDeleteError(null); setPendingDelete(user); }}
-                      title="Remove employee"
-                      className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
-                      <Trash2 size={15} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {user.archivedAt ? (
+                        <button type="button" onClick={() => archiveMutation.mutate({ id: user.id, archived: false })}
+                          disabled={archiveMutation.isPending}
+                          title="Restore to current employees"
+                          className="p-1 rounded text-gray-400 hover:text-green-700 hover:bg-green-50 disabled:opacity-50">
+                          <ArchiveRestore size={15} />
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => archiveMutation.mutate({ id: user.id, archived: true })}
+                          disabled={archiveMutation.isPending}
+                          title="Archive — keeps their history, removes them from the directory"
+                          className="p-1 rounded text-gray-400 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                          <Archive size={15} />
+                        </button>
+                      )}
+                      <button type="button" onClick={() => { setDeleteError(null); setPendingDelete(user); }}
+                        title="Remove employee permanently"
+                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -323,7 +356,7 @@ export default function Employees() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900">Remove {pendingDelete.name ?? pendingDelete.email ?? 'this employee'}?</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  This permanently deletes the directory record and can&apos;t be undone. Anyone reporting to them has their manager cleared, and their own reviews, coaching plans, and survey responses are removed with them. If you only want to hide them, set them to <span className="font-medium">Inactive</span> instead.
+                  This permanently deletes the directory record and can&apos;t be undone. Anyone reporting to them has their manager cleared, and their own reviews, coaching plans, and survey responses are removed with them. If they simply no longer work here, use <span className="font-medium">Archive</span> instead — it keeps their record and history.
                 </p>
               </div>
             </div>

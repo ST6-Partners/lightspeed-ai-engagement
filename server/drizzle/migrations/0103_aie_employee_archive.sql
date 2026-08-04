@@ -1,0 +1,16 @@
+-- 0103 AIE 2026-08-04 — archive an employee.
+--
+-- Adds users.archived_at. Archiving is the safe alternative to the hard Remove
+-- button: the person leaves the working directory and every headcount, but their
+-- reviews, coaching plans, PIPs and survey responses stay intact and readable.
+--
+-- Deliberately separate from is_active. is_active governs whether someone can
+-- sign in, and an inactive person is still a current employee (a seat awaiting
+-- setup, a contractor between engagements). Archived means "no longer works
+-- here". Archiving also clears is_active, so every existing surface that already
+-- filters on is_active — org tree, engagement eligibility, assignment pickers —
+-- excludes archived people with no further change.
+--
+-- Idempotent; nothing is backfilled. Existing inactive people stay current
+-- employees until an admin archives them explicitly.
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "archived_at" timestamp with time zone;

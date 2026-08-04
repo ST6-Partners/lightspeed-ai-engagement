@@ -68,6 +68,10 @@ export const users = pgTable('users', {
   isBeta: boolean('is_beta').notNull().default(false),
   isHrAccess: boolean('is_hr_access').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true),
+  // Archived = a past employee. Distinct from isActive (which governs sign-in):
+  // archiving hides someone from the working directory and every headcount while
+  // preserving their reviews, coaching plans and survey history. AIE 2026-08-04.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   timezone: varchar('timezone', { length: 100 }),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
