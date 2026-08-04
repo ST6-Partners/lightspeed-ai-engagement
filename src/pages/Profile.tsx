@@ -2,7 +2,7 @@
 // Shows exactly the data the engagement survey reads for attribution. Personal
 // fields + start date are editable; org-structure fields are read-only (managed by
 // your admin via the employee upload) so analytics stay trustworthy.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Lock } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
@@ -49,6 +49,26 @@ export default function Profile() {
   // rather than hidden so people can check what the company holds about them.
   const { data: me } = trpc.auth.me.useQuery();
   const canEdit = me?.accessLevel === 'hr' || me?.accessLevel === 'sysadmin';
+
+  // Profile picture is the one thing on this page everyone owns (2026-08-03).
+  // It used to live on Settings > Access, which now sits behind the Admin
+  // screen gate — so an ordinary employee had no way to reach it at all.
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photoErr, setPhotoErr] = useState<string | null>(null);
+  const savePhoto = trpc.auth.updateProfile.useMutation({
+    onSuccess: () => { utils.profile.get.invalidate(); utils.auth.me.invalidate(); },
+    onError: (e) => setPhotoErr(e.message),
+  });
+  const onPickPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoErr(null);
+    if (!file.type.startsWith('image/')) { setPhotoErr('Please choose an image file.'); return; }
+    if (file.size > 1_500_000) { setPhotoErr('Please choose an image under 1.5 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => savePhoto.mutate({ avatarUrl: String(reader.result) });
+    reader.readAsDataURL(file);
+  };
   const save = trpc.profile.updateSelf.useMutation({
     onSuccess: () => { utils.profile.get.invalidate(); utils.auth.me.invalidate(); setSaved(true); },
   });
@@ -103,12 +123,29 @@ export default function Profile() {
   return (
     <div className="max-w-3xl">
       <div className="flex items-center gap-4 mb-6">
-        {p.avatarUrl
-          ? <img src={p.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover" />
-          : <div className="w-14 h-14 rounded-full bg-ls-active text-white flex items-center justify-center text-lg font-bold">{p.name?.charAt(0) || '?'}</div>}
+        <button
+          type="button"
+          onClick={() => photoInput.current?.click()}
+          disabled={savePhoto.isPending}
+          title="Change your photo"
+          className="relative group w-14 h-14 rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-ls-blue disabled:opacity-60"
+        >
+          {p.avatarUrl
+            ? <img src={p.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover" />
+            : <div className="w-14 h-14 rounded-full bg-ls-active text-white flex items-center justify-center text-lg font-bold">{p.name?.charAt(0) || '?'}</div>}
+          <span className="absolute inset-0 bg-black/45 text-white text-[10px] font-medium flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
+            {savePhoto.isPending ? 'Saving' : 'Change'}
+          </span>
+        </button>
+        <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
         <div>
           <h1 className="text-2xl font-bold text-ls-blue-deep">{p.name || 'Your profile'}</h1>
           <p className="text-sm text-ls-ink-3">{p.email}</p>
+          <button type="button" onClick={() => photoInput.current?.click()}
+            className="text-xs text-ls-blue-deep hover:underline mt-0.5">
+            {p.avatarUrl ? 'Change photo' : 'Add a photo'}
+          </button>
+          {photoErr && <p className="text-xs text-ls-risk mt-1">{photoErr}</p>}
         </div>
       </div>
 
