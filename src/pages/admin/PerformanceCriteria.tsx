@@ -43,7 +43,8 @@ export default function PerformanceCriteria() {
     <div className="max-w-3xl">
       <div className="mb-3">
         <h2 className="text-lg font-bold text-gray-900">Performance Criteria</h2>
-        <div className="my-2"><ImportButton label="Import criteria" hint="CSV: name, definition"
+        <div className="my-2"><ImportButton label="Import criteria" hint="CSV, Excel or PDF: name, definition"
+          columns={['name', 'definition']}
           onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? '', definition: r.definition ?? r.description })) })} /></div>
         <p className="text-sm text-gray-500">The performance framework scored in employee reviews (Engagement &rarr; Reviews, Performance tab). The companion axis to Company Values. Deactivate to retire a criterion without losing history.</p>
       </div>

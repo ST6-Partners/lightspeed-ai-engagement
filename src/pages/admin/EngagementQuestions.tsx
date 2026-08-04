@@ -104,7 +104,8 @@ export default function EngagementQuestions() {
         <ListChecks className="text-blue-600" size={22} />
         <div>
           <h1 className="text-xl font-bold text-gray-900">Engagement Questions</h1>
-          <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, driver, section, sectionTitle"
+          <div className="my-2"><ImportButton label="Import questions" hint="CSV, Excel or PDF: text, driver, section, sectionTitle"
+            columns={['text', 'driver', 'section', 'sectiontitle']}
             onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ text: r.text ?? r.question ?? '', driver: r.driver, section: r.section, sectionTitle: r.sectiontitle })) })} /></div>
           <p className="text-sm text-gray-500">Build named survey versions (e.g. one for Marketing, one for Sales). Check the questions a version includes, then Save — that version’s Take Survey tab updates to match.</p>
         </div>

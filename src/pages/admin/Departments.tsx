@@ -116,7 +116,8 @@ export default function Departments() {
             Each person is on one team at a time. Expand a department to see and edit its members.
           </p>
         </div>
-        <ImportButton label="Import departments" hint="CSV columns: name, description"
+        <ImportButton label="Import departments" hint="CSV, Excel or PDF columns: name, description"
+          columns={['name', 'description']}
           onImport={async (rows) => importDepts.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? r.department ?? '', description: r.description })) })} />
       </div>
 

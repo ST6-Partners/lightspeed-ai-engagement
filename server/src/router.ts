@@ -16,6 +16,7 @@ import { feedbackApproveRouter } from './routers/feedbackApprove.js';
 import { promptsRouter } from './routers/prompts.js';
 import { systemRouter } from './routers/system.js';
 import { emailTestRouter } from './routers/emailTest.js';
+import { importParseRouter } from './routers/importParse.js';
 import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
@@ -68,6 +69,7 @@ export const appRouter = router({
   prompts: promptsRouter,
   system: systemRouter,
   emailTest: emailTestRouter,
+  importParse: importParseRouter,
   releases: releasesRouter,
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,

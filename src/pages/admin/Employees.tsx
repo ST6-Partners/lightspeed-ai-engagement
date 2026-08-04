@@ -148,7 +148,8 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
             ? 'Who works here and who they report to. View only.'
             : 'The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and access level here. Title and Department come from the Core Data lookups.'}</p>
         </div>
-        {!readOnly && <ImportButton label="Import employees" hint="CSV: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
+        {!readOnly && <ImportButton label="Import employees" hint="CSV, Excel or PDF: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
+          columns={['email', 'name', 'accesslevel', 'title', 'department', 'manager', 'team', 'location', 'businessunit', 'startdate']}
           onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, accessLevel: r.accesslevel ?? r['access level'] ?? r.role, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />}
       </div>
 

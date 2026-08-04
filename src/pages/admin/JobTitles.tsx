@@ -42,7 +42,8 @@ export default function JobTitles() {
             employee record, not here. Separate from a user’s permission role. Deactivate to retire.
           </p>
         </div>
-        <ImportButton label="Import titles" hint="CSV columns: title, level"
+        <ImportButton label="Import titles" hint="CSV, Excel or PDF columns: title, level"
+          columns={['title', 'level']}
           onImport={async (rows) => importTitles.mutateAsync({ rows: rows.map((r) => ({ title: r.title ?? r.name ?? '', level: r.level })) })} />
       </div>
 

@@ -50,7 +50,8 @@ export default function CompanyValues() {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Company Values</h2>
-          <div className="my-2"><ImportButton label="Import values" hint="CSV: name, pillar, category, description"
+          <div className="my-2"><ImportButton label="Import values" hint="CSV, Excel or PDF: name, pillar, category, description"
+            columns={['name', 'pillar', 'category', 'description']}
             onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ name: r.name ?? '', pillar: r.pillar, category: r.category, description: r.description })) })} /></div>
           <p className="text-sm text-gray-500">The values framework scored in employee performance evaluations (Engagement → Reviews). Grouped by pillar. Deactivate to retire without losing history.</p>
         </div>

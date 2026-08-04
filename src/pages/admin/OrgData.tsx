@@ -83,7 +83,8 @@ function PrioritiesAdmin() {
           <button className={btnCls} disabled={!userId || create.isLoading} onClick={add}>+ Add</button>
         </div>
         <div className="mt-3 border-t pt-3">
-          <ImportButton label="Import priorities" hint="CSV columns: email, label"
+          <ImportButton label="Import priorities" hint="CSV, Excel or PDF columns: email, label"
+            columns={['email', 'label']}
             onImport={async (r) => impPri.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', label: x.label ?? x.priority ?? '' })) })} />
         </div>
       </div>
@@ -125,9 +126,11 @@ function EngagementAdmin() {
             onClick={() => userId && upsert.mutate({ userId, asOf, score: Number(score) })}>+ Save</button>
         </div>
         <div className="mt-3 border-t pt-3 flex flex-wrap gap-4">
-          <ImportButton label="Import snapshots" hint="CSV columns: email, asOf, score"
+          <ImportButton label="Import snapshots" hint="CSV, Excel or PDF columns: email, asOf, score"
+            columns={['email', 'asof', 'score']}
             onImport={async (r) => impEng.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', asOf: x.asof, score: x.score })) })} />
-          <ImportButton label="Import historical results" hint="CSV: period, periodDate, scope, department, dimension, metricKey, mean, favorablePct, responseCount"
+          <ImportButton label="Import historical results" hint="CSV, Excel or PDF: period, periodDate, scope, department, dimension, metricKey, mean, favorablePct, responseCount"
+            columns={['period', 'perioddate', 'scope', 'department', 'dimension', 'metrickey', 'mean', 'favorablepct', 'responsecount']}
             onImport={async (r) => { const res = await impHist.mutateAsync({ rows: r }); return { added: res.metricsAdded, skipped: res.skipped, errors: res.errors }; }} />
         </div>
       </div>
@@ -154,7 +157,8 @@ function NineBoxAdmin() {
         Rate people inline on the Organization screen → 9 Box tab. This is a backstop list for review/cleanup.
       </div>
       <div className={cardCls}>
-        <ImportButton label="Import 9-box ratings" hint="CSV columns: email, box (1-9), note"
+        <ImportButton label="Import 9-box ratings" hint="CSV, Excel or PDF columns: email, box (1-9), note"
+          columns={['email', 'box', 'note']}
           onImport={async (r) => impNb.mutateAsync({ rows: r.map((x) => ({ email: x.email ?? '', box: x.box, note: x.note })) })} />
       </div>
       <SimpleTable

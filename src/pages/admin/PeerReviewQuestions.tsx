@@ -36,7 +36,8 @@ export default function PeerReviewQuestions() {
     <div className="max-w-4xl">
       <div className="mb-2">
         <h2 className="text-lg font-bold text-gray-900">Peer Review Questions</h2>
-        <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, description"
+        <div className="my-2"><ImportButton label="Import questions" hint="CSV, Excel or PDF: text, description"
+          columns={['text', 'description']}
           onImport={async (imported) => imp.mutateAsync({ rows: imported.map((r) => ({ text: r.text ?? r.question ?? '', description: r.description })) })} /></div>
         <p className="text-sm text-gray-500">
           The statements employees rate about a peer on the Peer Review. Order by the
