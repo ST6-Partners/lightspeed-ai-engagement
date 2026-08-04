@@ -61,6 +61,10 @@ export const users = pgTable('users', {
   leaderBadge: varchar('leader_badge', { length: 8 }),
   role: varchar('role', { length: 20 }).notNull().default('user'),
     // 'user' | 'manager' | 'admin' | 'sysadmin'
+  // Single access level (AIE 2026-08-03). Supersedes role + leaderBadge +
+  // isHrAccess, which stay in place for one release as a rollback path and
+  // are kept in sync on write. 'sysadmin'|'elt'|'slt'|'hr'|'admin'|'manager'|'user'.
+  accessLevel: varchar('access_level', { length: 16 }).notNull().default('user'),
   isBeta: boolean('is_beta').notNull().default(false),
   isHrAccess: boolean('is_hr_access').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true),

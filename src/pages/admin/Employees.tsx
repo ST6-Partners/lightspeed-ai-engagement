@@ -3,6 +3,20 @@ import { trpc } from '../../lib/trpc';
 import { Search, Info, UserPlus, X, Trash2 } from 'lucide-react';
 import ImportButton from '../../components/ImportButton';
 
+// One field per person (AIE 2026-08-03). Supersedes the separate Role dropdown,
+// Leader badge dropdown and HR tick-box. ELT and SLT are the only two that draw
+// a badge on the org chart. What each level can actually reach is set on
+// Admin -> Sysadmin -> Access.
+const ACCESS_LEVEL_OPTIONS = [
+  { id: 'sysadmin', label: 'Sysadmin' },
+  { id: 'elt', label: 'ELT' },
+  { id: 'slt', label: 'SLT' },
+  { id: 'hr', label: 'HR' },
+  { id: 'admin', label: 'Admin' },
+  { id: 'manager', label: 'Manager' },
+  { id: 'user', label: 'User' },
+];
+
 const ROLE_OPTIONS = ['user', 'manager', 'admin', 'sysadmin'] as const;
 const ROLE_COLORS: Record<string, string> = {
   sysadmin: 'bg-purple-100 text-purple-800',
@@ -27,7 +41,7 @@ export default function Employees() {
   const set = (id: string, patch: Record<string, unknown>) => updateMutation.mutate({ id, ...patch } as any);
 
   // ── Add Employee (admin create) ──────────────────────────────
-  const EMPTY = { name: '', email: '', role: 'user', jobTitleId: '', departmentId: '', managerId: '', leaderBadge: '', isActive: true, tempPassword: '' };
+  const EMPTY = { name: '', email: '', accessLevel: 'user', jobTitleId: '', departmentId: '', managerId: '', isActive: true, tempPassword: '' };
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [addError, setAddError] = useState<string | null>(null);
@@ -42,11 +56,10 @@ export default function Employees() {
     createMutation.mutate({
       email: form.email.trim(),
       name: form.name.trim() || undefined,
-      role: form.role as any,
+      accessLevel: form.accessLevel as any,
       jobTitleId: form.jobTitleId || null,
       departmentId: form.departmentId || null,
       managerId: form.managerId || null,
-      leaderBadge: (form.leaderBadge || null) as any,
       isActive: form.isActive,
       tempPassword: form.tempPassword.trim() || undefined,
     } as any);
@@ -156,10 +169,10 @@ export default function Employees() {
               <input type="email" value={form.email} onChange={(e) => f({ email: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500" placeholder="name@company.com" />
             </label>
-            <label className="text-xs text-gray-600">Role
-              <select value={form.role} onChange={(e) => f({ role: e.target.value })}
+            <label className="text-xs text-gray-600">Access level
+              <select value={form.accessLevel} onChange={(e) => f({ accessLevel: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                {ACCESS_LEVEL_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
               </select>
             </label>
             <label className="text-xs text-gray-600">Title
@@ -181,14 +194,6 @@ export default function Employees() {
                 className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
                 <option value="">— (top of tree)</option>
                 {employeesByFirstName.map((m: any) => <option key={m.id} value={m.id}>{nameById.get(m.id)}</option>)}
-              </select>
-            </label>
-            <label className="text-xs text-gray-600">Leader badge
-              <select value={form.leaderBadge} onChange={(e) => f({ leaderBadge: e.target.value })}
-                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="">—</option>
-                <option value="ELT">ELT</option>
-                <option value="SLT">SLT</option>
               </select>
             </label>
             <label className="text-xs text-gray-600">Temp password <span className="text-gray-400">(optional)</span>

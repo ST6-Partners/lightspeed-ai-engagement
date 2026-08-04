@@ -20,6 +20,7 @@ import { departments } from '../db/schema/departments.js';
 import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
+import { legacyFieldsFor, type AccessLevel } from '../services/access.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
 import { sendEmail } from '../services/email.js';
 import { env } from '../env.js';
@@ -30,7 +31,7 @@ export const authRouter = router({
     if (!ctx.user) return null;
     const dbUser = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.user.id),
-      columns: { id: true, name: true, email: true, role: true, isBeta: true, isHrAccess: true, leaderBadge: true, timezone: true, avatarUrl: true },
+      columns: { id: true, name: true, email: true, role: true, accessLevel: true, isBeta: true, isHrAccess: true, leaderBadge: true, timezone: true, avatarUrl: true },
     });
     return dbUser ?? null;
   }),
@@ -97,6 +98,18 @@ export const authRouter = router({
   updateProfile: protectedProcedure
     .input(z.object({ name: z.string().max(255).optional(), avatarUrl: z.string().nullable().optional() }))
     .mutation(async ({ ctx, input }) => {
+      // Display name and photo are part of the HR-owned person record as of
+      // 2026-08-03. Same rule as profile.updateSelf — HR or Sysadmin only.
+      const me = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.user.id), columns: { accessLevel: true },
+      });
+      const lvl = me?.accessLevel ?? 'user';
+      if (lvl !== 'hr' && lvl !== 'sysadmin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Your name and photo are maintained by HR. Contact them to change these.',
+        });
+      }
       const updates: Record<string, unknown> = {};
       if (input.name !== undefined) updates.name = input.name.trim() || null;
       if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl || null;
@@ -209,7 +222,7 @@ export const authRouter = router({
       const [rows, mgrRows] = await Promise.all([
         ctx.db.query.users.findMany({
           columns: {
-            id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true,
+            id: true, sub: true, externalId: true, name: true, email: true, title: true, role: true, accessLevel: true,
             jobTitleId: true, departmentId: true, managerId: true, leaderBadge: true,
             location: true, businessUnit: true, eltLeader: true, hireYear: true, hireMonth: true, hireDay: true,
             connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true,
@@ -250,6 +263,7 @@ export const authRouter = router({
       hireMonth: z.number().int().nullable().optional(),
       hireDay: z.number().int().nullable().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
+      accessLevel: z.enum(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']).optional(),
       isActive: z.boolean().optional(),
       isBeta: z.boolean().optional(),
     }))
@@ -262,6 +276,11 @@ export const authRouter = router({
       }
       const { id, managerIds, primaryManagerId, ...rest } = input;
       const updates: Record<string, unknown> = { ...rest };
+      // Setting the access level rewrites the legacy trio so the two models
+      // cannot drift while both are live.
+      if (typeof updates.accessLevel === 'string') {
+        Object.assign(updates, legacyFieldsFor(updates.accessLevel as AccessLevel));
+      }
       // Manager set: unify legacy single managerId with the new managerIds[] +
       // primaryManagerId. users.managerId stays the PRIMARY (drives the tree).
       let managerSet: string[] | undefined;
@@ -495,6 +514,7 @@ export const authRouter = router({
       email: z.string().email(),
       name: z.string().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
+      accessLevel: z.enum(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']).optional(),
       jobTitleId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
       managerId: z.string().uuid().nullable().optional(),
@@ -510,7 +530,8 @@ export const authRouter = router({
         sub: `local:${email}`,
         email,
         name: input.name?.trim() || null,
-        role: input.role ?? 'user',
+        ...legacyFieldsFor((input.accessLevel ?? 'user') as AccessLevel),
+        accessLevel: input.accessLevel ?? 'user',
         jobTitleId: input.jobTitleId ?? null,
         departmentId: input.departmentId ?? null,
         managerId: input.managerId ?? null,

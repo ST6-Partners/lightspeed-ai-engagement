@@ -34,6 +34,7 @@ export { sampleEntities } from './sampleEntity.js';
 
 export { departments } from './departments.js';
 export { passwordResetTokens } from './passwordResetTokens.js';
+export { accessGrants } from './accessControl.js';
 export { jobTitles } from './jobTitles.js';
 export {
   pips, pipConcerns, pipGoals, pipSupports, pipCheckins, pipSignatures,

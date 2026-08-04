@@ -47,6 +47,7 @@ import { checkinSettingsRouter } from './routers/checkinSettings.js';
 import { cadenceRouter } from './routers/cadence.js';
 import { oneOnOneRouter } from './routers/oneOnOne.js';
 import { accessRouter } from './routers/access.js';
+import { accessControlRouter } from './routers/accessControl.js';
 import { metricsRouter } from './routers/metrics.js';
 import { managerEffectivenessRouter } from './routers/managerEffectiveness.js';
 import { actionsRouter } from './routers/actions.js';
@@ -79,6 +80,7 @@ export const appRouter = router({
   weeklyPlan: weeklyPlanRouter,
   oneOnOne: oneOnOneRouter,
   access: accessRouter,
+  accessControl: accessControlRouter,
   metrics: metricsRouter,
   managerEffectiveness: managerEffectivenessRouter,
   actions: actionsRouter,

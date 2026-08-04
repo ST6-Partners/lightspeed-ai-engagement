@@ -7,6 +7,8 @@
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import AccessGrid from './admin/AccessGrid';
+import Employees from './admin/Employees';
 import {
   ChangeLogPanel,
   FeedbackPanel,
@@ -97,6 +99,13 @@ const CONFIG_TABS = [
   { id: 'cadence', label: 'Cadence' },
   { id: 'surveyperiods', label: 'Survey Periods' },
   { id: 'archived', label: 'Archived Items' },
+];
+
+// Sysadmin-only. Employees moved here from Core Data, and the Access grid is new
+// (AIE 2026-08-03) — both hold company-wide people and permission controls.
+const SYSADMIN_TABS = [
+  { id: 'employees', label: 'Employees' },
+  { id: 'accessgrid', label: 'Access' },
 ];
 
 const SYSTEM_TABS = [
@@ -275,11 +284,31 @@ function CadencePanel() {
 export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState('gettingstarted');
 
-  // In a real app, these come from auth context (DD-012 four-tier role model)
-  // For the template, show all tiers — adopter configures per their role model
-  const showAnalytics = true;
-  const showConfig = true;
-  const showSystem = true;
+  // Gated on the viewer's access level (AIE 2026-08-03). These rows were
+  // hardcoded to `true` by the template, which meant any signed-in employee
+  // who reached this URL saw Database, Backups, Prompts and Chat Logs.
+  const { data: me } = trpc.auth.me.useQuery();
+  const level = me?.accessLevel ?? 'user';
+  const isSysadmin = level === 'sysadmin';
+  const isAdminUp = isSysadmin || level === 'admin' || level === 'hr' || level === 'elt';
+  const showAnalytics = isAdminUp;
+  const showConfig = isAdminUp;
+  const showSystem = isSysadmin;
+
+  // Someone below admin has no business on this screen at all.
+  if (me && !isAdminUp) {
+    return (
+      <div style={s.container}>
+        <div style={s.header}>
+          <Settings size={22} color="#374151" />
+          <h2 style={s.title}>Settings</h2>
+        </div>
+        <p style={{ fontSize: 13, color: '#4F6068', padding: '12px 0' }}>
+          You do not have access to this area.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={s.container}>
@@ -299,6 +328,9 @@ export default function AdminSettings() {
       )}
       {showSystem && (
         <TabRow label="System" tabs={SYSTEM_TABS} activeSection={activeSection} onSelect={setActiveSection} />
+      )}
+      {isSysadmin && (
+        <TabRow label="Sysadmin" tabs={SYSADMIN_TABS} activeSection={activeSection} onSelect={setActiveSection} />
       )}
 
       {/* Panel content */}
@@ -323,6 +355,8 @@ export default function AdminSettings() {
         {activeSection === 'sync' && showSystem && <SnapshotSync />}
         {activeSection === 'database' && showSystem && <DatabaseViews />}
         {activeSection === 'emailtest' && showSystem && <EmailTestPanel />}
+        {activeSection === 'employees' && isSysadmin && <Employees />}
+        {activeSection === 'accessgrid' && isSysadmin && <AccessGrid />}
       </div>
     </div>
   );

@@ -11,7 +11,9 @@
 // ============================================================
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
+import { type AccessLevel } from '../services/access.js';
 import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
@@ -91,16 +93,22 @@ export const profileRouter = router({
 
   // Update ONLY the user's own editable fields. Any org/access field is ignored
   // even if sent — org data comes from the admin upload.
+  // Profile data is HR-owned as of 2026-08-03 — an employee can no longer edit
+  // their own name, photo, employee record or date of birth. Three exceptions,
+  // all deliberate:
+  //   - timezone: set automatically by the browser so clocks are right when
+  //     someone travels. Not really profile data.
+  //   - gender / ethnicity: self-identified. Having HR assign these on
+  //     someone's behalf is the wrong default, so the employee keeps them.
+  // Everything else needs HR or Sysadmin, who edit people via auth.updateUser.
   updateSelf: protectedProcedure
     .input(z.object({
       name: z.string().max(255).optional(),
       avatarUrl: z.string().max(2000).nullable().optional(),
       timezone: z.string().max(100).nullable().optional(),
-      // Start date: YEAR required when setting a start date; month/day optional.
       hireYear: z.number().int().min(1900).max(2100).nullable().optional(),
       hireMonth: z.number().int().min(1).max(12).nullable().optional(),
       hireDay: z.number().int().min(1).max(31).nullable().optional(),
-      // Self-reported demographics (optional).
       dobYear: z.number().int().min(1900).max(2100).nullable().optional(),
       dobMonth: z.number().int().min(1).max(12).nullable().optional(),
       dobDay: z.number().int().min(1).max(31).nullable().optional(),
@@ -108,24 +116,35 @@ export const profileRouter = router({
       ethnicity: z.string().max(80).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const updates: Record<string, unknown> = {};
-      if (input.name !== undefined) updates.name = input.name.trim() || null;
-      if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl || null;
-      if (input.timezone !== undefined) updates.timezone = input.timezone || null;
-      if (input.hireYear !== undefined) updates.hireYear = input.hireYear;
-      if (input.hireMonth !== undefined) updates.hireMonth = input.hireMonth;
-      if (input.hireDay !== undefined) updates.hireDay = input.hireDay;
-      if (input.dobYear !== undefined) updates.dobYear = input.dobYear;
-      if (input.dobMonth !== undefined) updates.dobMonth = input.dobMonth;
-      if (input.dobDay !== undefined) updates.dobDay = input.dobDay;
-      if (input.gender !== undefined) updates.gender = input.gender || null;
-      if (input.ethnicity !== undefined) updates.ethnicity = input.ethnicity || null;
+      const SELF_EDITABLE = new Set(['timezone', 'gender', 'ethnicity']);
+      const attempted = Object.keys(input).filter((k) => input[k as keyof typeof input] !== undefined);
+      const restricted = attempted.filter((k) => !SELF_EDITABLE.has(k));
 
-      // Guard: month/day can't be set without a year (year is the mandatory part).
-      const y = input.hireYear !== undefined ? input.hireYear : undefined;
-      if ((input.hireMonth || input.hireDay) && y === null) {
-        updates.hireMonth = null; updates.hireDay = null;
+      if (restricted.length) {
+        const me = await ctx.db.query.users.findFirst({
+          where: eq(users.id, ctx.user.id),
+          columns: { accessLevel: true },
+        });
+        const level = (me?.accessLevel ?? 'user') as AccessLevel;
+        if (level !== 'hr' && level !== 'sysadmin') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Your profile details are maintained by HR. Contact them to change these.',
+          });
+        }
       }
+
+      const updates: Record<string, unknown> = {};
+      for (const k of attempted) updates[k] = input[k as keyof typeof input];
+
+      // Month/day can't be set without a year — the year is the mandatory part.
+      if (updates.hireMonth !== undefined || updates.hireDay !== undefined) {
+        if (input.hireYear === null) { updates.hireMonth = null; updates.hireDay = null; }
+      }
+      if (updates.dobMonth !== undefined || updates.dobDay !== undefined) {
+        if (input.dobYear === null) { updates.dobMonth = null; updates.dobDay = null; }
+      }
+
       if (Object.keys(updates).length === 0) return { success: true };
       await ctx.db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, ctx.user.id));
       return { success: true };

@@ -20,12 +20,14 @@ import { trpc } from '../lib/trpc';
 
 type RoleTier = 'user' | 'manager' | 'admin' | 'sysadmin';
 type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier; children?: { path: string; label: string }[] };
-type NavGroup = { label: string | null; items: NavItem[] };
+type Area = 'planning' | 'engagement' | 'insights' | 'documents' | 'assessments';
+type NavGroup = { label: string | null; items: NavItem[]; area?: Area };
 
 // Information architecture per DD-002
 const navGroups: NavGroup[] = [
   {
     label: 'Planning',
+    area: 'planning',
     items: [
       { path: '/organization', label: 'Organization', icon: Users },
       { path: '/okrs', label: 'OKRs', icon: Target },
@@ -35,6 +37,7 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Engagement',
+    area: 'engagement',
     // Order mirrors the Documents → Overview chart's Engagement row.
     items: [
       { path: '/check-ins', label: 'Pulses', icon: MessageCircle },
@@ -53,10 +56,10 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Documents',
+    area: 'documents',
     items: [
       { path: '/documents/overview', label: 'Overview', icon: FileText },
       { path: '/core-data', label: 'Core Data', icon: Database, children: [
-        { path: '/core-data/employees', label: 'Employees' },
         { path: '/core-data/job-titles', label: 'Job Titles' },
         { path: '/core-data/departments', label: 'Departments' },
         { path: '/core-data/survey-questions', label: 'Survey Questions' },
@@ -67,12 +70,12 @@ const navGroups: NavGroup[] = [
         { path: '/core-data/performance-criteria', label: 'Performance Criteria' },
         { path: '/core-data/checkin-questions', label: 'Check-in Questions' },
         { path: '/core-data/engagement-questions', label: 'Engagement Questions' },
-        { path: '/core-data/assessments', label: 'Assessments' },
       ] },
     ],
   },
   {
     label: 'Insights',
+    area: 'insights',
     items: [
       { path: '/insights', label: 'Insights Dashboard', icon: BarChart3, minRole: 'manager', children: [
         { path: '/insights?tab=brief', label: 'Manager Brief' },
@@ -133,7 +136,20 @@ export default function Layout() {
 
   const ROLE_ORDER: Record<string, number> = { user: 1, manager: 2, admin: 3, sysadmin: 4 };
   const meetsRole = (min: RoleTier) => (ROLE_ORDER[user?.role ?? 'user'] ?? 0) >= (ROLE_ORDER[min] ?? 0);
+
+  // Which areas this person may reach, from the Access grid (AIE 2026-08-03).
+  // While it loads we show nothing rather than everything — briefly bare beats
+  // briefly flashing a group the viewer is not allowed to see.
+  const { data: areas } = trpc.accessControl.myAreas.useQuery(undefined, { enabled: !!user });
+  const areaVisible = (a?: Area) => (a ? !!areas && areas[a] !== 'none' : true);
+
+  // The Admin entry is for admin and up; the grid does not govern it.
+  const showSystemGroup = ['sysadmin', 'admin', 'hr', 'elt'].includes(
+    (user as { accessLevel?: string } | undefined)?.accessLevel ?? 'user',
+  );
+
   const visibleGroups = navGroups
+    .filter((g) => (g.label === 'System' ? showSystemGroup : areaVisible(g.area)))
     .map((g) => ({ ...g, items: g.items.filter((it) => !it.minRole || meetsRole(it.minRole)) }))
     .filter((g) => g.items.length > 0);
 

@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import AreaGuard from './components/AreaGuard';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Entities from './pages/Entities';
@@ -36,28 +37,33 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         {/* Planning */}
-        <Route path="/organization" element={<Organization />} />
-        <Route path="/okrs" element={<Okrs />} />
-        <Route path="/okr-analytics" element={<OkrAnalytics />} />
-        <Route path="/weekly-plan" element={<WeeklyPlan />} />
+        <Route element={<AreaGuard area="planning" />}>
+          <Route path="/organization" element={<Organization />} />
+          <Route path="/okrs" element={<Okrs />} />
+          <Route path="/okr-analytics" element={<OkrAnalytics />} />
+          <Route path="/weekly-plan" element={<WeeklyPlan />} />
+        </Route>
         {/* Engagement */}
-        <Route path="/check-ins" element={<CheckIns />} />
-        <Route path="/reviews" element={<Reviews />} />
-        <Route path="/development" element={<Development />} />
-        <Route path="/coaching-plans" element={<CoachingPlans />} />
-        <Route path="/coaching-plans/:id" element={<CoachingPlanDetail />} />
-        <Route path="/pips" element={<Pips />} />
-        <Route path="/pips/:id" element={<PipDetail />} />
-        <Route path="/exit-survey" element={<ExitSurvey />} />
-        <Route path="/engagement-survey" element={<EngagementSurvey />} />
+        <Route element={<AreaGuard area="engagement" />}>
+          <Route path="/check-ins" element={<CheckIns />} />
+          <Route path="/reviews" element={<Reviews />} />
+          <Route path="/development" element={<Development />} />
+          <Route path="/coaching-plans" element={<CoachingPlans />} />
+          <Route path="/coaching-plans/:id" element={<CoachingPlanDetail />} />
+          <Route path="/pips" element={<Pips />} />
+          <Route path="/pips/:id" element={<PipDetail />} />
+          <Route path="/exit-survey" element={<ExitSurvey />} />
+          <Route path="/engagement-survey" element={<EngagementSurvey />} />
+        </Route>
         <Route path="/profile" element={<Profile />} />
         <Route path="/manager-survey" element={<Navigate to="/reviews?tab=manager" replace />} />
         <Route path="/peer-review" element={<Navigate to="/reviews?tab=peer" replace />} />
         {/* Core Data */}
-        <Route path="/core-data">
+        <Route path="/documents/overview" element={<AreaGuard area="documents"><Overview /></AreaGuard>} />
+        <Route path="/core-data" element={<AreaGuard area="documents" />}>
           <Route index element={<CoreData />} />
           <Route element={<CoreDataSubLayout />}>
-            <Route path="employees" element={<Employees />} />
+            <Route path="employees" element={<Navigate to="/admin/settings" replace />} />
             <Route path="job-titles" element={<JobTitles />} />
             <Route path="departments" element={<Departments />} />
             <Route path="survey-questions" element={<ManagerSurveyQuestions />} />
@@ -68,15 +74,16 @@ export default function App() {
             <Route path="performance-criteria" element={<PerformanceCriteria />} />
             <Route path="checkin-questions" element={<CheckinQuestions />} />
             <Route path="engagement-questions" element={<EngagementQuestions />} />
-            <Route path="assessments" element={<Assessments />} />
+            <Route path="assessments" element={<AreaGuard area="assessments"><Assessments /></AreaGuard>} />
           </Route>
         </Route>
         {/* Insights (manager+) */}
-        <Route path="/insights" element={<InsightsDashboard />} />
-        <Route path="/manager-brief" element={<ManagerBrief />} />
-        <Route path="/manager-effectiveness" element={<ManagerEffectiveness />} />
+        <Route element={<AreaGuard area="insights" />}>
+          <Route path="/insights" element={<InsightsDashboard />} />
+          <Route path="/manager-brief" element={<ManagerBrief />} />
+          <Route path="/manager-effectiveness" element={<ManagerEffectiveness />} />
+        </Route>
         {/* Documents */}
-        <Route path="/documents/overview" element={<Overview />} />
         {/* System */}
         <Route path="/admin/settings" element={<AdminSettings />} />
         {/* Retained template surfaces (not in primary nav) */}
