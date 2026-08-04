@@ -715,6 +715,13 @@
       "when": 1785780494899,
       "tag": "0100_aie_access_levels_and_reach_grid",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1785780494900,
+      "tag": "0101_aie_bsf_sysadmin",
+      "breakpoints": true
     }
   ]
 }
