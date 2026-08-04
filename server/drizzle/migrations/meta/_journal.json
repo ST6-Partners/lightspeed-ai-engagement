@@ -722,6 +722,13 @@
       "when": 1785780494900,
       "tag": "0101_aie_bsf_sysadmin",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1785780494901,
+      "tag": "0102_aie_collapse_access_levels",
+      "breakpoints": true
     }
   ]
 }

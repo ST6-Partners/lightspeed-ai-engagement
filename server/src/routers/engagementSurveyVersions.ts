@@ -11,7 +11,9 @@ import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { engagementSurveyVersions, engagementSurveyVersionQuestions } from '../db/schema/engagementSurveyVersions.js';
 import { engagementSurveyQuestions } from '../db/schema/engagementSurveyQuestions.js';
-import { requireAdmin } from '../services/permissions.js';
+// Editing the instrument is survey work, not administration — ELT and HR only
+// (PM ruling 2026-08-03). requireAdmin would have included every sysadmin.
+import { requireAction } from '../services/access.js';
 import { auditChange } from '../services/audit.js';
 
 export const engagementSurveyVersionsRouter = router({
@@ -50,7 +52,7 @@ export const engagementSurveyVersionsRouter = router({
     }),
 
   create: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ name: z.string().min(1).max(120), copyFromVersionId: z.string().uuid().optional() }))
     .mutation(async ({ ctx, input }) => {
       const all = await ctx.db.query.engagementSurveyVersions.findMany();
@@ -71,7 +73,7 @@ export const engagementSurveyVersionsRouter = router({
     }),
 
   rename: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().uuid(), name: z.string().min(1).max(120) }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.update(engagementSurveyVersions)
@@ -82,7 +84,7 @@ export const engagementSurveyVersionsRouter = router({
     }),
 
   setDefault: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.update(engagementSurveyVersions).set({ isDefault: false });
@@ -93,7 +95,7 @@ export const engagementSurveyVersionsRouter = router({
     }),
 
   remove: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const all = await ctx.db.query.engagementSurveyVersions.findMany();
@@ -109,7 +111,7 @@ export const engagementSurveyVersionsRouter = router({
   // Explicit Save: replace a version's question set with the given ids (ordered
   // by their position in the bank so sections render consistently).
   setQuestions: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().uuid(), questionIds: z.array(z.string().max(64)) }))
     .mutation(async ({ ctx, input }) => {
       const version = await ctx.db.query.engagementSurveyVersions.findFirst({ where: eq(engagementSurveyVersions.id, input.id) });

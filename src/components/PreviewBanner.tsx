@@ -13,8 +13,7 @@ import { Eye } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 const LABELS: Record<string, string> = {
-  sysadmin: 'Sysadmin', elt: 'ELT', slt: 'SLT', hr: 'HR',
-  admin: 'Admin', manager: 'Manager', user: 'User',
+  sysadmin: 'Sysadmin', elt: 'ELT', hr: 'HR', manager: 'Manager', user: 'User',
 };
 
 export default function PreviewBanner() {

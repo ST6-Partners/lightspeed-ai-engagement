@@ -14,12 +14,12 @@ import { Lock, RotateCcw, Check, AlertCircle } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import PreviewSwitcher from './PreviewSwitcher';
 
+// Five levels (2026-08-03, revised from seven the same day): SLT folded into
+// ELT and Admin into Sysadmin — each pair was the same group of people.
 const LEVELS = [
   { id: 'sysadmin', label: 'Sysadmin' },
   { id: 'elt', label: 'ELT' },
-  { id: 'slt', label: 'SLT' },
   { id: 'hr', label: 'HR' },
-  { id: 'admin', label: 'Admin' },
   { id: 'manager', label: 'Manager' },
   { id: 'user', label: 'User' },
 ] as const;

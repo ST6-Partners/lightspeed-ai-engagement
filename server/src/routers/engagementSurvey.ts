@@ -14,6 +14,8 @@ import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
+import { effectiveLevelOf } from '../services/access.js';
+import { canDo } from '../services/capabilities.js';
 
 const answersSchema = z.record(z.string(), z.number().int().min(1).max(5));
 
@@ -35,12 +37,15 @@ function currentLivePeriod(db: DrizzleClient) {
   });
 }
 
-// Period management is limited to HR or ELT (admins/sysadmins, HR-access, or an
-// ELT leadership badge). Managers cannot set release/close dates.
-async function assertHrOrElt(db: DrizzleClient, userId: string) {
-  const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  const ok = !!u && (hasMinimumRole(u.role as RoleTier, 'admin') || u.isHrAccess || u.leaderBadge === 'ELT');
-  if (!ok) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only HR or ELT can manage survey periods.' });
+// Running the survey belongs to ELT and HR — and to nobody else, sysadmin
+// included (PM ruling 2026-08-03). Sysadmin administers the system; it does
+// not address the company. The old check let anyone at admin tier through,
+// which now means every sysadmin, so it is replaced by the capability table.
+async function assertHrOrElt(db: DrizzleClient, userId: string, previewLevel?: string | null) {
+  const level = await effectiveLevelOf(db, userId, previewLevel);
+  if (!level || !canDo(level, 'survey.run')) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Only ELT or HR can manage survey periods.' });
+  }
 }
 
 export const engagementSurveyRouter = router({
@@ -173,7 +178,7 @@ export const engagementSurveyRouter = router({
 
   // ── Admin (HR/ELT only): manage the survey period window ──
   adminListPeriods: protectedProcedure.query(async ({ ctx }) => {
-    await assertHrOrElt(ctx.db, ctx.user.id);
+    await assertHrOrElt(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
     // Archived surveys are managed from Engagement Surveys -> Manage surveys;
     // they should not reappear in the period admin list.
     const rows = await ctx.db.query.surveyPeriods.findMany({ orderBy: [desc(surveyPeriods.createdAt)] });
@@ -189,7 +194,7 @@ export const engagementSurveyRouter = router({
       makeCurrent: z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertHrOrElt(ctx.db, ctx.user.id);
+      await assertHrOrElt(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
       if (input.makeCurrent) {
         await ctx.db.update(surveyPeriods).set({ isCurrent: false }).where(eq(surveyPeriods.source, 'live'));
       }
@@ -215,7 +220,7 @@ export const engagementSurveyRouter = router({
       makeCurrent: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertHrOrElt(ctx.db, ctx.user.id);
+      await assertHrOrElt(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
       const updates: Record<string, unknown> = {};
       if (input.label !== undefined) updates.label = input.label;
       if (input.releaseAt !== undefined) updates.releaseAt = input.releaseAt ? new Date(input.releaseAt) : null;

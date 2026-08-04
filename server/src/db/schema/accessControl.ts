@@ -19,8 +19,12 @@
 import { pgTable, uuid, varchar, timestamp, unique } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 
-/** The seven access levels. Order is for display only — this is not a ladder. */
-export const ACCESS_LEVELS = ['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user'] as const;
+/**
+ * The five access levels (AIE 2026-08-03, revised same day from seven).
+ * SLT folded into ELT and Admin folded into Sysadmin — each pair was the same
+ * thing in practice. Order is for display only; this is not a ladder.
+ */
+export const ACCESS_LEVELS = ['sysadmin', 'elt', 'hr', 'manager', 'user'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
 /** The five gated areas — the four sidebar groups plus Assessments. */
@@ -31,8 +35,8 @@ export type AccessArea = (typeof ACCESS_AREAS)[number];
 export const REACH_VALUES = ['none', 'down_org', 'all'] as const;
 export type Reach = (typeof REACH_VALUES)[number];
 
-/** Only these two levels draw a badge on the org chart. */
-export const BADGE_LEVELS: AccessLevel[] = ['elt', 'slt'];
+/** Only ELT draws a badge on the org chart now that SLT is retired. */
+export const BADGE_LEVELS: AccessLevel[] = ['elt'];
 
 /**
  * Documents is Core Data — job titles, departments, rating scales. It holds

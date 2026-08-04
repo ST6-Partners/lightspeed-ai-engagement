@@ -4,6 +4,7 @@
 // surprise scores are promoted to columns for the HR comparison read. Status is
 // derived from response completion: draft -> part_a_done -> complete.
 import { z } from 'zod';
+import { requireAction } from '../services/access.js';
 import { desc, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -34,7 +35,10 @@ export const exitSurveyRouter = router({
       return row;
     }),
 
+  // Sending an exit survey TO someone is gated. saveResponse below is not —
+  // anyone asked to fill one in must be able to answer it (2026-08-03).
   create: protectedProcedure
+    .use(requireAction('exitSurvey.send'))
     .input(z.object({
       subjectName: z.string().min(1).max(200),
       subjectRole: z.string().max(200).optional(),

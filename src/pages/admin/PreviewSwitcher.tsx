@@ -11,9 +11,7 @@ import { trpc } from '../../lib/trpc';
 
 const LEVELS = [
   { id: 'elt', label: 'ELT' },
-  { id: 'slt', label: 'SLT' },
   { id: 'hr', label: 'HR' },
-  { id: 'admin', label: 'Admin' },
   { id: 'manager', label: 'Manager' },
   { id: 'user', label: 'User' },
 ];

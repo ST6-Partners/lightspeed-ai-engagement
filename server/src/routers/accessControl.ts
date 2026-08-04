@@ -23,6 +23,7 @@ import {
   resolveAllAreas, requireSysadminLevel, invalidateGridCache,
   realLevelOf, effectiveLevelOf,
 } from '../services/access.js';
+import { capabilityPayload } from '../services/capabilities.js';
 
 const levelEnum = z.enum(ACCESS_LEVELS);
 const areaEnum = z.enum(ACCESS_AREAS);
@@ -42,6 +43,14 @@ export const accessControlRouter = router({
   // What the current viewer can reach, per area. Drives the sidebar.
   myAreas: protectedProcedure.query(async ({ ctx }) => {
     return resolveAllAreas(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+  }),
+
+  // Pages, sub-tabs, Core Data items and actions for the current viewer.
+  // The client mirrors this to hide things; the server enforces the same
+  // table at each mutation, so the two can never disagree.
+  myCapabilities: protectedProcedure.query(async ({ ctx }) => {
+    const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+    return capabilityPayload(level ?? 'user');
   }),
 
   // ── "View as" preview ──────────────────────────────────────
@@ -147,12 +156,10 @@ export const accessControlRouter = router({
     .mutation(async ({ ctx }) => {
       const D: Record<AccessLevel, Record<AccessArea, Reach>> = {
         sysadmin: { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
-        elt:      { planning: 'all', engagement: 'all', insights: 'all', documents: 'none', assessments: 'all' },
-        slt:      { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'none', assessments: 'none' },
+        elt:      { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
         hr:       { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
-        admin:    { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'none' },
-        manager:  { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'none', assessments: 'none' },
-        user:     { planning: 'down_org', engagement: 'down_org', insights: 'none', documents: 'none', assessments: 'none' },
+        manager:  { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'none', assessments: 'down_org' },
+        user:     { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'all', assessments: 'none' },
       };
       for (const level of ACCESS_LEVELS) {
         for (const area of ACCESS_AREAS) {

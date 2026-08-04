@@ -9,7 +9,9 @@ import { eq, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { engagementSurveyQuestions } from '../db/schema/engagementSurveyQuestions.js';
-import { requireAdmin } from '../services/permissions.js';
+// Editing the instrument is survey work, not administration — ELT and HR only
+// (PM ruling 2026-08-03). requireAdmin would have included every sysadmin.
+import { requireAction } from '../services/access.js';
 import { auditChange } from '../services/audit.js';
 
 const typeEnum = z.enum(['likert5', 'text']);
@@ -31,7 +33,7 @@ export const engagementSurveyQuestionsRouter = router({
   }),
 
   import: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ rows: z.array(z.object({ text: z.string(), driver: z.string().optional(), section: z.string().optional(), sectiontitle: z.string().optional(), sectionTitle: z.string().optional() })).max(5000) }))
     .mutation(async ({ ctx, input }) => {
       let added = 0; let skipped = 0; const errors: string[] = [];
@@ -51,7 +53,7 @@ export const engagementSurveyQuestionsRouter = router({
     }),
 
   create: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({
       text: z.string().min(1).max(1000),
       driver: z.string().max(40).nullable().optional(),
@@ -86,7 +88,7 @@ export const engagementSurveyQuestionsRouter = router({
     }),
 
   update: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({
       id: z.string().max(64),
       text: z.string().min(1).max(1000).optional(),
@@ -112,7 +114,7 @@ export const engagementSurveyQuestionsRouter = router({
 
   // Convenience toggle used by the bank UI switches.
   setActive: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().max(64), isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.update(engagementSurveyQuestions)
@@ -123,7 +125,7 @@ export const engagementSurveyQuestionsRouter = router({
     }),
 
   remove: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('survey.editQuestions'))
     .input(z.object({ id: z.string().max(64) }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.engagementSurveyQuestions.findFirst({ where: eq(engagementSurveyQuestions.id, input.id) });

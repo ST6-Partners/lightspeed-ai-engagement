@@ -1,0 +1,59 @@
+// Capability assertions, checked against the PM spec agreed 2026-08-03.
+// Run: npx tsx server/src/services/capabilities.spec.ts
+import { canDo, canSeeCoreDataItem, canSeeReviewTab, canSeePage } from './capabilities.js';
+
+let fail = 0;
+const t = (name: string, got: boolean, want: boolean) => {
+  const ok = got === want;
+  if (!ok) fail++;
+  console.log(`${ok ? 'PASS  ' : 'FAIL  '}${name}${ok ? '' : `  got ${got} want ${want}`}`);
+};
+
+// Who runs the survey — ELT and HR only, sysadmin deliberately excluded.
+t('ELT runs the survey', canDo('elt', 'survey.run'), true);
+t('HR runs the survey', canDo('hr', 'survey.run'), true);
+t('Sysadmin does NOT run the survey', canDo('sysadmin', 'survey.run'), false);
+t('Sysadmin does NOT edit survey questions', canDo('sysadmin', 'survey.editQuestions'), false);
+t('Manager does not run the survey', canDo('manager', 'survey.run'), false);
+t('User does not run the survey', canDo('user', 'survey.run'), false);
+
+// A user receives; it never sends.
+t('User cannot create a PIP', canDo('user', 'pip.create'), false);
+t('User cannot create a coaching plan', canDo('user', 'coaching.create'), false);
+t('User cannot send an exit survey', canDo('user', 'exitSurvey.send'), false);
+t('User CAN fill in their own exit survey', canDo('user', 'exitSurvey.submitOwn'), true);
+t('User cannot author a regular review', canDo('user', 'review.author'), false);
+t('Manager can create a PIP', canDo('manager', 'pip.create'), true);
+t('Manager can send an exit survey', canDo('manager', 'exitSurvey.send'), true);
+
+// Pages a user gets, and the one they lose.
+t('User has no Organization', canSeePage('user', 'organization'), false);
+t('User has OKRs', canSeePage('user', 'okrs'), true);
+t('User has OKR Analytics', canSeePage('user', 'okr-analytics'), true);
+t('User has Weekly Plan', canSeePage('user', 'weekly-plan'), true);
+t('User has Pulses', canSeePage('user', 'pulses'), true);
+t('User has Reviews', canSeePage('user', 'reviews'), true);
+t('User has Core Data', canSeePage('user', 'core-data'), true);
+t('Manager keeps Organization', canSeePage('manager', 'organization'), true);
+
+// Reviews: gives upward and peer, receives the regular one.
+t('User Reviews — regular tab hidden', canSeeReviewTab('user', 'reviews'), false);
+t('User Reviews — manager tab shown', canSeeReviewTab('user', 'manager'), true);
+t('User Reviews — peer tab shown', canSeeReviewTab('user', 'peer'), true);
+t('Manager Reviews — regular tab shown', canSeeReviewTab('manager', 'reviews'), true);
+
+// Core Data: the three exclusions, and proof the rest stays.
+t('User Core Data — no survey questions', canSeeCoreDataItem('user', 'survey-questions'), false);
+t('User Core Data — no peer review questions', canSeeCoreDataItem('user', 'peer-review-questions'), false);
+t('User Core Data — no engagement questions', canSeeCoreDataItem('user', 'engagement-questions'), false);
+t('User Core Data — no assessments', canSeeCoreDataItem('user', 'assessments'), false);
+t('User Core Data — no org data', canSeeCoreDataItem('user', 'org-data'), false);
+t('User Core Data — job titles kept', canSeeCoreDataItem('user', 'job-titles'), true);
+t('User Core Data — departments kept', canSeeCoreDataItem('user', 'departments'), true);
+t('User Core Data — company values kept', canSeeCoreDataItem('user', 'values'), true);
+t('User Core Data — rating scale kept', canSeeCoreDataItem('user', 'rating-scale'), true);
+t('User Core Data — performance criteria kept', canSeeCoreDataItem('user', 'performance-criteria'), true);
+t('User Core Data — check-in questions kept', canSeeCoreDataItem('user', 'checkin-questions'), true);
+
+console.log(fail ? `\n${fail} FAILED` : `\nAll ${'assertions'} passed`);
+process.exit(fail ? 1 : 0);

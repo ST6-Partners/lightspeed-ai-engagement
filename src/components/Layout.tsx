@@ -20,7 +20,7 @@ import { trpc } from '../lib/trpc';
 import PreviewBanner from './PreviewBanner';
 
 type RoleTier = 'user' | 'manager' | 'admin' | 'sysadmin';
-type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier; children?: { path: string; label: string }[] };
+type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier; page?: string; children?: { path: string; label: string; item?: string }[] };
 type Area = 'planning' | 'engagement' | 'insights' | 'documents' | 'assessments';
 type NavGroup = { label: string | null; items: NavItem[]; area?: Area };
 
@@ -30,10 +30,10 @@ const navGroups: NavGroup[] = [
     label: 'Planning',
     area: 'planning',
     items: [
-      { path: '/organization', label: 'Organization', icon: Users },
-      { path: '/okrs', label: 'OKRs', icon: Target },
-      { path: '/okr-analytics', label: 'OKR Analytics', icon: BarChart3, minRole: 'manager' },
-      { path: '/weekly-plan', label: 'Weekly Plan', icon: CalendarCheck },
+      { page: 'organization', path: '/organization', label: 'Organization', icon: Users },
+      { page: 'okrs', path: '/okrs', label: 'OKRs', icon: Target },
+      { page: 'okr-analytics', path: '/okr-analytics', label: 'OKR Analytics', icon: BarChart3, minRole: 'manager' },
+      { page: 'weekly-plan', path: '/weekly-plan', label: 'Weekly Plan', icon: CalendarCheck },
     ],
   },
   {
@@ -41,18 +41,18 @@ const navGroups: NavGroup[] = [
     area: 'engagement',
     // Order mirrors the Documents → Overview chart's Engagement row.
     items: [
-      { path: '/check-ins', label: 'Pulses', icon: MessageCircle },
-      { path: '/reviews', label: 'Reviews', icon: Star, children: [
-        { path: '/reviews?tab=reviews', label: 'Reviews' },
-        { path: '/reviews?tab=manager', label: 'Manager Review' },
-        { path: '/reviews?tab=peer', label: 'Peer Review' },
+      { page: 'pulses', path: '/check-ins', label: 'Pulses', icon: MessageCircle },
+      { page: 'reviews', path: '/reviews', label: 'Reviews', icon: Star, children: [
+        { path: '/reviews?tab=reviews', label: 'Reviews', item: 'tab:reviews' },
+        { path: '/reviews?tab=manager', label: 'Manager Review', item: 'tab:manager' },
+        { path: '/reviews?tab=peer', label: 'Peer Review', item: 'tab:peer' },
       ] },
-      { path: '/development', label: 'Development', icon: HeartHandshake, children: [
+      { page: 'development', path: '/development', label: 'Development', icon: HeartHandshake, children: [
         { path: '/development?tab=coaching', label: 'Coaching Plans' },
         { path: '/development?tab=pip', label: 'PIP' },
         { path: '/development?tab=exit', label: 'Exit Survey' },
       ] },
-      { path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
+      { page: 'engagement-survey', path: '/engagement-survey', label: 'Engagement Survey', icon: ClipboardCheck },
     ],
   },
   {
@@ -60,17 +60,17 @@ const navGroups: NavGroup[] = [
     area: 'documents',
     items: [
       { path: '/documents/overview', label: 'Overview', icon: FileText },
-      { path: '/core-data', label: 'Core Data', icon: Database, children: [
-        { path: '/core-data/job-titles', label: 'Job Titles' },
-        { path: '/core-data/departments', label: 'Departments' },
-        { path: '/core-data/survey-questions', label: 'Survey Questions' },
-        { path: '/core-data/peer-review-questions', label: 'Peer Review Questions' },
-        { path: '/core-data/rating-scale', label: 'Rating Scale' },
-        { path: '/core-data/org-data', label: 'Org Data' },
-        { path: '/core-data/values', label: 'Company Values' },
-        { path: '/core-data/performance-criteria', label: 'Performance Criteria' },
-        { path: '/core-data/checkin-questions', label: 'Check-in Questions' },
-        { path: '/core-data/engagement-questions', label: 'Engagement Questions' },
+      { page: 'core-data', path: '/core-data', label: 'Core Data', icon: Database, children: [
+        { path: '/core-data/job-titles', label: 'Job Titles', item: 'job-titles' },
+        { path: '/core-data/departments', label: 'Departments', item: 'departments' },
+        { path: '/core-data/survey-questions', label: 'Survey Questions', item: 'survey-questions' },
+        { path: '/core-data/peer-review-questions', label: 'Peer Review Questions', item: 'peer-review-questions' },
+        { path: '/core-data/rating-scale', label: 'Rating Scale', item: 'rating-scale' },
+        { path: '/core-data/org-data', label: 'Org Data', item: 'org-data' },
+        { path: '/core-data/values', label: 'Company Values', item: 'values' },
+        { path: '/core-data/performance-criteria', label: 'Performance Criteria', item: 'performance-criteria' },
+        { path: '/core-data/checkin-questions', label: 'Check-in Questions', item: 'checkin-questions' },
+        { path: '/core-data/engagement-questions', label: 'Engagement Questions', item: 'engagement-questions' },
       ] },
     ],
   },
@@ -78,7 +78,7 @@ const navGroups: NavGroup[] = [
     label: 'Insights',
     area: 'insights',
     items: [
-      { path: '/insights', label: 'Insights Dashboard', icon: BarChart3, minRole: 'manager', children: [
+      { page: 'insights', path: '/insights', label: 'Insights Dashboard', icon: BarChart3, minRole: 'manager', children: [
         { path: '/insights?tab=brief', label: 'Manager Brief' },
         { path: '/insights?tab=effectiveness', label: 'Manager Effectiveness' },
       ] },
@@ -144,6 +144,19 @@ export default function Layout() {
   const { data: areas } = trpc.accessControl.myAreas.useQuery(undefined, { enabled: !!user });
   const areaVisible = (a?: Area) => (a ? !!areas && areas[a] !== 'none' : true);
 
+  // Page-, tab- and item-level rules that the area grid cannot express — a user
+  // sees most of Core Data but not the instruments, and two of the three tabs
+  // on Reviews. Same table the server enforces, so hiding never drifts from it.
+  const { data: caps } = trpc.accessControl.myCapabilities.useQuery(undefined, { enabled: !!user });
+  const has = (list: readonly string[] | undefined, v: string) => !list || list.includes(v);
+  const pageVisible = (pg?: string) => (pg ? has(caps?.pages, pg) : true);
+  const childVisible = (item?: string) => {
+    if (!item || !caps) return true;
+    return item.startsWith('tab:')
+      ? has(caps.reviewTabs, item.slice(4))
+      : has(caps.coreDataItems, item);
+  };
+
   // The Admin entry is for admin and up; the grid does not govern it.
   const showSystemGroup = ['sysadmin', 'admin', 'hr', 'elt'].includes(
     (user as { accessLevel?: string } | undefined)?.accessLevel ?? 'user',
@@ -151,7 +164,12 @@ export default function Layout() {
 
   const visibleGroups = navGroups
     .filter((g) => (g.label === 'System' ? showSystemGroup : areaVisible(g.area)))
-    .map((g) => ({ ...g, items: g.items.filter((it) => !it.minRole || meetsRole(it.minRole)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items
+        .filter((it) => (!it.minRole || meetsRole(it.minRole)) && pageVisible(it.page))
+        .map((it) => (it.children ? { ...it, children: it.children.filter((c) => childVisible(c.item)) } : it)),
+    }))
     .filter((g) => g.items.length > 0);
 
   const isActive = (path: string) =>

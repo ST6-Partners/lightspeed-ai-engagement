@@ -21,7 +21,9 @@ import { companyValues } from '../db/schema/values.js';
 import { performanceCriteria } from '../db/schema/performance.js';
 import { reviews, reviewScores } from '../db/schema/reviews.js';
 import { users } from '../db/schema/core.js';
-import { requireManager } from '../services/permissions.js';
+// Authoring a coaching plan is a capability, not a tier — a user receives one
+// but never writes one (2026-08-03).
+import { requireAction } from '../services/access.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -240,7 +242,7 @@ export const coachingRouter = router({
 
   // Preview an AI draft from a review WITHOUT saving (used by "Regenerate").
   draftFromReview: protectedProcedure
-    .use(requireManager)
+    .use(requireAction('coaching.create'))
     .input(z.object({ evaluationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { evaluation, scores, employeeName } = await loadReview(ctx.db, input.evaluationId);
@@ -249,7 +251,7 @@ export const coachingRouter = router({
 
   // Create a plan from a review: generate the AI draft and persist it, return id.
   createFromReview: protectedProcedure
-    .use(requireManager)
+    .use(requireAction('coaching.create'))
     .input(z.object({ evaluationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { evaluation, scores, employeeName } = await loadReview(ctx.db, input.evaluationId);
@@ -282,7 +284,7 @@ export const coachingRouter = router({
 
   // Save edits: plan fields + full replace of focus areas.
   save: protectedProcedure
-    .use(requireManager)
+    .use(requireAction('coaching.create'))
     .input(z.object({
       id: z.string().uuid(),
       status: z.enum(['draft', 'final']).optional(),
@@ -327,7 +329,7 @@ export const coachingRouter = router({
     }),
 
   remove: protectedProcedure
-    .use(requireManager)
+    .use(requireAction('coaching.create'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.delete(coachingPlans).where(eq(coachingPlans.id, input.id));

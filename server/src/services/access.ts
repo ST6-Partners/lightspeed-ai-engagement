@@ -229,11 +229,25 @@ export function legacyFieldsFor(level: AccessLevel): {
 } {
   switch (level) {
     case 'sysadmin': return { role: 'sysadmin', leaderBadge: null, isHrAccess: false };
-    case 'elt': return { role: 'admin', leaderBadge: 'ELT', isHrAccess: false };
-    case 'slt': return { role: 'manager', leaderBadge: 'SLT', isHrAccess: false };
+    case 'elt': return { role: 'admin', leaderBadge: 'ELT', isHrAccess: true };
     case 'hr': return { role: 'admin', leaderBadge: null, isHrAccess: true };
-    case 'admin': return { role: 'admin', leaderBadge: null, isHrAccess: false };
     case 'manager': return { role: 'manager', leaderBadge: null, isHrAccess: false };
     default: return { role: 'user', leaderBadge: null, isHrAccess: false };
   }
 }
+
+// ── Action gate ──────────────────────────────────────────────
+// Pairs with services/capabilities.ts. Use this on any mutation that is a
+// VERB rather than a view — sending a survey, writing a PIP, authoring a
+// review. Reach middleware answers "how far can you see"; this answers
+// "are you allowed to do this at all".
+export const requireAction = (action: import('./capabilities.js').Action) =>
+  middleware(async ({ ctx, next }) => {
+    if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' });
+    const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+    const { canDo } = await import('./capabilities.js');
+    if (!level || !canDo(level, action)) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have permission to do this.' });
+    }
+    return next();
+  });

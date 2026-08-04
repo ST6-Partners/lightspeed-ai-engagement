@@ -24,6 +24,7 @@
 // ============================================================
 
 import { z } from 'zod';
+import { requireAction } from '../services/access.js';
 import { eq, and, isNull, asc, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -181,7 +182,9 @@ export const pipRouter = router({
       };
     }),
 
+  // A user receives a PIP; they never open one on somebody else (2026-08-03).
   create: protectedProcedure
+    .use(requireAction('pip.create'))
     .input(z.object({
       employeeId: z.string().uuid().optional(),
       managerId: z.string().uuid().optional(),

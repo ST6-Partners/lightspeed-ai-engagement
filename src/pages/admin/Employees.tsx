@@ -10,9 +10,7 @@ import ImportButton from '../../components/ImportButton';
 const ACCESS_LEVEL_OPTIONS = [
   { id: 'sysadmin', label: 'Sysadmin' },
   { id: 'elt', label: 'ELT' },
-  { id: 'slt', label: 'SLT' },
   { id: 'hr', label: 'HR' },
-  { id: 'admin', label: 'Admin' },
   { id: 'manager', label: 'Manager' },
   { id: 'user', label: 'User' },
 ];
@@ -20,9 +18,7 @@ const ACCESS_LEVEL_OPTIONS = [
 const ACCESS_LEVEL_COLORS: Record<string, string> = {
   sysadmin: 'bg-purple-100 text-purple-800',
   elt: 'bg-indigo-100 text-indigo-800',
-  slt: 'bg-sky-100 text-sky-800',
   hr: 'bg-amber-100 text-amber-800',
-  admin: 'bg-blue-100 text-blue-800',
   manager: 'bg-green-100 text-green-800',
   user: 'bg-gray-100 text-gray-800',
 };
