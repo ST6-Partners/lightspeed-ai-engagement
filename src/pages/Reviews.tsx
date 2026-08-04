@@ -994,9 +994,21 @@ function MyReviewCard({ row, kind }: { row: any; kind: 'values' | 'performance' 
     ? trpc.values.getEvaluation.useQuery({ id: row.id }, { enabled: open })
     : trpc.performance.getEvaluation.useQuery({ id: row.id }, { enabled: open });
 
-  const items: any[] = (detail.data as any)?.items ?? [];
-  const scored = items.filter((i) => typeof i.score === 'number');
-  const avg = scored.length ? scored.reduce((a, i) => a + i.score, 0) / scored.length : null;
+  // Both procedures return `scores`, not `items`, and name the label field per
+  // instrument (valueName / criterionName). Reading `items` showed an empty
+  // card — which is why opening a review appeared to do nothing.
+  const scores: any[] = (detail.data as any)?.scores ?? [];
+  const labelOf = (sc: any) => sc.valueName ?? sc.criterionName ?? '—';
+  const rated = scores.filter((sc) => typeof sc.score === 'number');
+  const avg = rated.length ? rated.reduce((a, sc) => a + sc.score, 0) / rated.length : null;
+
+  // Values are grouped by pillar on the authoring form; keep that grouping so
+  // the employee reads it the way it was written.
+  const groups = scores.reduce((m: Map<string, any[]>, sc: any) => {
+    const g = sc.pillar ?? '';
+    m.set(g, [...(m.get(g) ?? []), sc]);
+    return m;
+  }, new Map<string, any[]>());
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -1008,40 +1020,50 @@ function MyReviewCard({ row, kind }: { row: any; kind: 'values' | 'performance' 
               {row.periodLabel ? ` · ${row.periodLabel}` : ''}
             </div>
             <div className="text-xs text-gray-500">
-              by {row.reviewerName ?? '—'}
-              {row.status ? ` · ${row.status.replace('_', ' ')}` : ''}
+              by {row.reviewerName ?? '—'}{row.status ? ` · ${String(row.status).replace('_', ' ')}` : ''}
             </div>
           </div>
-          {avg != null && (
-            <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
-              avg {avg.toFixed(1)}
-            </span>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {avg != null && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                avg {avg.toFixed(1)}
+              </span>
+            )}
+            <span className="text-[13px] text-ls-blue-deep font-semibold">{open ? 'Hide' : 'Open'}</span>
+          </div>
         </div>
       </button>
 
       {open && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           {detail.isLoading && <div className="text-xs text-gray-400">Loading…</div>}
-          {!detail.isLoading && items.length === 0 && (
-            <div className="text-xs text-gray-500">Nothing recorded on this review.</div>
+          {!detail.isLoading && scores.length === 0 && (
+            <div className="text-xs text-gray-500">No scores were recorded on this review.</div>
           )}
-          <div className="space-y-1.5">
-            {items.map((i: any) => (
-              <div key={i.id ?? i.label} className="text-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-gray-700 min-w-0">{i.label ?? i.name}</span>
-                  {typeof i.score === 'number' && (
-                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{i.score}</span>
-                  )}
-                </div>
-                {i.note && <div className="text-xs text-gray-500 italic mt-0.5">&ldquo;{i.note}&rdquo;</div>}
+          {[...groups.entries()].map(([pillar, list]) => (
+            <div key={pillar || 'all'} className="mb-3 last:mb-0">
+              {pillar && (
+                <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">{pillar}</div>
+              )}
+              <div className="space-y-1.5">
+                {list.map((sc: any, i: number) => (
+                  <div key={`${labelOf(sc)}-${i}`} className="text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-gray-700 min-w-0">{labelOf(sc)}</span>
+                      <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">
+                        {typeof sc.score === 'number' ? sc.score : '—'}
+                      </span>
+                    </div>
+                    {sc.notes && <div className="text-xs text-gray-500 italic mt-0.5">&ldquo;{sc.notes}&rdquo;</div>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
           {(detail.data as any)?.overallNotes && (
-            <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-700">
-              {(detail.data as any).overallNotes}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1">Overall</div>
+              <div className="text-sm text-gray-700">{(detail.data as any).overallNotes}</div>
             </div>
           )}
         </div>

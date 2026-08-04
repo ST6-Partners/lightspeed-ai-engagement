@@ -48,7 +48,12 @@ export const exitSurveyRouter = router({
   // The subject is taken from the signed-in user and cannot be supplied, so
   // this cannot be used to open a record on somebody else.
   createOwn: protectedProcedure
-    .mutation(async ({ ctx }) => {
+    .input(z.object({
+      subjectRole: z.string().max(200).optional(),
+      managerName: z.string().max(200).optional(),
+      exitType: z.enum(['vol', 'invol']).default('vol'),
+    }).optional())
+    .mutation(async ({ ctx, input }) => {
       const me = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
       if (!me) throw new TRPCError({ code: 'NOT_FOUND' });
       // Reuse an unfinished one rather than stacking duplicates each time the
@@ -57,10 +62,14 @@ export const exitSurveyRouter = router({
         where: and(eq(exitSurveys.createdById, ctx.user.id), ne(exitSurveys.status, 'complete')),
       });
       if (open) return open;
+      // subjectName is taken from the session and is NOT an input — the role
+      // and manager are the employee's to state, but who the record is about
+      // is not.
       const [row] = await ctx.db.insert(exitSurveys).values({
         subjectName: me.name ?? me.email,
-        subjectRole: me.title ?? undefined,
-        exitType: 'vol',
+        subjectRole: input?.subjectRole ?? me.title ?? undefined,
+        managerName: input?.managerName,
+        exitType: input?.exitType ?? 'vol',
         createdById: ctx.user.id,
       }).returning();
       return row;

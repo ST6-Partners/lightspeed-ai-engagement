@@ -80,6 +80,11 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
   const startOwn = trpc.exitSurvey.createOwn.useMutation({
     onSuccess: (row: any) => { refetch(); if (row?.id) onOpen(row.id); },
   });
+  // A user's record is always about them, so their name is filled in and fixed.
+  const meQ = trpc.auth.me.useQuery();
+  useEffect(() => {
+    if (!canSend && meQ.data?.name && !name) setName(meQ.data.name);
+  }, [canSend, meQ.data?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   const create = trpc.exitSurvey.create.useMutation({ onSuccess: () => { setName(''); setRole(''); setMgr(''); refetch(); } });
   const [name, setName] = useState(''); const [role, setRole] = useState(''); const [mgr, setMgr] = useState(''); const [type, setType] = useState<Mode>('vol');
   const { data: org } = trpc.organization.list.useQuery();
@@ -103,16 +108,24 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
         ? 'A two-part exit diagnostic — departing employee and manager — built for side-by-side comparison. Click any row to open the full record: both completed forms and the HR comparison.'
         : 'Exit surveys addressed to you. Open one to fill it in.'}</p>
 
-      {/* Opening an exit diagnostic on somebody is a send, not a fill-in. A user
-          answers one addressed to them and never starts one (2026-08-03). */}
-      {canSend && (
+      {/* The intake fields are the same for everyone (PM, 2026-08-03) — an
+          employee still names themselves, their role and their manager. What
+          differs is that a user's record can only be about themselves, and
+          they never see Part B or the comparison afterwards. */}
       <div className="ls-card p-4 mb-5">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-3">New exit diagnostic</div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-3">
+          {canSend ? 'New exit diagnostic' : 'Your exit survey'}
+        </div>
         <div className="grid sm:grid-cols-3 gap-3">
-          <select value={name} onChange={(e) => pickEmployee(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
-            <option value="">Select employee…</option>
-            {members.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
-          </select>
+          {canSend ? (
+            <select value={name} onChange={(e) => pickEmployee(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
+              <option value="">Select employee…</option>
+              {members.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+            </select>
+          ) : (
+            <input value={name} readOnly title="Your own exit survey"
+              className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-ls-bg-2 text-ls-ink-2" />
+          )}
           <select value={role} onChange={(e) => setRole(e.target.value)} className="text-sm border border-ls-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-ls-blue focus:ring-2 focus:ring-ls-blue-50">
             <option value="">Role — from Job Titles…</option>
             {role && !titleNames.includes(role) && <option value={role}>{role}</option>}
@@ -130,25 +143,15 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
               <button key={m} onClick={() => setType(m)} className={`text-[13px] font-semibold px-4 py-1.5 rounded-full ${type === m ? 'bg-ls-active text-white' : 'text-ls-ink-2'}`}>{m === 'vol' ? 'Voluntary · Resignation' : 'Involuntary · Termination'}</button>
             ))}
           </div>
-          <button disabled={!name.trim() || create.isPending} onClick={() => create.mutate({ subjectName: name.trim(), subjectRole: role.trim() || undefined, managerName: mgr.trim() || undefined, exitType: type })} className="ls-btn ls-btn-primary disabled:opacity-50">Create exit</button>
-        </div>
-      </div>
-      )}
-
-      {!canSend && (
-        <div className="ls-card p-4 mb-5 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="text-[13px] font-semibold text-ls-ink">Filling in your own exit survey?</div>
-            <p className="text-[12px] text-ls-ink-3 mt-0.5">
-              Start it here. You can save and come back — it is not shared until you complete it.
-            </p>
-          </div>
-          <button onClick={() => startOwn.mutate()} disabled={startOwn.isPending}
-            className="ls-btn ls-btn-primary shrink-0">
-            {startOwn.isPending ? 'Starting…' : 'Start my exit survey'}
+          <button disabled={!name.trim() || create.isPending || startOwn.isPending}
+            onClick={() => (canSend
+              ? create.mutate({ subjectName: name.trim(), subjectRole: role.trim() || undefined, managerName: mgr.trim() || undefined, exitType: type })
+              : startOwn.mutate({ subjectRole: role.trim() || undefined, managerName: mgr.trim() || undefined, exitType: type }))}
+            className="ls-btn ls-btn-primary disabled:opacity-50">
+            {canSend ? 'Create exit' : 'Start my exit survey'}
           </button>
         </div>
-      )}
+      </div>
 
       <div className="font-semibold mb-2">{canSend ? 'All exits' : 'Your exit surveys'}</div>
       <div className="ls-card overflow-hidden">
