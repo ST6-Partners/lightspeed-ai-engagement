@@ -26,7 +26,7 @@ import { middleware } from '../trpc.js';
 import type { DrizzleClient } from '../db.js';
 import { users } from '../db/schema/core.js';
 import {
-  accessGrants, AREAS_WITHOUT_DOWN_ORG,
+  accessGrants, AREAS_WITHOUT_DOWN_ORG, ACCESS_LEVELS,
   type AccessArea, type AccessLevel, type Reach,
 } from '../db/schema/accessControl.js';
 
@@ -105,6 +105,27 @@ export async function hasReports(db: DrizzleClient, userId: string): Promise<boo
   return !!row;
 }
 
+export async function realLevelOf(db: DrizzleClient, userId: string): Promise<AccessLevel | null> {
+  return levelOf(db, userId);
+}
+
+/**
+ * The level to resolve against. A sysadmin previewing another level gets that
+ * level; everyone else gets their own. A preview set by someone who is no
+ * longer a sysadmin is ignored rather than honoured — the check is on the
+ * stored record every time, not on whatever set the preview.
+ */
+export async function effectiveLevelOf(
+  db: DrizzleClient, userId: string, previewLevel?: string | null,
+): Promise<AccessLevel | null> {
+  const real = await levelOf(db, userId);
+  if (!real) return null;
+  if (real !== 'sysadmin' || !previewLevel) return real;
+  return (ACCESS_LEVELS as readonly string[]).includes(previewLevel)
+    ? (previewLevel as AccessLevel)
+    : real;
+}
+
 async function levelOf(db: DrizzleClient, userId: string): Promise<AccessLevel | null> {
   const u = await db.query.users.findFirst({
     where: eq(users.id, userId),
@@ -122,8 +143,9 @@ export async function resolveAreaAccess(
   db: DrizzleClient,
   userId: string,
   area: AccessArea,
+  previewLevel?: string | null,
 ): Promise<AreaAccess> {
-  const level = await levelOf(db, userId);
+  const level = await effectiveLevelOf(db, userId, previewLevel);
   if (!level) return { visible: false, reach: 'none' };
 
   const grid = await loadGrid(db);
@@ -148,10 +170,11 @@ export async function resolveAreaAccess(
 export async function resolveAllAreas(
   db: DrizzleClient,
   userId: string,
+  previewLevel?: string | null,
 ): Promise<Record<AccessArea, Reach>> {
   const areas: AccessArea[] = ['planning', 'engagement', 'insights', 'documents', 'assessments'];
   const out = {} as Record<AccessArea, Reach>;
-  for (const a of areas) out[a] = (await resolveAreaAccess(db, userId, a)).reach;
+  for (const a of areas) out[a] = (await resolveAreaAccess(db, userId, a, previewLevel)).reach;
   return out;
 }
 
@@ -174,7 +197,7 @@ export async function canReachUser(
 export const requireArea = (area: AccessArea) =>
   middleware(async ({ ctx, next }) => {
     if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' });
-    const acc = await resolveAreaAccess(ctx.db, ctx.user.id, area);
+    const acc = await resolveAreaAccess(ctx.db, ctx.user.id, area, ctx.req.session?.previewLevel);
     if (!acc.visible) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this area.' });
     }

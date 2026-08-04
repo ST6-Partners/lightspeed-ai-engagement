@@ -17,6 +17,7 @@ import AssignmentNoticeModal from './AssignmentNoticeModal';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
+import PreviewBanner from './PreviewBanner';
 
 type RoleTier = 'user' | 'manager' | 'admin' | 'sysadmin';
 type NavItem = { path: string; label: string; icon: typeof Home; minRole?: RoleTier; children?: { path: string; label: string }[] };
@@ -180,7 +181,11 @@ export default function Layout() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    // Column wrapper so the preview bar spans the sidebar too — it must be
+    // visible on every screen, including ones the previewed level can reach.
+    <div className="h-screen flex flex-col overflow-hidden">
+      <PreviewBanner />
+      <div className="flex-1 flex overflow-hidden">
       {/* Sidebar */}
       <aside className={`${navCollapsed ? 'w-16' : 'w-60'} bg-ls-slate text-[#B9C3CB] flex flex-col transition-all duration-200`}>
         <div className={`px-3 py-4 flex items-center ${navCollapsed ? 'justify-center' : 'gap-3'}`}>
@@ -355,6 +360,8 @@ export default function Layout() {
         <main className="flex-1 p-6 overflow-auto">
           <Outlet />
         </main>
+      </div>
+
       </div>
 
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />

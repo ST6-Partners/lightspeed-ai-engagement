@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Lock, RotateCcw, Check, AlertCircle } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import PreviewSwitcher from './PreviewSwitcher';
 
 const LEVELS = [
   { id: 'sysadmin', label: 'Sysadmin' },
@@ -179,6 +180,8 @@ export default function AccessGrid() {
           </span>
         )}
       </div>
+
+      <PreviewSwitcher />
     </div>
   );
 }

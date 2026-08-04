@@ -21,6 +21,10 @@ import { env } from './env.js';
 declare module 'express-session' {
   interface SessionData {
     userId?: string;
+    // Sysadmin "view as" preview. Never changes the user's record — it only
+    // colours how this one browser session resolves access, so there is no
+    // lockout to recover from. Cleared on logout with the rest of the session.
+    previewLevel?: string;
   }
 }
 

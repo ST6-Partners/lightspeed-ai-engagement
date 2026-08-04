@@ -19,7 +19,10 @@ import {
   accessGrants, ACCESS_LEVELS, ACCESS_AREAS, REACH_VALUES, AREAS_WITHOUT_DOWN_ORG,
   type AccessArea, type AccessLevel, type Reach,
 } from '../db/schema/accessControl.js';
-import { resolveAllAreas, requireSysadminLevel, invalidateGridCache } from '../services/access.js';
+import {
+  resolveAllAreas, requireSysadminLevel, invalidateGridCache,
+  realLevelOf, effectiveLevelOf,
+} from '../services/access.js';
 
 const levelEnum = z.enum(ACCESS_LEVELS);
 const areaEnum = z.enum(ACCESS_AREAS);
@@ -38,7 +41,45 @@ function assertReachAllowed(area: AccessArea, reach: Reach) {
 export const accessControlRouter = router({
   // What the current viewer can reach, per area. Drives the sidebar.
   myAreas: protectedProcedure.query(async ({ ctx }) => {
-    return resolveAllAreas(ctx.db, ctx.user.id);
+    return resolveAllAreas(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+  }),
+
+  // ── "View as" preview ──────────────────────────────────────
+  // Lets a sysadmin experience the app as another level WITHOUT changing their
+  // own record. Nothing is written to the users table, so there is no state to
+  // recover from — closing the session or pressing Stop returns things to
+  // normal. This exists so access can be tested without the obvious trap:
+  // demote yourself to User and you can no longer reach the screen that would
+  // promote you back.
+  previewState: protectedProcedure.query(async ({ ctx }) => {
+    const real = await realLevelOf(ctx.db, ctx.user.id);
+    const raw = ctx.req.session?.previewLevel ?? null;
+    const previewing = real === 'sysadmin' && !!raw;
+    return {
+      realLevel: real,
+      previewLevel: previewing ? raw : null,
+      canPreview: real === 'sysadmin',
+      effectiveLevel: await effectiveLevelOf(ctx.db, ctx.user.id, raw),
+    };
+  }),
+
+  startPreview: protectedProcedure
+    .use(requireSysadminLevel)
+    .input(z.object({ level: levelEnum }))
+    .mutation(async ({ ctx, input }) => {
+      ctx.req.session.previewLevel = input.level === 'sysadmin' ? undefined : input.level;
+      return { success: true, previewLevel: ctx.req.session.previewLevel ?? null };
+    }),
+
+  // The way back. Checks the REAL stored level, never the previewed one —
+  // otherwise previewing as User would disable the button that undoes it.
+  stopPreview: protectedProcedure.mutation(async ({ ctx }) => {
+    const real = await realLevelOf(ctx.db, ctx.user.id);
+    if (real !== 'sysadmin') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Only a sysadmin can use preview mode.' });
+    }
+    ctx.req.session.previewLevel = undefined;
+    return { success: true };
   }),
 
   // The whole grid, as a level -> area -> reach map. Sysadmin only.

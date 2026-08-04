@@ -20,7 +20,7 @@ import { departments } from '../db/schema/departments.js';
 import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
-import { legacyFieldsFor, type AccessLevel } from '../services/access.js';
+import { legacyFieldsFor, effectiveLevelOf, type AccessLevel } from '../services/access.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
 import { sendEmail } from '../services/email.js';
 import { env } from '../env.js';
@@ -33,7 +33,17 @@ export const authRouter = router({
       where: eq(users.id, ctx.user.id),
       columns: { id: true, name: true, email: true, role: true, accessLevel: true, isBeta: true, isHrAccess: true, leaderBadge: true, timezone: true, avatarUrl: true },
     });
-    return dbUser ?? null;
+    if (!dbUser) return null;
+    // While a sysadmin is previewing another level, report the PREVIEWED level
+    // as accessLevel so every client-side check behaves as that level would.
+    // realAccessLevel keeps the stored value for the "stop previewing" banner.
+    const effective = await effectiveLevelOf(ctx.db, dbUser.id, ctx.req.session?.previewLevel);
+    return {
+      ...dbUser,
+      accessLevel: effective ?? dbUser.accessLevel,
+      realAccessLevel: dbUser.accessLevel,
+      previewing: (effective ?? dbUser.accessLevel) !== dbUser.accessLevel,
+    };
   }),
 
   // ── Register a new account (email/password) ────────────────
