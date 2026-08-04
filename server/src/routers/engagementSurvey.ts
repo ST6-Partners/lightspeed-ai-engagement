@@ -14,7 +14,7 @@ import { users } from '../db/schema/core.js';
 import { jobTitles } from '../db/schema/jobTitles.js';
 import { departments } from '../db/schema/departments.js';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
-import { effectiveLevelOf } from '../services/access.js';
+import { effectiveLevelOf, resolveAreaAccess } from '../services/access.js';
 import { canDo } from '../services/capabilities.js';
 
 const answersSchema = z.record(z.string(), z.number().int().min(1).max(5));
@@ -46,6 +46,22 @@ async function assertHrOrElt(db: DrizzleClient, userId: string, previewLevel?: s
   if (!level || !canDo(level, 'survey.run')) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Only ELT or HR can manage survey periods.' });
   }
+}
+
+// Same two questions as engagementAnalytics: may you see results, and whose.
+// Kept local rather than imported so the gate is visible at the call site.
+async function assertCanViewResults(ctx: any) {
+  const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+  if (!level || !canDo(level, 'survey.viewResults')) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to survey results.' });
+  }
+}
+
+async function scopeToViewer<T extends { managerPath?: string[] | null }>(ctx: any, rows: T[]): Promise<T[]> {
+  const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'insights', ctx.req.session?.previewLevel);
+  if (acc.reach === 'all') return rows;
+  const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+  return rows.filter((r) => (r.managerPath ?? []).some((id) => scope.has(id)));
 }
 
 export const engagementSurveyRouter = router({
@@ -236,17 +252,24 @@ export const engagementSurveyRouter = router({
       return { success: true };
     }),
 
+  // Raw individual responses. This returned EVERY response in the company to
+  // any signed-in employee — the single most sensitive read in the module,
+  // ungated since it was written. Now needs results access, and is scoped to
+  // the viewer's branch like every other read.
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.engagementSurveyResponses.findMany({
+    await assertCanViewResults(ctx);
+    const rows = await ctx.db.query.engagementSurveyResponses.findMany({
       orderBy: [desc(engagementSurveyResponses.submittedAt)],
     });
+    return scopeToViewer(ctx, rows);
   }),
 
   // Aggregate read: response count, per-question averages, overall favorability
   // (% of Likert answers that are 4 or 5), and average eNPS. All aggregate —
   // never returns an individual's answers.
   stats: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.query.engagementSurveyResponses.findMany();
+    await assertCanViewResults(ctx);
+    const rows = await scopeToViewer(ctx, await ctx.db.query.engagementSurveyResponses.findMany());
     const count = rows.length;
     const sums: Record<string, { total: number; n: number }> = {};
     let favNum = 0;

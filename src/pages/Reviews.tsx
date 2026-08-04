@@ -88,6 +88,11 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
     else { setPerfEditingId(null); setPerfMode('edit'); }
   };
 
+  // Anyone who does not author reviews gets the history screen instead.
+  if (!canEdit && !hidePicker) {
+    return <MyReviewHistory employeeId={me?.id ?? ''} employeeName={me?.name ?? ''} />;
+  }
+
   return (
     <div className={hidePicker ? '' : 'max-w-4xl mx-auto'}>
       {!hidePicker && (<>
@@ -344,9 +349,9 @@ function ValuesEvaluationList({ employeeName, rows, loading, canEdit, onOpen }: 
   );
 }
 
-function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, values, pillars, onDone, onCancel }: {
+function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, values, pillars, readOnly = false, onDone, onCancel }: {
   employeeId: string; employeeName: string; editingId: string | null; newPeriodLabel: string; values: any[]; pillars: string[];
-  onDone: () => void; onCancel: () => void;
+  readOnly?: boolean; onDone: () => void; onCancel: () => void;
 }) {
   const existing = trpc.values.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
   const save = trpc.values.saveEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
@@ -396,7 +401,7 @@ function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLa
           <button onClick={() => exportReviewPdf({ instrument: 'Values', employeeName, period: displayPeriod, status, overallNotes,
             items: values.map((v: any) => ({ group: v.pillar, label: v.name, description: v.description, score: scores[v.id], note: notes[v.id] })) })}
             className="inline-flex items-center gap-1 text-sm text-ls-blue-deep hover:underline"><Printer size={14} /> Export to PDF</button>
-          {editingId && (
+          {editingId && !readOnly && (
             <button onClick={() => { if (confirm('Delete this review?')) del.mutate({ id: editingId }); }}
               className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"><Trash2 size={14} /> Delete</button>
           )}
@@ -434,7 +439,7 @@ function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLa
                     </div>
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5].map((n) => (
-                        <button key={n} type="button"
+                        <button key={n} type="button" disabled={readOnly}
                           onClick={() => setScores((s) => ({ ...s, [v.id]: n }))}
                           className={`w-8 h-8 rounded-md text-sm font-semibold border transition-colors ${
                             scores[v.id] === n ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
@@ -444,7 +449,7 @@ function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLa
                     </div>
                   </div>
                   {scores[v.id] != null && (
-                    <input className="w-full mt-2 px-2 py-1.5 border border-gray-200 rounded text-xs" placeholder="Notes (optional)"
+                    <input className="w-full mt-2 px-2 py-1.5 border border-gray-200 rounded text-xs" placeholder="Notes (optional)" disabled={readOnly}
                       value={notes[v.id] ?? ''} onChange={(e) => setNotes((nn) => ({ ...nn, [v.id]: e.target.value }))} />
                   )}
                 </div>
@@ -456,16 +461,16 @@ function ValuesEvaluationForm({ employeeId, employeeName, editingId, newPeriodLa
 
       <div className="mb-4">
         <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Overall notes</label>
-        <textarea className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3}
+        <textarea className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3} disabled={readOnly}
           value={overallNotes} onChange={(e) => setOverallNotes(e.target.value)} placeholder="Summary, strengths, growth areas…" />
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-        <button onClick={submit} disabled={save.isLoading}
+        <button onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">{readOnly ? 'Back' : 'Cancel'}</button>
+        {!readOnly && <button onClick={submit} disabled={save.isLoading}
           className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {save.isLoading ? 'Saving…' : 'Save review'}
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -550,9 +555,9 @@ function PerformanceEvaluationList({ employeeName, rows, loading, canEdit, onOpe
   );
 }
 
-function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, criteria, onDone, onCancel }: {
+function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPeriodLabel, criteria, readOnly = false, onDone, onCancel }: {
   employeeId: string; employeeName: string; editingId: string | null; newPeriodLabel: string; criteria: any[];
-  onDone: () => void; onCancel: () => void;
+  readOnly?: boolean; onDone: () => void; onCancel: () => void;
 }) {
   const existing = trpc.performance.getEvaluation.useQuery({ id: editingId! }, { enabled: !!editingId });
   const save = trpc.performance.saveEvaluation.useMutation({ onSuccess: onDone, onError: (e) => alert(e.message) });
@@ -638,7 +643,7 @@ function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPer
                   </div>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} type="button"
+                      <button key={n} type="button" disabled={readOnly}
                         onClick={() => setScores((s) => ({ ...s, [c.id]: n }))}
                         className={`w-8 h-8 rounded-md text-sm font-semibold border transition-colors ${
                           scores[c.id] === n ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
@@ -648,7 +653,7 @@ function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPer
                   </div>
                 </div>
                 {scores[c.id] != null && (
-                  <input className="w-full mt-2 px-2 py-1.5 border border-gray-200 rounded text-xs" placeholder="Notes (optional)"
+                  <input className="w-full mt-2 px-2 py-1.5 border border-gray-200 rounded text-xs" placeholder="Notes (optional)" disabled={readOnly}
                     value={notes[c.id] ?? ''} onChange={(e) => setNotes((nn) => ({ ...nn, [c.id]: e.target.value }))} />
                 )}
               </div>
@@ -659,16 +664,16 @@ function PerformanceEvaluationForm({ employeeId, employeeName, editingId, newPer
 
       <div className="mb-4">
         <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Overall notes</label>
-        <textarea className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3}
+        <textarea className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3} disabled={readOnly}
           value={overallNotes} onChange={(e) => setOverallNotes(e.target.value)} placeholder="Summary, strengths, growth areas…" />
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-        <button onClick={submit} disabled={save.isLoading}
+        <button onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md">{readOnly ? 'Back' : 'Cancel'}</button>
+        {!readOnly && <button onClick={submit} disabled={save.isLoading}
           className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {save.isLoading ? 'Saving…' : 'Save review'}
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -971,6 +976,94 @@ function PrivateNotesSection({ employeeId }: { employeeId: string }) {
 // Manager Review (upward survey), and Peer Review (lateral survey).
 // Consolidates the three former Engagement nav items. 2026-07-21 (bf).
 // ============================================================
+
+// ── Reviews you have been given (read-only) ──────────────────
+// Shown to anyone without review.author. Deliberately a different SCREEN, not
+// the authoring page with pieces hidden — the instrument tabs and period bar
+// are the authoring workflow, and leaving them up kept reading as "score
+// someone". Same shape as the Development lists: a list, click to read.
+function MyReviewHistory({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [kind, setKind] = useState<'values' | 'performance'>('values');
+
+  const valuesQ = trpc.values.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
+  const perfQ = trpc.performance.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
+
+  const rows = [
+    ...(valuesQ.data ?? []).map((r: any) => ({ ...r, _kind: 'values' as const })),
+    ...(perfQ.data ?? []).map((r: any) => ({ ...r, _kind: 'performance' as const })),
+  ].sort((a, b) => String(b.periodLabel ?? '').localeCompare(String(a.periodLabel ?? '')));
+
+  const loading = valuesQ.isLoading || perfQ.isLoading;
+
+  if (openId) {
+    return (
+      <div>
+        <button onClick={() => setOpenId(null)} className="text-[13px] font-semibold text-ls-blue-deep mb-3">‹ All reviews</button>
+        {kind === 'values' ? (
+          <ValuesEvaluationForm
+            key={openId}
+            employeeId={employeeId}
+            employeeName={employeeName}
+            editingId={openId}
+            newPeriodLabel={''}
+            values={[]}
+            pillars={[]}
+            readOnly
+            onDone={() => setOpenId(null)}
+            onCancel={() => setOpenId(null)}
+          />
+        ) : (
+          <PerformanceEvaluationForm
+            key={openId}
+            employeeId={employeeId}
+            employeeName={employeeName}
+            editingId={openId}
+            newPeriodLabel={''}
+            criteria={[]}
+            readOnly
+            onDone={() => setOpenId(null)}
+            onCancel={() => setOpenId(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="ls-eyebrow mb-1">Engagement</div>
+      <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+        <Star size={22} className="text-amber-500" /> Reviews
+      </h1>
+      <p className="text-sm text-ls-ink-3 mb-5">The reviews you have been given. Open one to read it.</p>
+
+      <div className="ls-card overflow-hidden">
+        {loading && <div className="text-sm text-ls-ink-3 p-8 text-center">Loading…</div>}
+        {!loading && rows.length === 0 && (
+          <div className="text-sm text-ls-ink-3 p-8 text-center">You have not been given a review yet.</div>
+        )}
+        {rows.map((r: any) => (
+          <button
+            key={`${r._kind}-${r.id}`}
+            onClick={() => { setKind(r._kind); setOpenId(r.id); }}
+            className="w-full text-left px-4 py-3 border-b border-ls-line last:border-0 hover:bg-ls-bg-2 flex items-center justify-between gap-3"
+          >
+            <div>
+              <div className="text-sm font-semibold text-ls-ink">{r.periodLabel ?? 'Review'}</div>
+              <div className="text-[12px] text-ls-ink-3 mt-0.5">
+                {r._kind === 'values' ? 'Company values' : 'Performance criteria'}
+                {r.reviewerName ? ` · ${r.reviewerName}` : ''}
+              </div>
+            </div>
+            <span className="text-[13px] text-ls-blue-deep font-semibold shrink-0">Open ›</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Reviews() {
   // Tab is URL-addressable (?tab=manager|peer) so the sidebar dropdown can
   // deep-link to a specific instrument. Absent/unknown param → Reviews.

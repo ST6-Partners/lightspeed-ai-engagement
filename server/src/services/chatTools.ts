@@ -13,6 +13,8 @@
 // ============================================================
 
 import { tool } from 'ai';
+import { effectiveLevelOf, resolveAreaAccess } from './access.js';
+import { canDo } from './capabilities.js';
 import { z } from 'zod';
 import { and, eq, ilike, or, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -273,7 +275,21 @@ export function buildChatTools(ctx: ChatToolCtx) {
         }
 
         // Live period computed from confidential responses — aggregate only.
-        const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+        // Scoped to the caller: the assistant reads on the user's behalf, so an
+        // unscoped read here is a back door round every gate on the pages. The
+        // min-group-size suppression above still applies on top.
+        const allResponses = await ctx.db.query.engagementSurveyResponses.findMany();
+        const chatLevel = await effectiveLevelOf(ctx.db, ctx.userId, undefined);
+        let responses = allResponses;
+        if (!chatLevel || !canDo(chatLevel, 'survey.viewResults')) {
+          responses = [];
+        } else {
+          const acc = await resolveAreaAccess(ctx.db, ctx.userId, 'insights', undefined);
+          if (acc.reach !== 'all') {
+            const scope = new Set(acc.scopeUserIds ?? [ctx.userId]);
+            responses = allResponses.filter((r) => (r.managerPath ?? []).some((id) => scope.has(id)));
+          }
+        }
         let live: unknown = null;
         if (responses.length) {
           const allVals: number[] = [];
