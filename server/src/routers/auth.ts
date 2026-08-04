@@ -98,17 +98,19 @@ export const authRouter = router({
   updateProfile: protectedProcedure
     .input(z.object({ name: z.string().max(255).optional(), avatarUrl: z.string().nullable().optional() }))
     .mutation(async ({ ctx, input }) => {
-      // Display name and photo are part of the HR-owned person record as of
-      // 2026-08-03. Same rule as profile.updateSelf — HR or Sysadmin only.
-      const me = await ctx.db.query.users.findFirst({
-        where: eq(users.id, ctx.user.id), columns: { accessLevel: true },
-      });
-      const lvl = me?.accessLevel ?? 'user';
-      if (lvl !== 'hr' && lvl !== 'sysadmin') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Your name and photo are maintained by HR. Contact them to change these.',
+      // Display name is part of the HR-owned person record as of 2026-08-03.
+      // The profile picture is not — everyone sets their own.
+      if (input.name !== undefined) {
+        const me = await ctx.db.query.users.findFirst({
+          where: eq(users.id, ctx.user.id), columns: { accessLevel: true },
         });
+        const lvl = me?.accessLevel ?? 'user';
+        if (lvl !== 'hr' && lvl !== 'sysadmin') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Your name is maintained by HR. Contact them to change it.',
+          });
+        }
       }
       const updates: Record<string, unknown> = {};
       if (input.name !== undefined) updates.name = input.name.trim() || null;

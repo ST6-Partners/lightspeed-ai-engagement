@@ -100,6 +100,10 @@ function AccountPanel({ me, onSaved }: { me: any; onSaved: () => void }) {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const updateProfile = trpc.auth.updateProfile.useMutation({ onSuccess: onSaved });
+  // Display name is HR-owned (2026-08-03); the profile picture is not — everyone
+  // sets their own, so only the name control is gated here.
+  const canEditName = (me as { accessLevel?: string } | undefined)?.accessLevel === 'hr'
+    || (me as { accessLevel?: string } | undefined)?.accessLevel === 'sysadmin';
   const changePassword = trpc.auth.changePassword.useMutation();
 
   const onPickPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +159,7 @@ function AccountPanel({ me, onSaved }: { me: any; onSaved: () => void }) {
         </div>
       </div>
       <div className="mt-3">
-        <button onClick={saveName} disabled={updateProfile.isLoading} className="ls-btn ls-btn-primary">Save profile</button>
+        <button onClick={saveName} disabled={!canEditName || updateProfile.isLoading} className="ls-btn ls-btn-primary">Save profile</button>
       </div>
 
       <div className="border-t border-ls-line mt-5 pt-5">

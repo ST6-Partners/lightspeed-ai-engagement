@@ -93,13 +93,13 @@ export const profileRouter = router({
 
   // Update ONLY the user's own editable fields. Any org/access field is ignored
   // even if sent — org data comes from the admin upload.
-  // Profile data is HR-owned as of 2026-08-03 — an employee can no longer edit
-  // their own name, photo, employee record or date of birth. Three exceptions,
-  // all deliberate:
+  // Profile data is HR-owned as of 2026-08-03 — an employee cannot edit their
+  // own name, employee record, date of birth, gender or ethnicity. Gender and
+  // ethnicity are HR-entered by PM ruling (2026-08-03), not self-identified.
+  // Two exceptions:
   //   - timezone: set automatically by the browser so clocks are right when
   //     someone travels. Not really profile data.
-  //   - gender / ethnicity: self-identified. Having HR assign these on
-  //     someone's behalf is the wrong default, so the employee keeps them.
+  //   - avatarUrl: everyone sets their own profile picture.
   // Everything else needs HR or Sysadmin, who edit people via auth.updateUser.
   updateSelf: protectedProcedure
     .input(z.object({
@@ -116,7 +116,7 @@ export const profileRouter = router({
       ethnicity: z.string().max(80).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const SELF_EDITABLE = new Set(['timezone', 'gender', 'ethnicity']);
+      const SELF_EDITABLE = new Set(['timezone', 'avatarUrl']);
       const attempted = Object.keys(input).filter((k) => input[k as keyof typeof input] !== undefined);
       const restricted = attempted.filter((k) => !SELF_EDITABLE.has(k));
 

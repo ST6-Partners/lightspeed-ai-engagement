@@ -44,6 +44,11 @@ function ReadonlyRow({ label, value }: { label: string; value: string | null | u
 export default function Profile() {
   const utils = trpc.useContext();
   const { data: p, isLoading } = trpc.profile.get.useQuery();
+  // Person records are HR-owned as of 2026-08-03. Everyone can still SEE their
+  // own details; only HR and sysadmins can change them. The fields are disabled
+  // rather than hidden so people can check what the company holds about them.
+  const { data: me } = trpc.auth.me.useQuery();
+  const canEdit = me?.accessLevel === 'hr' || me?.accessLevel === 'sysadmin';
   const save = trpc.profile.updateSelf.useMutation({
     onSuccess: () => { utils.profile.get.invalidate(); utils.auth.me.invalidate(); setSaved(true); },
   });
@@ -133,14 +138,14 @@ export default function Profile() {
               </select>
             </div>
             <div>
-              <select className={inputCls} value={month} disabled={!year}
+              <select className={inputCls} value={month} disabled={!canEdit || !year}
                 onChange={(e) => { setMonth(e.target.value); setSaved(false); }}>
                 <option value="">Month</option>
                 {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
               </select>
             </div>
             <div>
-              <select className={inputCls} value={day} disabled={!year}
+              <select className={inputCls} value={day} disabled={!canEdit || !year}
                 onChange={(e) => { setDay(e.target.value); setSaved(false); }}>
                 <option value="">Day</option>
                 {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -151,7 +156,7 @@ export default function Profile() {
         </div>
 
         <div className="flex items-center gap-3 mt-5">
-          <button onClick={onSave} disabled={save.isPending || yearMissing} className="ls-btn ls-btn-primary disabled:opacity-50">
+          <button onClick={onSave} disabled={!canEdit || save.isPending || yearMissing} className="ls-btn ls-btn-primary disabled:opacity-50">
             {save.isPending ? 'Saving…' : 'Save changes'}
           </button>
           {saved && <span className="ls-chip bg-ls-thrive-bg text-ls-thrive">Saved</span>}
@@ -162,19 +167,19 @@ export default function Profile() {
       {/* About you — editable, self-reported */}
       <div className="ls-card p-5 mb-5">
         <h2 className="text-lg font-bold text-ls-ink-1 mb-1">About you</h2>
-        <p className="text-[13px] text-ls-ink-3 mb-4">Optional and self-reported. Share as much or as little as you like.</p>
+        <p className="text-[13px] text-ls-ink-3 mb-4">{canEdit ? 'Maintained by HR.' : 'Maintained by HR. Contact them if anything here is wrong.'}</p>
         <div>
           <label className={lblCls}>Date of birth <span className="text-ls-ink-3 normal-case">(year required; month &amp; day optional)</span></label>
           <div className="grid grid-cols-4 gap-3 max-w-xl">
-            <select className={inputCls} value={dYear} onChange={(e) => { setDYear(e.target.value); setSaved(false); }}>
+            <select className={inputCls} value={dYear} disabled={!canEdit} onChange={(e) => { setDYear(e.target.value); setSaved(false); }}>
               <option value="">Year</option>
               {DOB_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
-            <select className={inputCls} value={dMonth} disabled={!dYear} onChange={(e) => { setDMonth(e.target.value); setSaved(false); }}>
+            <select className={inputCls} value={dMonth} disabled={!canEdit || !dYear} onChange={(e) => { setDMonth(e.target.value); setSaved(false); }}>
               <option value="">Month</option>
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
-            <select className={inputCls} value={dDay} disabled={!dYear} onChange={(e) => { setDDay(e.target.value); setSaved(false); }}>
+            <select className={inputCls} value={dDay} disabled={!canEdit || !dYear} onChange={(e) => { setDDay(e.target.value); setSaved(false); }}>
               <option value="">Day</option>
               {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
@@ -189,7 +194,7 @@ export default function Profile() {
         <div className="grid sm:grid-cols-2 gap-4 mt-4">
           <div>
             <label className={lblCls}>Gender</label>
-            <select className={inputCls} value={gender} onChange={(e) => { setGender(e.target.value); setSaved(false); }}>
+            <select className={inputCls} value={gender} disabled={!canEdit} onChange={(e) => { setGender(e.target.value); setSaved(false); }}>
               <option value="">—</option>
               {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
               {gender && !GENDERS.includes(gender) && <option value={gender}>{gender}</option>}
@@ -197,7 +202,7 @@ export default function Profile() {
           </div>
           <div>
             <label className={lblCls}>Ethnicity</label>
-            <select className={inputCls} value={ethnicity} onChange={(e) => { setEthnicity(e.target.value); setSaved(false); }}>
+            <select className={inputCls} value={ethnicity} disabled={!canEdit} onChange={(e) => { setEthnicity(e.target.value); setSaved(false); }}>
               <option value="">Select… (optional)</option>
               {ETHNICITIES.map((x) => <option key={x} value={x}>{x}</option>)}
               {ethnicity && !ETHNICITIES.includes(ethnicity) && <option value={ethnicity}>{ethnicity}</option>}
@@ -206,7 +211,7 @@ export default function Profile() {
         </div>
 
         <div className="flex items-center gap-3 mt-5">
-          <button onClick={onSave} disabled={save.isPending || yearMissing} className="ls-btn ls-btn-primary disabled:opacity-50">
+          <button onClick={onSave} disabled={!canEdit || save.isPending || yearMissing} className="ls-btn ls-btn-primary disabled:opacity-50">
             {save.isPending ? 'Saving\u2026' : 'Save changes'}
           </button>
           {saved && <span className="ls-chip bg-ls-thrive-bg text-ls-thrive">Saved</span>}
