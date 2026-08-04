@@ -736,6 +736,13 @@
       "when": 1785861121349,
       "tag": "0103_aie_employee_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1785861121350,
+      "tag": "0104_aie_manager_core_data",
+      "breakpoints": true
     }
   ]
 }

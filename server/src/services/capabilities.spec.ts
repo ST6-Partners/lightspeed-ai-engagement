@@ -56,7 +56,9 @@ t('User Core Data — departments kept', canSeeCoreDataItem('user', 'departments
 t('User Core Data — company values kept', canSeeCoreDataItem('user', 'values'), true);
 t('User Core Data — rating scale kept', canSeeCoreDataItem('user', 'rating-scale'), true);
 t('User Core Data — performance criteria kept', canSeeCoreDataItem('user', 'performance-criteria'), true);
-t('User Core Data — check-in questions kept', canSeeCoreDataItem('user', 'checkin-questions'), true);
+// Revised 2026-08-03: pulse (check-in) questions are an instrument too, so
+// they join the hidden set. Also relabelled Pulse Questions in the UI.
+t('User Core Data — pulse questions hidden', canSeeCoreDataItem('user', 'checkin-questions'), false);
 
 // ── Second pass, 2026-08-03 ──────────────────────────────────
 t('User reads OKRs but cannot edit them', canDo('user', 'okr.edit'), false);
@@ -72,6 +74,14 @@ t('Manager can read all of Core Data', canSeeCoreDataItem('manager', 'org-data')
 t('Manager cannot edit the manager-survey questions', canDo('manager', 'managerSurvey.editQuestions'), false);
 t('HR can edit the manager-survey questions', canDo('hr', 'managerSurvey.editQuestions'), true);
 t('Sysadmin can edit the manager-survey questions', canDo('sysadmin', 'managerSurvey.editQuestions'), true);
+
+// ── Third pass, 2026-08-03 ───────────────────────────────────
+t('User fills in a manager survey', canDo('user', 'managerSurvey.submit'), true);
+t('Manager does NOT fill one in — reads what they were given', canDo('manager', 'managerSurvey.submit'), false);
+t('User cannot send an exit survey (Development create hidden)', canDo('user', 'exitSurvey.send'), false);
+t('Manager reads Core Data — org data', canSeeCoreDataItem('manager', 'org-data'), true);
+t('Manager reads Core Data — assessments', canSeeCoreDataItem('manager', 'assessments'), true);
+t('Manager reads Core Data — pulse questions', canSeeCoreDataItem('manager', 'checkin-questions'), true);
 
 console.log(fail ? `\n${fail} FAILED` : `\nAll ${'assertions'} passed`);
 process.exit(fail ? 1 : 0);

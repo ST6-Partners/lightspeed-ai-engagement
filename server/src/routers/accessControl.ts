@@ -158,7 +158,7 @@ export const accessControlRouter = router({
         sysadmin: { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
         elt:      { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
         hr:       { planning: 'all', engagement: 'all', insights: 'all', documents: 'all', assessments: 'all' },
-        manager:  { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'none', assessments: 'down_org' },
+        manager:  { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'all', assessments: 'down_org' },
         user:     { planning: 'down_org', engagement: 'down_org', insights: 'down_org', documents: 'all', assessments: 'none' },
       };
       for (const level of ACCESS_LEVELS) {

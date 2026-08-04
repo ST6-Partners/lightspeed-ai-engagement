@@ -1,4 +1,5 @@
 import { fmtDate, fmtDateTime } from '../lib/date';
+import { useCapabilities } from '../lib/useCapabilities';
 // ============================================================
 // MANAGER SURVEY — upward feedback filled out AFTER a 1:1 with your manager.
 // An employee rates their manager 1..5 across the active Survey Questions.
@@ -30,7 +31,11 @@ const avgOf = (r: Record<string, number>) => {
 type View = 'form' | 'history';
 
 export default function ManagerSurvey() {
-  const [view, setView] = useState<View>('form');
+  const { can } = useCapabilities();
+  const mayAuthor = can('managerSurvey.submit');
+  // Open on the history list for anyone who does not author these, so the page
+  // never lands on a blank form they are not meant to fill in.
+  const [view, setView] = useState<View>(mayAuthor ? 'form' : 'history');
 
   const { data: people } = trpc.pip.listUsers.useQuery();
   const { data: questions, isLoading: qLoading } = trpc.managerSurveyQuestions.list.useQuery();
@@ -78,8 +83,11 @@ export default function ManagerSurvey() {
   const TabBar = () => (
     <div className="flex gap-1 mb-4 border-b border-gray-200">
       {([
-        { key: 'form' as const, label: 'After a 1:1', icon: ClipboardList },
-        { key: 'history' as const, label: 'Past Responses', icon: History },
+        // The authoring tab only exists for someone who fills these in about
+        // their own manager. A manager reads the ones they were given, so the
+        // screen collapses to the history list (2026-08-03).
+        ...(mayAuthor ? [{ key: 'form' as const, label: 'After a 1:1', icon: ClipboardList }] : []),
+        { key: 'history' as const, label: mayAuthor ? 'Past Responses' : 'Reviews you have been given', icon: History },
       ]).map(({ key, label, icon: Icon }) => {
         const on = view === key;
         return (

@@ -34,7 +34,7 @@ const cards: Card[] = [
     desc: 'The company values referenced across reviews and coaching.' },
   { item: 'performance-criteria', path: '/core-data/performance-criteria', label: 'Performance Criteria', icon: Gauge,
     desc: 'The criteria used to evaluate performance.' },
-  { item: 'checkin-questions', path: '/core-data/checkin-questions', label: 'Check-in Questions', icon: MessageCircle,
+  { item: 'checkin-questions', path: '/core-data/checkin-questions', label: 'Pulse Questions', icon: MessageCircle,
     desc: 'The prompts used in recurring pulses / check-ins.' },
   { item: 'engagement-questions', path: '/core-data/engagement-questions', label: 'Engagement Questions', icon: ListChecks,
     desc: 'Add, remove, or toggle the questions on the engagement survey.' },

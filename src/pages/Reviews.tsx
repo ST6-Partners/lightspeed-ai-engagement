@@ -46,6 +46,13 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
 
   const [periodLabel, setPeriodLabel] = useState('');
   const [employeeId, setEmployeeId] = useState(lockedEmployeeId ?? '');
+
+  // A viewer who cannot author reviews only ever looks at their own, so pin the
+  // subject to them. Without this the page opens on "Select an employee…",
+  // which reads as an invitation to review somebody.
+  useEffect(() => {
+    if (!canEdit && me?.id && employeeId !== me.id) setEmployeeId(me.id);
+  }, [canEdit, me?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (lockedEmployeeId) setEmployeeId(lockedEmployeeId); }, [lockedEmployeeId]);
   const [tab, setTab] = useState<Tab>('values');
 
@@ -86,7 +93,9 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
       {!hidePicker && (<>
       <div className="ls-eyebrow mb-1">Engagement</div>
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Star size={22} className="text-amber-500" /> Reviews</h1>
-      <p className="text-sm text-ls-ink-3 mb-5">Choose a review period and an employee, then score them against the company values or performance criteria.</p>
+      <p className="text-sm text-ls-ink-3 mb-5">{canEdit
+        ? 'Choose a review period and an employee, then score them against the company values or performance criteria.'
+        : 'The reviews you have been given. Pick a period to see it.'}</p>
       </>)}
 
       {/* Period + employee pickers — SHARED across tabs (hidden while editing a review) */}
@@ -108,7 +117,7 @@ function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: 
               )}
             </div>
           </div>
-          {!hidePicker && (
+          {!hidePicker && canEdit && (
           <div className="flex-1 min-w-[200px]">
             <label className="block text-[11px] uppercase tracking-wide text-gray-500 mb-1">Employee</label>
             <select

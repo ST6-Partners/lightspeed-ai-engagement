@@ -57,7 +57,7 @@ export default function CheckinQuestions() {
       <div className="mb-4 flex items-center gap-2">
         <ListChecks className="text-blue-600" size={22} />
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Check-in Questions</h1>
+          <h1 className="text-xl font-bold text-gray-900">Pulse Questions</h1>
           <div className="my-2"><ImportButton label="Import questions" hint="CSV: text, category, driver"
             onImport={async (rows) => imp.mutateAsync({ rows: rows.map((r) => ({ text: r.text ?? r.question ?? '', category: r.category, driver: r.driver })) })} /></div>
           <p className="text-sm text-gray-500">Pick which questions the check-in asks, their type, and how often it runs.</p>

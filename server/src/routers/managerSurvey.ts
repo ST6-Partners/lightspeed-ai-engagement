@@ -9,6 +9,7 @@
 // ============================================================
 
 import { z } from 'zod';
+import { requireAction } from '../services/access.js';
 import { desc, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -19,6 +20,7 @@ const ratingsSchema = z.record(z.string().uuid(), z.number().int().min(1).max(5)
 
 export const managerSurveyRouter = router({
   submit: protectedProcedure
+    .use(requireAction('managerSurvey.submit'))
     .input(z.object({
       respondentId: z.string().uuid().optional(),
       managerId: z.string().uuid(),

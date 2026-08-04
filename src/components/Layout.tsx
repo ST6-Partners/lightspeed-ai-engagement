@@ -69,7 +69,7 @@ const navGroups: NavGroup[] = [
         { path: '/core-data/org-data', label: 'Org Data', item: 'org-data' },
         { path: '/core-data/values', label: 'Company Values', item: 'values' },
         { path: '/core-data/performance-criteria', label: 'Performance Criteria', item: 'performance-criteria' },
-        { path: '/core-data/checkin-questions', label: 'Check-in Questions', item: 'checkin-questions' },
+        { path: '/core-data/checkin-questions', label: 'Pulse Questions', item: 'checkin-questions' },
         { path: '/core-data/engagement-questions', label: 'Engagement Questions', item: 'engagement-questions' },
       ] },
     ],

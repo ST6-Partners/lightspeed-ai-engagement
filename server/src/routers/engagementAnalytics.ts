@@ -107,10 +107,40 @@ export function engagementTierOf(answers: Record<string, number>, scaleMax: numb
   return (ENGAGEMENT_TIERS.find((t) => pctOfScale >= t.min) ?? ENGAGEMENT_TIERS[ENGAGEMENT_TIERS.length - 1]).key;
 }
 
+
+// ── Viewer scope, shared by every read in this file ──────────
+// Ten separate procedures each ran `engagementSurveyResponses.findMany()` with
+// no scope. Two were fixed by hand and the other eight still returned every
+// response in the company, so a manager saw the whole organisation's answers.
+// Both concerns now live in one place: may you see results at all, and whose.
+async function assertCanViewResults(ctx: any) {
+  const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+  if (!level || !canDo(level, 'survey.viewResults')) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to survey results.' });
+  }
+}
+
+/**
+ * Every response the viewer is allowed to count. Full reach returns all of
+ * them; anything narrower keeps only responses whose manager path runs through
+ * someone in the viewer's subtree — which is how a manager sees their own
+ * branch, all the way down, and nothing beside it.
+ */
+type ResponseRow = typeof engagementSurveyResponses.$inferSelect;
+
+async function readResponses(ctx: any): Promise<ResponseRow[]> {
+  const rows: ResponseRow[] = await ctx.db.query.engagementSurveyResponses.findMany();
+  const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'insights', ctx.req.session?.previewLevel);
+  if (acc.reach === 'all') return rows;
+  const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+  return rows.filter((r) => (r.managerPath ?? []).some((id: string) => scope.has(id)));
+}
+
 export const engagementAnalyticsRouter = router({
   // ── Filter options for the analytics filter bar (from in-app responses + roster) ──
   filterOptions: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.query.engagementSurveyResponses.findMany();
+    await assertCanViewResults(ctx);
+    const rows = await readResponses(ctx);
     const uniq = (xs: (string | null | undefined)[]) =>
       [...new Set(xs.map((x) => (x ?? '').trim()).filter(Boolean))].sort();
     // Hierarchy roll-up options = everyone who appears as an ancestor in any
@@ -193,21 +223,9 @@ export const engagementAnalyticsRouter = router({
       // branch and so fell through to every response in the company, and 'admin
       // tier' now includes every sysadmin. Both are decided by the capability
       // table and the grid instead.
-      const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
-      if (!level || !canDo(level, 'survey.viewResults')) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to survey results.' });
-      }
+      await assertCanViewResults(ctx);
       const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'insights', ctx.req.session?.previewLevel);
-
-      let rows = await ctx.db.query.engagementSurveyResponses.findMany();
-
-      // A manager sees only responses from people on their own branch. Scoped
-      // by the resolved subtree rather than by direct reports, so it reaches
-      // all the way down.
-      if (acc.reach !== 'all') {
-        const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
-        rows = rows.filter((r) => (r.managerPath ?? []).some((id) => scope.has(id)));
-      }
+      let rows = await readResponses(ctx);
 
       const thisYear = new Date().getFullYear();
       const bandOf = (startYear: number | null | undefined): string | null => {
@@ -308,6 +326,7 @@ export const engagementAnalyticsRouter = router({
   results: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+    await assertCanViewResults(ctx);
     const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
     const metricRows = await ctx.db.query.surveyMetrics.findMany();
     // Question bank drives the driver map + question text (falls back to the built-in
@@ -349,7 +368,7 @@ export const engagementAnalyticsRouter = router({
     }
 
     // ── Live period from confidential responses ──────────────────────────────
-    const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    const responses = await readResponses(ctx);
     let livePeriod: PeriodInfo | null = null;
     // live aggregates: keyed the same way as metricMap under period id 'live'
     const liveAgg = new Map<string, Agg>();
@@ -570,7 +589,7 @@ export const engagementAnalyticsRouter = router({
   // ── Period list for the Org-screen engagement selector ───────────────────
   periods: protectedProcedure.query(async ({ ctx }) => {
     const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
-    const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    const responses = await readResponses(ctx);
     const historical = periodRows
       .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
       .sort((a, b) => a.periodDate.localeCompare(b.periodDate))
@@ -588,6 +607,7 @@ export const engagementAnalyticsRouter = router({
   personCard: protectedProcedure
     .input(z.object({ userId: z.string().uuid(), periodId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
+    await assertCanViewResults(ctx);
       // Engagement anonymity floor = 3, matching the breakdown path (MIN=3) and
       // the app-wide rule: a team with fewer than 3 responses is suppressed.
       const SUPPRESS_MIN = 3;
@@ -596,7 +616,7 @@ export const engagementAnalyticsRouter = router({
 
       const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
       const metricRows = await ctx.db.query.surveyMetrics.findMany();
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const responses = await readResponses(ctx);
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
       const Q_DRIVER: Record<string, DriverKey> = qbank.length
         ? Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as DriverKey]))
@@ -809,8 +829,9 @@ export const engagementAnalyticsRouter = router({
   rawResponses: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), department: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+    await assertCanViewResults(ctx);
       const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const responses = await readResponses(ctx);
       const hasLive = responses.length > 0;
       const hist = periodRows
         .map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate }))
@@ -851,6 +872,7 @@ export const engagementAnalyticsRouter = router({
   campaignProgress: protectedProcedure
     .input(z.object({ periodId: z.string().optional(), groupBy: z.enum(['dept', 'mgr', 'hier', 'loc']).default('dept') }))
     .query(async ({ ctx, input }) => {
+    await assertCanViewResults(ctx);
       type Grp = { name: string; people: number; responseCount: number; responseRatePct: number | null };
       if (input.groupBy === 'loc') {
         return { available: false as const, groupBy: 'loc' as const, reason: 'no-location-field', periodLabel: '', partial: false as const, groups: [] as Grp[] };
@@ -860,7 +882,7 @@ export const engagementAnalyticsRouter = router({
       const deptNameById = new Map(allDepts.map((d) => [d.id, d.name]));
       const active = allUsers.filter((u) => u.isActive);
       const periodRows = (await ctx.db.query.surveyPeriods.findMany()).filter((p) => !p.archivedAt);
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+      const responses = await readResponses(ctx);
       const hist = periodRows.map((p) => ({ id: p.id, label: p.label, periodDate: p.periodDate })).sort((a, b) => a.periodDate.localeCompare(b.periodDate));
       const live = responses.length > 0 ? { id: 'live', label: 'Current survey', periodDate: new Date().toISOString().slice(0, 10) } : null;
       const periods = live ? [...hist, live] : hist;
@@ -901,7 +923,8 @@ export const engagementAnalyticsRouter = router({
   enps: protectedProcedure
     .input(z.object({ periodId: z.string().optional() }).optional())
     .query(async ({ ctx }) => {
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    await assertCanViewResults(ctx);
+      const responses = await readResponses(ctx);
       const withE = responses.filter((r) => r.enpsScore != null);
       if (withE.length === 0) return { available: false as const };
       const total = withE.length;
@@ -936,7 +959,8 @@ export const engagementAnalyticsRouter = router({
   feedback: protectedProcedure
     .input(z.object({ periodId: z.string().optional() }).optional())
     .query(async ({ ctx }) => {
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    await assertCanViewResults(ctx);
+      const responses = await readResponses(ctx);
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
       const qDriver: Record<string, string> = Object.fromEntries(qbank.filter((q) => q.driver).map((q) => [q.id, q.driver as string]));
       const qText: Record<string, string> = Object.fromEntries(qbank.map((q) => [q.id, q.text]));
@@ -987,7 +1011,8 @@ export const engagementAnalyticsRouter = router({
   heatmapCells: protectedProcedure
     .input(z.object({ periodId: z.string().optional() }).optional())
     .query(async ({ ctx }) => {
-      const responses = await ctx.db.query.engagementSurveyResponses.findMany();
+    await assertCanViewResults(ctx);
+      const responses = await readResponses(ctx);
       if (responses.length === 0) return { available: false as const, columns: [] as { id: string; driver: string | null; text: string }[], rows: [] as unknown[] };
       const qbank = await ctx.db.query.engagementSurveyQuestions.findMany();
       const qDriver: Record<string, string> = qbank.length

@@ -4,6 +4,7 @@
 //   Analytics: Summary · Engagement · Drivers · Statements · Heatmap · eNPS · Feedback,
 //   with a Groups selector (ELT Leaders / Hierarchy / Departments / Business Units).
 import { useState, useEffect } from 'react';
+import { useCapabilities } from '../lib/useCapabilities';
 import { trpc } from '../lib/trpc';
 import SurveyForm from '../components/engagement/SurveyForm';
 import { ResultsSummary, ResultsDrivers } from '../components/engagement/Results';
@@ -68,16 +69,23 @@ export default function EngagementSurvey() {
   };
   const anyFilter = Object.keys(activeFilters).length > 0;
 
-  const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: view !== 'survey' });
-  const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: progressPeriod, groupBy }, { enabled: view === 'landing' });
-  const groups = trpc.engagementAnalytics.groups.useQuery(undefined, { enabled: view === 'analytics' });
-  const fopts = trpc.engagementAnalytics.filterOptions.useQuery(undefined, { enabled: view === 'analytics' });
+  // A user takes the survey and never sees results, so every results query is
+  // switched off for them — otherwise the page fires a wall of requests the
+  // server correctly refuses, and the console fills with red on an ordinary
+  // employee's screen.
+  const { can } = useCapabilities();
+  const canSeeResults = can('survey.viewResults');
+
+  const results = trpc.engagementAnalytics.results.useQuery({ periodId, department }, { enabled: canSeeResults && view !== 'survey' });
+  const progress = trpc.engagementAnalytics.campaignProgress.useQuery({ periodId: progressPeriod, groupBy }, { enabled: canSeeResults && view === 'landing' });
+  const groups = trpc.engagementAnalytics.groups.useQuery(undefined, { enabled: canSeeResults && view === 'analytics' });
+  const fopts = trpc.engagementAnalytics.filterOptions.useQuery(undefined, { enabled: canSeeResults && view === 'analytics' });
   const me = trpc.auth.me.useQuery();
   const isAdmin = hasMinRole((me.data?.role ?? 'user') as RoleTier, 'admin');
   // Outcome filters slice by individual respondents, so they are HR / ELT only
   // (mirrors the server gate — see the note in engagementAnalytics.filtered).
   const canSeeOutcomes = isAdmin || me.data?.isHrAccess === true || me.data?.leaderBadge === 'ELT';
-  const filtered = trpc.engagementAnalytics.filtered.useQuery(activeFilters, { enabled: view === 'analytics' });
+  const filtered = trpc.engagementAnalytics.filtered.useQuery(activeFilters, { enabled: canSeeResults && view === 'analytics' });
   const suppressed = filtered.data?.suppressed === true;
   useEffect(() => { if (suppressed && anyFilter) setShowSuppress(true); }, [suppressed, anyFilter]);
   const data = results.data;
@@ -116,17 +124,26 @@ export default function EngagementSurvey() {
           <div>
             <div className="ls-eyebrow mb-1">Engagement</div>
             <h1 className="text-2xl font-bold tracking-tight">Engagement Surveys</h1>
-            <p className="text-sm text-ls-ink-3 mb-5">Pick a survey to view its results, or launch the questionnaire.</p>
+            <p className="text-sm text-ls-ink-3 mb-5">{canSeeResults
+              ? 'Pick a survey to view its results, or launch the questionnaire.'
+              : 'Your answers are confidential. Results are reported as group averages only.'}</p>
           </div>
           <button onClick={() => setView('survey')} className="ls-btn ls-btn-primary shrink-0">Take Survey</button>
         </div>
 
-        {results.isLoading && <div className="ls-card p-8 text-center text-sm text-ls-ink-3">Loading…</div>}
-        {!results.isLoading && !hasData && (
+        {!canSeeResults && (
+          <div className="ls-card p-8 text-center">
+            <h2 className="font-bold mb-1">Ready when you are</h2>
+            <p className="text-sm text-ls-ink-3">Take the survey above. It only takes a few minutes.</p>
+          </div>
+        )}
+
+        {canSeeResults && results.isLoading && <div className="ls-card p-8 text-center text-sm text-ls-ink-3">Loading…</div>}
+        {canSeeResults && !results.isLoading && !hasData && (
           <div className="ls-card p-8 text-center"><h2 className="font-bold mb-1">No results yet</h2><p className="text-sm text-ls-ink-3">Once responses come in — or historical results are imported — surveys appear here.</p></div>
         )}
 
-        {hasData && (
+        {canSeeResults && hasData && (
           <>
             {cur && (
               <div className="ls-card p-5 cursor-pointer hover:border-ls-blue transition-colors" onClick={() => openPeriod(cur.id)}>
@@ -193,7 +210,7 @@ export default function EngagementSurvey() {
           </>
         )}
 
-        {isAdmin && <ImportResultsPanel onOpenSurvey={openPeriod} />}
+        {canSeeResults && isAdmin && <ImportResultsPanel onOpenSurvey={openPeriod} />}
         {isAdmin && <ManageSurveysPanel />}
         {isAdmin && hasData && data.periods.some((p) => p.id !== 'live') && (
           <VerifyImportPanel

@@ -5,6 +5,7 @@
 // the questions diagnose manager quality; the signature mechanic is "surprise",
 // which flips owner by exit type.
 import { Fragment, useState } from 'react';
+import { useCapabilities } from '../lib/useCapabilities';
 import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../server/src/router';
@@ -69,6 +70,10 @@ export default function ExitSurvey() {
 
 // ---------------- LIST ----------------
 function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => void; onOpen: (id: string) => void }) {
+  // Starting an exit diagnostic on somebody is a send. A user only ever answers
+  // one addressed to them (2026-08-03).
+  const { can } = useCapabilities();
+  const canSend = can('exitSurvey.send');
   const create = trpc.exitSurvey.create.useMutation({ onSuccess: () => { setName(''); setRole(''); setMgr(''); refetch(); } });
   const [name, setName] = useState(''); const [role, setRole] = useState(''); const [mgr, setMgr] = useState(''); const [type, setType] = useState<Mode>('vol');
   const { data: org } = trpc.organization.list.useQuery();
@@ -88,8 +93,13 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
     <div className="max-w-4xl mx-auto">
       <div className="ls-eyebrow mb-1">Engagement</div>
       <h1 className="text-2xl font-bold tracking-tight">Exit Survey</h1>
-      <p className="text-sm text-ls-ink-3 mb-5">A two-part exit diagnostic — departing employee and manager — built for side-by-side comparison. Click any row to open the full record: both completed forms and the HR comparison.</p>
+      <p className="text-sm text-ls-ink-3 mb-5">{canSend
+        ? 'A two-part exit diagnostic — departing employee and manager — built for side-by-side comparison. Click any row to open the full record: both completed forms and the HR comparison.'
+        : 'Exit surveys addressed to you. Open one to fill it in.'}</p>
 
+      {/* Opening an exit diagnostic on somebody is a send, not a fill-in. A user
+          answers one addressed to them and never starts one (2026-08-03). */}
+      {canSend && (
       <div className="ls-card p-4 mb-5">
         <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3 mb-3">New exit diagnostic</div>
         <div className="grid sm:grid-cols-3 gap-3">
@@ -117,10 +127,11 @@ function ListView({ rows, refetch, onOpen }: { rows: ExitRow[]; refetch: () => v
           <button disabled={!name.trim() || create.isPending} onClick={() => create.mutate({ subjectName: name.trim(), subjectRole: role.trim() || undefined, managerName: mgr.trim() || undefined, exitType: type })} className="ls-btn ls-btn-primary disabled:opacity-50">Create exit</button>
         </div>
       </div>
+      )}
 
-      <div className="font-semibold mb-2">All exits</div>
+      <div className="font-semibold mb-2">{canSend ? 'All exits' : 'Your exit surveys'}</div>
       <div className="ls-card overflow-hidden">
-        {rows.length === 0 && <div className="text-sm text-ls-ink-3 p-8 text-center">No exit diagnostics yet — create one above.</div>}
+        {rows.length === 0 && <div className="text-sm text-ls-ink-3 p-8 text-center">{canSend ? 'No exit diagnostics yet — create one above.' : 'Nothing here right now.'}</div>}
         {rows.map((s) => {
           const g = surpriseGap(s);
           const tone = g == null ? 'bg-ls-bg-2 text-ls-ink-3' : g >= 3 ? 'bg-ls-risk-bg text-ls-risk' : g === 2 ? 'bg-ls-watch-bg text-ls-watch' : 'bg-ls-thrive-bg text-ls-thrive';

@@ -43,7 +43,7 @@ export type CoreDataItem = (typeof CORE_DATA_ITEMS)[number];
 /** Withheld from a plain user: the instruments and the raw org/assessment data. */
 const USER_HIDDEN_CORE_DATA: CoreDataItem[] = [
   'survey-questions', 'peer-review-questions', 'engagement-questions',
-  'org-data', 'assessments',
+  'checkin-questions', 'org-data', 'assessments',
 ];
 
 // ── Actions ──────────────────────────────────────────────────
@@ -54,6 +54,7 @@ export const ACTIONS = [
   'survey.takeOwn',              // answer it — everyone
   'survey.viewResults',          // see the aggregate results
   'managerSurvey.editQuestions', // the instrument managers are rated WITH
+  'managerSurvey.submit',        // fill one in about your own manager
   'pip.create',
   'coaching.create',
   'exitSurvey.send',             // send one TO somebody
@@ -82,7 +83,7 @@ const ALL_REVIEW_TABS = REVIEW_TABS;
 // deliberately including sysadmin in the exclusion (PM ruling). Sysadmin
 // administers the system; it does not speak to the company.
 const SYSADMIN_ACTIONS: Action[] = [
-  'survey.takeOwn', 'survey.viewResults', 'managerSurvey.editQuestions',
+  'survey.takeOwn', 'survey.viewResults', 'managerSurvey.editQuestions', 'managerSurvey.submit',
   'pip.create', 'coaching.create', 'exitSurvey.send', 'exitSurvey.submitOwn',
   'review.author', 'ninebox.rate', 'priorities.set', 'okr.edit', 'employees.edit',
 ];
@@ -115,6 +116,10 @@ const CAPS: Record<AccessLevel, Caps> = {
   manager: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
     coreDataItems: ALL_CORE_DATA,
+    // managerSurvey.submit is absent by PM ruling (2026-08-03): on the Manager
+    // Review tab a manager reads what they were given, they do not author.
+    // NOTE this also means a manager cannot review their own manager — flagged
+    // to the PM rather than quietly softened.
     actions: [
       'survey.takeOwn', 'survey.viewResults',
       'pip.create', 'coaching.create', 'exitSurvey.send', 'exitSurvey.submitOwn',
@@ -133,7 +138,7 @@ const CAPS: Record<AccessLevel, Caps> = {
             'development', 'engagement-survey', 'core-data'],
     reviewTabs: ALL_REVIEW_TABS,
     coreDataItems: ALL_CORE_DATA.filter((i) => !USER_HIDDEN_CORE_DATA.includes(i)),
-    actions: ['exitSurvey.submitOwn', 'survey.takeOwn'],
+    actions: ['exitSurvey.submitOwn', 'survey.takeOwn', 'managerSurvey.submit'],
   },
 };
 
