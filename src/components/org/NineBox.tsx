@@ -34,13 +34,22 @@ const boxOf = (p: number, q: number) => q * 3 + p + 1;
 const AGGREGATE_VIEWS_ENABLED = false;
 
 // Right-rail band membership + ordering (PM, 2026-08-04).
-// Top performers reads Star -> High Impact -> High Potential (the top row, best
-// performance first). Needs attention reads worst-first: Risk -> Inconsistent ->
-// Developing. Inconsistent sits ahead of Developing because Developing still
-// carries potential upside while Inconsistent does not. Array order IS the sort
-// order — these lists are the single source of truth for both membership and
-// sequence.
-const TOP_ORDER = [9, 8, 7];
+//
+// Top performers reads Star -> High Impact -> Strong. Note this is NOT the top
+// row of the grid: High Potential (7) is LOW performance with high potential —
+// someone who is not delivering yet — so it does not belong in a list titled
+// "Top performers". Strong (6) takes its place: high performance, medium
+// potential. PM call, replacing the original top-row reading.
+//
+// Needs attention reads worst-first: Risk -> Inconsistent -> Developing.
+// Inconsistent sits ahead of Developing because Developing still carries
+// potential upside while Inconsistent does not.
+//
+// Array order IS the sort order — these lists are the single source of truth for
+// both membership and sequence. Boxes in neither list (Effective 3, Core 5,
+// High Potential 7) appear on the grid but in no rail card — see the open
+// question on whether the middle bands should surface at all.
+const TOP_ORDER = [9, 8, 6];
 const RISK_ORDER = [1, 2, 4];
 
 export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly, periodStartISO, periodEndISO }: {
