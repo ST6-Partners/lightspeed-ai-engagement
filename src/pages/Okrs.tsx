@@ -348,7 +348,7 @@ export default function Okrs() {
           <Icon size={14} className="shrink-0 text-ls-blue-deep" />
           <span className={`flex-1 text-[13px] truncate ${n.type === 'objective' ? 'font-semibold' : ''}`}>{n.title}</span>
           {isUnassigned(n) && <span title="Unassigned — needs an owner" className="w-1.5 h-1.5 rounded-full bg-ls-watch shrink-0" />}
-          <span className="text-[11px] text-ls-ink-3 shrink-0 tabular-nums">{Math.round(progressOf(n))}%</span>
+          <span className="text-[11px] text-ls-ink-3 shrink-0 tabular-nums" title={n.parentId ? 'Weight — share of its parent' : 'Weight — the whole goal'}>{n.weight ?? (n.parentId ? 1 : 100)}%</span>
           {n.light && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: LIGHT_HEX[n.light as Light] }} />}
         </div>
         {isExp && kids.map((c) => renderNode(c, depth + 1))}
@@ -706,7 +706,7 @@ export default function Okrs() {
                             style={{ background: n.light ? LIGHT_HEX[n.light as Light] : '#8A969E' }} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm text-ls-ink">{n.title}</div>
-                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status} · {Math.round(progressOf(n))}%</div>
+                            <div className="text-[12px] text-ls-ink-3">{STATUS_LABEL[n.status] ?? n.status}{childrenOf(n.id).length > 0 ? ` · ${Math.round(progressOf(n))}%` : ''}</div>
                             {n.description && <p className="text-[12.5px] text-ls-ink-2 mt-1 whitespace-pre-wrap">{n.description}</p>}
                           </div>
                         </div>
