@@ -15,6 +15,34 @@ const perfOf = (b: number) => (b - 1) % 3;
 const potOf = (b: number) => Math.floor((b - 1) / 3);
 const boxOf = (p: number, q: number) => q * 3 + p + 1;
 
+// Company-wide aggregate views OFF (PM, 2026-08-04).
+//
+// Stage 4 gave admins / HR / ELT two views that silently REPLACED the population
+// the caller passed in: Directs became "every manager (or the ELT team) in the
+// company", Team became "one chip per department centroid". Both read from
+// `allPeople` instead of `people`, so for a company-wide viewer the 3x3 grid did
+// not follow the org-tree selection at all — the exact complaint that prompted
+// this change. The scope toggle now means the same thing for every viewer:
+// Individual = the selected person, Directs = their immediate reports, Team =
+// everyone below them.
+//
+// Flipping this back to `true` restores both views and, with them, the GROUP and
+// DEPARTMENT dropdowns in the right rail — those selects only render inside these
+// modes, so they are hidden by this flag rather than deleted. The cohort/dept
+// state, `TeamChip`, `centroidOf` and the department option list are deliberately
+// left in place below. FOLLOW-UP: decide whether to delete that code outright.
+const AGGREGATE_VIEWS_ENABLED = false;
+
+// Right-rail band membership + ordering (PM, 2026-08-04).
+// Top performers reads Star -> High Impact -> High Potential (the top row, best
+// performance first). Needs attention reads worst-first: Risk -> Inconsistent ->
+// Developing. Inconsistent sits ahead of Developing because Developing still
+// carries potential upside while Inconsistent does not. Array order IS the sort
+// order — these lists are the single source of truth for both membership and
+// sequence.
+const TOP_ORDER = [9, 8, 7];
+const RISK_ORDER = [1, 2, 4];
+
 export default function NineBox({ people, allPeople, scope, canPlace, companyWide, statusById, readOnly, periodStartISO, periodEndISO }: {
   people: Person[];
   // Company-wide population for the leadership aggregate views.
@@ -34,8 +62,9 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
 
   const all = allPeople ?? people;
   // Leadership-only aggregate views (Stage 4): Directs → cohorts, Team → departments.
-  const cohortMode = !!companyWide && scope === 'directs';
-  const deptMode = !!companyWide && scope === 'descendants';
+  // Gated off — see AGGREGATE_VIEWS_ENABLED above.
+  const cohortMode = AGGREGATE_VIEWS_ENABLED && !!companyWide && scope === 'directs';
+  const deptMode = AGGREGATE_VIEWS_ENABLED && !!companyWide && scope === 'descendants';
   const pool = cohortMode || deptMode ? all : people;
 
   const ids = pool.map((p) => p.id);
@@ -168,8 +197,16 @@ export default function NineBox({ people, allPeople, scope, canPlace, companyWid
       const riskT = stats.filter((x) => [1, 2, 4].includes(x.c.box));
       rail = (<>{dropdown}{railCard(`Top teams (${topT.length})`, '#15803d', topT.map((x) => teamRow(x, '#15803d')))}{railCard(`Needs attention (${riskT.length})`, '#b91c1c', riskT.map((x) => teamRow(x, '#b91c1c')))}</>);
     } else {
-      const top = peoplePop.filter((p) => { const b = ratingByUser.get(p.id); return b != null && [7, 8, 9].includes(b); });
-      const risk = peoplePop.filter((p) => { const b = ratingByUser.get(p.id); return b != null && [1, 2, 4].includes(b); });
+      // Ranked by band (TOP_ORDER / RISK_ORDER), then alphabetically inside a band.
+      const byBand = (order: number[]) => (a: Person, b: Person) =>
+        order.indexOf(ratingByUser.get(a.id) as number) - order.indexOf(ratingByUser.get(b.id) as number)
+        || a.name.localeCompare(b.name);
+      const inBand = (order: number[]) => (p: Person) => {
+        const b = ratingByUser.get(p.id);
+        return b != null && order.includes(b);
+      };
+      const top = peoplePop.filter(inBand(TOP_ORDER)).sort(byBand(TOP_ORDER));
+      const risk = peoplePop.filter(inBand(RISK_ORDER)).sort(byBand(RISK_ORDER));
       rail = (<>{dropdown}{railCard(`Top performers (${top.length})`, '#15803d', top.map((p) => personRow(p, '#15803d')))}{railCard(`Needs attention (${risk.length})`, '#b91c1c', risk.map((p) => personRow(p, '#b91c1c')))}</>);
     }
   }
