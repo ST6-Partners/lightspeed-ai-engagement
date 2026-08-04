@@ -82,9 +82,13 @@ export const okrsRouter = router({
       const where = input?.periodId
         ? and(isNull(okrNodes.archivedAt), eq(okrNodes.periodId, input.periodId))
         : isNull(okrNodes.archivedAt);
+      // `id` is the final tiebreak on purpose: seeded rows share a sortOrder AND
+      // a createdAt, so without it Postgres returns them in heap order — which
+      // changes every time a row is updated, making the Plan tree reshuffle
+      // after any save.
       return ctx.db.query.okrNodes.findMany({
         where,
-        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt), asc(okrNodes.id)],
       });
     }),
 
@@ -95,9 +99,13 @@ export const okrsRouter = router({
       const where = input?.periodId
         ? and(isNotNull(okrNodes.archivedAt), eq(okrNodes.periodId, input.periodId))
         : isNotNull(okrNodes.archivedAt);
+      // `id` is the final tiebreak on purpose: seeded rows share a sortOrder AND
+      // a createdAt, so without it Postgres returns them in heap order — which
+      // changes every time a row is updated, making the Plan tree reshuffle
+      // after any save.
       return ctx.db.query.okrNodes.findMany({
         where,
-        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt)],
+        orderBy: [asc(okrNodes.sortOrder), asc(okrNodes.createdAt), asc(okrNodes.id)],
       });
     }),
 

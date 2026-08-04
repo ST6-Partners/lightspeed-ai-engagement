@@ -78,20 +78,20 @@ const attByTitle = Object.fromEntries(sc.plan.map((p) => [p.title, p.attainmentP
 eq('Ship v2 = 70', attByTitle['Ship the v2 platform'], 70);
 eq('Pay down = 50', attByTitle['Pay down tech debt'], 50);
 eq('Grow ARR = 100', attByTitle['Grow ARR 30%'], 100);
-eq('Launch partner = 100 (marked complete overrides rollup)', attByTitle['Launch partner program'], 100);
+eq('Launch partner = 50 (rollup wins over marked complete)', attByTitle['Launch partner program'], 50);
 eq('Cut churn = 75', attByTitle['Cut churn to 5%'], 75);
 eq('Automate onboarding = 0', attByTitle['Automate onboarding'], 0);
 eq('Reach SOC2 = 50', attByTitle['Reach SOC 2 Type II'], 50);
 eq('Explore = 0', attByTitle['Explore new AI tooling'], 0);
 
 // ── Distribution ──
-eq('distribution met/partial/missed', sc.distribution, { met: 2, partial: 4, missed: 2 });
+eq('distribution met/partial/missed', sc.distribution, { met: 1, partial: 5, missed: 2 });
 eq('objectiveCount', sc.objectiveCount, 8);
 eq('completedCount', sc.completedCount, 2);
 
 // ── Team leaderboard ──
 const teamPct = Object.fromEntries(sc.teams.map((t) => [t.team, t.attainmentPct]));
-eq('Sales 100', teamPct['Sales'], 100);
+eq('Sales 75', teamPct['Sales'], 75);
 eq('Customer Success 75', teamPct['Customer Success'], 75);
 eq('Engineering 61.4', teamPct['Engineering'], 61.4);
 eq('Operations 25', teamPct['Operations'], 25);
@@ -102,8 +102,8 @@ eq('top team = Sales', sc.topTeam?.team, 'Sales');
 eq('bottom team = Unassigned', sc.bottomTeam?.team, 'Unassigned');
 
 // ── Company attainment (weighted by objective weight) ──
-// (70*4 + 50*3 + 100 + 100 + 75 + 0 + 50 + 0) / 13 = 755/13 = 58.08 -> 58.1
-eq('company attainment', sc.companyAttainmentPct, 58.1);
+// (70*4 + 50*3 + 100 + 50 + 75 + 0 + 50 + 0) / 13 = 705/13 = 54.23 -> 54.2
+eq('company attainment', sc.companyAttainmentPct, 54.2);
 
 // ── Integrity + hygiene flags ──
 eq('one integrity flag', sc.integrityFlags.length, 1);
@@ -122,7 +122,7 @@ eq('Ship v2 child attainment', shipV2.children.map((c) => c.attainmentPct), [100
 const launch = sc.plan.find((p) => p.title === 'Launch partner program')!;
 ok('Launch partner markedComplete', launch.markedComplete === true);
 ok('Launch partner hasOpenChildren', launch.hasOpenChildren === true);
-eq('Launch partner status = met', launch.status, 'met');
+eq('Launch partner status = partial', launch.status, 'partial');
 const explore = sc.plan.find((p) => p.title === 'Explore new AI tooling')!;
 ok('Explore noOwnerOrTeam', explore.noOwnerOrTeam === true);
 eq('Explore status = missed', explore.status, 'missed');
@@ -137,6 +137,6 @@ eq('Legal has 0 objectives', legal.objectiveCount, 0);
 eq('Legal at 0%', legal.attainmentPct, 0);
 eq('Legal 0 met', legal.completedCount, 0);
 ok('Unassigned still present (real unowned objective)', allTeamNames.includes('Unassigned'));
-eq('company attainment unchanged by empty depts', scAll.companyAttainmentPct, 58.1);
+eq('company attainment unchanged by empty depts', scAll.companyAttainmentPct, 54.2);
 
 console.log(`\nokrScorecard.test.ts — ${passed} assertions passed\n`);

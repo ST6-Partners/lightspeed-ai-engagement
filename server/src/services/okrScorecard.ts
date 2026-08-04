@@ -111,7 +111,10 @@ const bySort = (a: OkrNodeLite, b: OkrNodeLite) =>
 
 /** Weight-weighted rollup of a node's completion (0..100). Mirrors the UI. */
 export function attainmentOf(node: OkrNodeLite, childrenByParent: Map<string | null, OkrNodeLite[]>): number {
-  if (node.status === 'complete') return 100; // explicit completion overrides rollup
+  // The rollup wins: marking a parent complete does NOT force it to 100%, so an
+  // objective can only read done once the work under it actually is. Matches the
+  // OKR screen (src/pages/Okrs.tsx progressOf). `markedComplete` + the integrity
+  // flag below are what surface a parent ticked complete over open children.
   const kids = childrenByParent.get(node.id) ?? [];
   if (!kids.length) return statusPct(node.status);
   const totW = kids.reduce((a, k) => a + (k.weight || 1), 0) || 1;
