@@ -743,6 +743,13 @@
       "when": 1785861121350,
       "tag": "0104_aie_manager_core_data",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1785861121351,
+      "tag": "0105_aie_demo_manager_reviews",
+      "breakpoints": true
     }
   ]
 }

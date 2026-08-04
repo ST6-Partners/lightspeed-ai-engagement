@@ -9,7 +9,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { requireAction } from '../services/access.js';
+import { requireAction, resolveAreaAccess } from '../services/access.js';
 import { desc, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -55,9 +55,18 @@ export const managerSurveyRouter = router({
       return row;
     }),
 
+  // Reviews ABOUT you, plus any you wrote yourself. This returned every manager
+  // review in the company to any signed-in employee — including the ones marked
+  // anonymous, whose whole point is that only the subject reads them.
+  // Full-reach levels see everything; a manager sees their own branch.
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.managerSurveyResponses.findMany({
+    const rows = await ctx.db.query.managerSurveyResponses.findMany({
       orderBy: [desc(managerSurveyResponses.submittedAt)],
     });
+    const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'engagement', ctx.req.session?.previewLevel);
+    if (acc.reach === 'all') return rows;
+    const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+    return rows.filter((r) =>
+      (r.managerId && scope.has(r.managerId)) || r.respondentId === ctx.user.id);
   }),
 });

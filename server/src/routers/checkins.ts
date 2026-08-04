@@ -6,6 +6,7 @@
 // ============================================================
 
 import { z } from 'zod';
+import { resolveAreaAccess } from '../services/access.js';
 import { desc, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -43,10 +44,18 @@ export const checkinsRouter = router({
       return row;
     }),
 
+  // Pulse responses. This backs BOTH the Past Responses list and the Analytics
+  // tab, and returned every pulse in the company to anyone signed in — a plain
+  // employee could read their colleagues' answers. Scoped to the viewer's
+  // branch; a user with no reports sees only their own.
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.checkinResponses.findMany({
+    const rows = await ctx.db.query.checkinResponses.findMany({
       orderBy: [desc(checkinResponses.submittedAt)],
     });
+    const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'engagement', ctx.req.session?.previewLevel);
+    if (acc.reach === 'all') return rows;
+    const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+    return rows.filter((r) => !!r.respondentId && scope.has(r.respondentId));
   }),
 
   // The signed-in user's most recent check-in 'priorities' answer, split into
