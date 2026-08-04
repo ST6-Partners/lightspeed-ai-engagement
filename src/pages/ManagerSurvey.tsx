@@ -103,6 +103,55 @@ export default function ManagerSurvey() {
   );
 
   // ── Past Responses view ────────────────────────────────
+  // One card per response, COLLAPSED until opened — same shape as the employee's
+  // Reviews history (PM, 2026-08-03). Previously every response rendered fully
+  // expanded, so a manager with a dozen of them had to scroll past all the
+  // answers to find the one they wanted.
+  const HistoryCard = ({ r }: { r: any }) => {
+    const [open, setOpen] = useState(false);
+    const avg = avgOf(r.ratings as Record<string, number>);
+    const entries = Object.entries((r.ratings ?? {}) as Record<string, number>);
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="w-full text-left">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-900">Manager: {r.managerName ?? '—'}</div>
+              <div className="text-xs text-gray-500">
+                by {r.anonymous ? 'Anonymous' : (r.respondentName ?? '—')} · {fmtDate(r.reviewDate)}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                avg {avg.toFixed(1)}
+              </span>
+              <span className="text-[13px] text-blue-700 font-semibold">{open ? 'Hide' : 'Open'}</span>
+            </div>
+          </div>
+        </button>
+
+        {open && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+            {entries.length === 0 && <div className="text-xs text-gray-500">No answers were recorded.</div>}
+            {entries.map(([qid, v]) => {
+              const cmt = ((r.comments ?? {}) as Record<string, string>)[qid];
+              return (
+                <div key={qid} className="text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
+                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
+                  </div>
+                  {cmt && <div className="text-xs text-gray-500 italic mt-0.5">&ldquo;{cmt}&rdquo;</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const HistoryView = () => {
     if (hLoading) {
       return <div className="bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-400">Loading responses…</div>;
@@ -119,40 +168,7 @@ export default function ManagerSurvey() {
     return (
       <div className="space-y-3">
         <p className="text-xs text-gray-500">{rows.length} recorded {rows.length === 1 ? 'response' : 'responses'}</p>
-        {rows.map((r) => {
-          const avg = avgOf(r.ratings as Record<string, number>);
-          return (
-            <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-900">
-                    Manager: {r.managerName ?? '—'}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    by {r.anonymous ? 'Anonymous' : (r.respondentName ?? '—')} · {fmtDate(r.reviewDate)}
-                  </div>
-                </div>
-                <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
-                  avg {avg.toFixed(1)}
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {Object.entries((r.ratings ?? {}) as Record<string, number>).map(([qid, v]) => {
-                  const cmt = ((r.comments ?? {}) as Record<string, string>)[qid];
-                  return (
-                    <div key={qid} className="text-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-gray-700 min-w-0">{questionText[qid] ?? qid}</span>
-                        <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">{v}</span>
-                      </div>
-                      {cmt && <div className="text-xs text-gray-500 italic mt-0.5">“{cmt}”</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+        {rows.map((r) => <HistoryCard key={r.id} r={r} />)}
       </div>
     );
   };
@@ -299,7 +315,9 @@ export default function ManagerSurvey() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Manager Review</h1>
           <p className="text-sm text-gray-500">
-            Fill this out after your 1:1 with your manager. Rate each behavior from 1 to 5 using the scale on the right.
+            {mayAuthor
+              ? 'Fill this out after your 1:1 with your manager. Rate each behavior from 1 to 5 using the scale on the right.'
+              : 'The manager reviews your team has filled out about you. Open one to see how each question was answered.'}
           </p>
         </div>
       </div>
