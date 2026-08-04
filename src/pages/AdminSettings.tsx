@@ -5,6 +5,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import AccessGrid from './admin/AccessGrid';
@@ -282,7 +283,15 @@ function CadencePanel() {
 
 // ── Main AdminSettings page ──────────────────────────────────
 export default function AdminSettings() {
-  const [activeSection, setActiveSection] = useState('gettingstarted');
+  // ?tab= lets other pages deep-link a specific tab — the old
+  // /core-data/employees bookmark redirects to ?tab=employees rather than
+  // dropping people on Getting Started and making them hunt.
+  const [params, setParams] = useSearchParams();
+  const [activeSection, setActiveSectionState] = useState(params.get('tab') || 'gettingstarted');
+  const setActiveSection = (id: string) => {
+    setActiveSectionState(id);
+    setParams(id === 'gettingstarted' ? {} : { tab: id }, { replace: true });
+  };
 
   // Gated on the viewer's access level (AIE 2026-08-03). These rows were
   // hardcoded to `true` by the template, which meant any signed-in employee

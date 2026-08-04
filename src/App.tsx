@@ -63,7 +63,7 @@ export default function App() {
         <Route path="/core-data" element={<AreaGuard area="documents" />}>
           <Route index element={<CoreData />} />
           <Route element={<CoreDataSubLayout />}>
-            <Route path="employees" element={<Navigate to="/admin/settings" replace />} />
+            <Route path="employees" element={<Navigate to="/admin/settings?tab=employees" replace />} />
             <Route path="job-titles" element={<JobTitles />} />
             <Route path="departments" element={<Departments />} />
             <Route path="survey-questions" element={<ManagerSurveyQuestions />} />
