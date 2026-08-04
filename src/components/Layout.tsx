@@ -10,7 +10,7 @@ import {
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
   Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
   UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3,
-  ChevronDown, ChevronRight, Sparkles} from 'lucide-react';
+  ChevronDown, ChevronRight, Sparkles, BookOpen, X } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import PeriodNoticeModal from './PeriodNoticeModal';
 import AssignmentNoticeModal from './AssignmentNoticeModal';
@@ -91,6 +91,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('nav.collapsed') === '1'; } catch { return false; }
   });
@@ -348,6 +349,13 @@ export default function Layout() {
           <div />
           <div className="flex items-center gap-2">
             <WhatsNew />
+            <button
+              onClick={() => setShowGuide(true)}
+              className="p-2 text-ls-ink-3 hover:text-ls-ink-2 rounded-lg hover:bg-ls-bg-2 transition-colors"
+              title="Guide"
+            >
+              <BookOpen className="w-5 h-5" />
+            </button>
             <Link
               to="/chat"
               title="AI Assistant"
@@ -383,6 +391,31 @@ export default function Layout() {
       </div>
 
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />
+      {showGuide && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowGuide(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 h-12 border-b border-ls-line shrink-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-ls-ink">
+                <BookOpen className="w-4 h-4 text-ls-blue-deep" /> Guide
+              </div>
+              <button
+                onClick={() => setShowGuide(false)}
+                className="p-1.5 text-ls-ink-3 hover:text-ls-ink-2 rounded-md hover:bg-ls-bg-2 transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <iframe src="/guide.html" title="AI Engagement Guide" className="flex-1 w-full border-0" />
+          </div>
+        </div>
+      )}
       {/* App-wide modals. Mounted at the root ON PURPOSE: <header> carries
           backdrop-blur, and backdrop-filter establishes a containing block for
           position:fixed descendants — mounted inside it, a fixed overlay centres
