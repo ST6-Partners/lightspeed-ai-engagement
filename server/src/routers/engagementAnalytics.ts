@@ -23,6 +23,8 @@ import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { hasMinimumRole, type RoleTier } from '../services/permissions.js';
 import { TRPCError } from '@trpc/server';
+import { effectiveLevelOf, resolveAreaAccess } from '../services/access.js';
+import { canDo } from '../services/capabilities.js';
 
 type DriverKey =
   | 'purpose' | 'autonomy' | 'utilization' | 'capacity' | 'manager_relationship'
@@ -186,14 +188,26 @@ export const engagementAnalyticsRouter = router({
     .query(async ({ ctx, input }) => {
       const MIN = 3;
       const f = input ?? {};
-      const viewer = await ctx.db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
-      const elevated = !!viewer && (hasMinimumRole(viewer.role as RoleTier, 'admin') || viewer.isHrAccess || viewer.leaderBadge === 'ELT');
-      const managerScoped = !!viewer && !elevated && viewer.role === 'manager';
+      // Who may see results at all, and whose. The old test was role-tier based
+      // and had two holes under the new model: a plain USER matched neither
+      // branch and so fell through to every response in the company, and 'admin
+      // tier' now includes every sysadmin. Both are decided by the capability
+      // table and the grid instead.
+      const level = await effectiveLevelOf(ctx.db, ctx.user.id, ctx.req.session?.previewLevel);
+      if (!level || !canDo(level, 'survey.viewResults')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to survey results.' });
+      }
+      const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'insights', ctx.req.session?.previewLevel);
 
       let rows = await ctx.db.query.engagementSurveyResponses.findMany();
 
-      // Viewer scope: a plain manager only sees responses that roll up to them.
-      if (managerScoped) rows = rows.filter((r) => (r.managerPath ?? []).includes(viewer!.id));
+      // A manager sees only responses from people on their own branch. Scoped
+      // by the resolved subtree rather than by direct reports, so it reaches
+      // all the way down.
+      if (acc.reach !== 'all') {
+        const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+        rows = rows.filter((r) => (r.managerPath ?? []).some((id) => scope.has(id)));
+      }
 
       const thisYear = new Date().getFullYear();
       const bandOf = (startYear: number | null | undefined): string | null => {
@@ -231,7 +245,7 @@ export const engagementAnalyticsRouter = router({
       // small team to 'Disengaged' would come close to naming people, which is
       // the line this module is explicit about not crossing. The min-group-size
       // gate below still applies on top.
-      if ((f.performanceTier || f.engagementTier) && !elevated) {
+      if ((f.performanceTier || f.engagementTier) && acc.reach !== 'all') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Outcome filters are available to HR and ELT only.' });
       }
       if (f.performanceTier) {

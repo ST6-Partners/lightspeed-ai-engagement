@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCapabilities } from '../lib/useCapabilities';
 import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { Plus, Archive, ChevronRight } from 'lucide-react';
@@ -21,6 +22,8 @@ function fmtDate(d: string | null): string {
 
 // Landing list of all Performance Improvement Plans (CRUD entry point).
 export default function Pips() {
+  // A user is placed on a PIP; they never open one (2026-08-03).
+  const { can } = useCapabilities();
   const navigate = useNavigate();
   const { data: rows, refetch, isLoading } = trpc.pip.list.useQuery();
   const archive = trpc.pip.archive.useMutation({ onSuccess: () => refetch() });
@@ -33,13 +36,15 @@ export default function Pips() {
           <h1 className="text-2xl font-bold text-gray-900">Improvement Plans</h1>
           <p className="text-gray-500 text-sm mt-1">Performance improvement plans — supportive, time-bound, no surprises</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          New PIP
-        </button>
+        {can('pip.create') && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            New PIP
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">

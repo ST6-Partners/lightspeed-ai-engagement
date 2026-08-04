@@ -12,7 +12,9 @@ import { eq, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { managerSurveyQuestions } from '../db/schema/managerSurvey.js';
-import { requireAdmin } from '../services/permissions.js';
+// Managers are rated with this instrument, so they may read it and not change
+// it. requireAdmin would have let them through once Admin folded into Sysadmin.
+import { requireAction } from '../services/access.js';
 import { auditChange } from '../services/audit.js';
 
 export const managerSurveyQuestionsRouter = router({
@@ -26,7 +28,7 @@ export const managerSurveyQuestionsRouter = router({
     }),
 
   import: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('managerSurvey.editQuestions'))
     .input(z.object({ rows: z.array(z.object({ text: z.string(), description: z.string().optional() })).max(5000) }))
     .mutation(async ({ ctx, input }) => {
       let added = 0; let skipped = 0; const errors: string[] = [];
@@ -42,7 +44,7 @@ export const managerSurveyQuestionsRouter = router({
     }),
 
   create: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('managerSurvey.editQuestions'))
     .input(z.object({
       text: z.string().min(1).max(1000),
       description: z.string().optional(),
@@ -59,7 +61,7 @@ export const managerSurveyQuestionsRouter = router({
     }),
 
   update: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('managerSurvey.editQuestions'))
     .input(z.object({
       id: z.string().uuid(),
       text: z.string().min(1).max(1000).optional(),
@@ -80,7 +82,7 @@ export const managerSurveyQuestionsRouter = router({
     }),
 
   remove: protectedProcedure
-    .use(requireAdmin)
+    .use(requireAction('managerSurvey.editQuestions'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.delete(managerSurveyQuestions).where(eq(managerSurveyQuestions.id, input.id));

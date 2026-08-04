@@ -37,7 +37,10 @@ t('User has Core Data', canSeePage('user', 'core-data'), true);
 t('Manager keeps Organization', canSeePage('manager', 'organization'), true);
 
 // Reviews: gives upward and peer, receives the regular one.
-t('User Reviews — regular tab hidden', canSeeReviewTab('user', 'reviews'), false);
+// Revised 2026-08-03 (second pass): the tab is SHOWN to a user, but as a
+// read-only history of reviews they have been given. review.author is what
+// removes the "New review" button, not hiding the tab.
+t('User Reviews — regular tab shown, read-only', canSeeReviewTab('user', 'reviews'), true);
 t('User Reviews — manager tab shown', canSeeReviewTab('user', 'manager'), true);
 t('User Reviews — peer tab shown', canSeeReviewTab('user', 'peer'), true);
 t('Manager Reviews — regular tab shown', canSeeReviewTab('manager', 'reviews'), true);
@@ -54,6 +57,21 @@ t('User Core Data — company values kept', canSeeCoreDataItem('user', 'values')
 t('User Core Data — rating scale kept', canSeeCoreDataItem('user', 'rating-scale'), true);
 t('User Core Data — performance criteria kept', canSeeCoreDataItem('user', 'performance-criteria'), true);
 t('User Core Data — check-in questions kept', canSeeCoreDataItem('user', 'checkin-questions'), true);
+
+// ── Second pass, 2026-08-03 ──────────────────────────────────
+t('User reads OKRs but cannot edit them', canDo('user', 'okr.edit'), false);
+t('Manager can edit OKRs', canDo('manager', 'okr.edit'), true);
+t('User CAN take the engagement survey', canDo('user', 'survey.takeOwn'), true);
+t('User canNOT see survey results', canDo('user', 'survey.viewResults'), false);
+t('Manager can see survey results', canDo('manager', 'survey.viewResults'), true);
+t('User has the engagement survey page', canSeePage('user', 'engagement-survey'), true);
+t('User has no Insights page', canSeePage('user', 'insights'), false);
+t('User can view the employee directory', canSeeCoreDataItem('user', 'employees'), true);
+t('User cannot edit employees', canDo('user', 'employees.edit'), false);
+t('Manager can read all of Core Data', canSeeCoreDataItem('manager', 'org-data'), true);
+t('Manager cannot edit the manager-survey questions', canDo('manager', 'managerSurvey.editQuestions'), false);
+t('HR can edit the manager-survey questions', canDo('hr', 'managerSurvey.editQuestions'), true);
+t('Sysadmin can edit the manager-survey questions', canDo('sysadmin', 'managerSurvey.editQuestions'), true);
 
 console.log(fail ? `\n${fail} FAILED` : `\nAll ${'assertions'} passed`);
 process.exit(fail ? 1 : 0);

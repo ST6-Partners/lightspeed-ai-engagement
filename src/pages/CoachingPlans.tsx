@@ -8,6 +8,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { useCapabilities } from '../lib/useCapabilities';
 import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fmtDate } from '../lib/date';
@@ -18,7 +19,11 @@ const RANK = { user: 1, manager: 2, admin: 3, sysadmin: 4 } as const;
 export default function CoachingPlans() {
   const navigate = useNavigate();
   const { data: me } = trpc.auth.me.useQuery();
-  const canEdit = !!me && (RANK[(me.role as keyof typeof RANK)] ?? 0) >= RANK.manager;
+  // A user receives a coaching plan; they never write one (2026-08-03).
+  // Was a role-rank test, which after Admin folded into Sysadmin no longer
+  // described who should be authoring.
+  const { can } = useCapabilities();
+  const canEdit = can('coaching.create');
 
   const { data: rows, refetch, isLoading } = trpc.coaching.list.useQuery();
   const remove = trpc.coaching.remove.useMutation({ onSuccess: () => refetch() });

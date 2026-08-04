@@ -1,4 +1,5 @@
 import { fmtDate, fmtDateTime } from '../lib/date';
+import { useCapabilities } from '../lib/useCapabilities';
 // ============================================================
 // REVIEWS — Employee performance evaluation (Engagement group)
 //
@@ -31,7 +32,13 @@ type Tab = 'values' | 'performance';
 
 function ReviewWorkbench({ lockedEmployeeId, hidePicker }: { lockedEmployeeId?: string; hidePicker?: boolean }) {
   const { data: me } = trpc.auth.me.useQuery();
-  const canEdit = !!me && (RANK[(me.role as keyof typeof RANK)] ?? 0) >= RANK.manager;
+  // A user receives regular reviews and never writes one, so the tab becomes a
+  // read-only history for them — same shape as the Development lists.
+  // Authoring a regular review is a capability, not a rank. The old test read
+  // role >= manager, which after Admin folded into Sysadmin was both too wide
+  // and too vague.
+  const { can } = useCapabilities();
+  const canEdit = can('review.author');
 
   const { data: employees } = trpc.values.listEmployees.useQuery();
   const { data: values } = trpc.values.list.useQuery();

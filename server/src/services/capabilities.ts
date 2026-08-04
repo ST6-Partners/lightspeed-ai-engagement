@@ -34,8 +34,8 @@ export type ReviewTab = (typeof REVIEW_TABS)[number];
 
 // ── Core Data items ──────────────────────────────────────────
 export const CORE_DATA_ITEMS = [
-  'job-titles', 'departments', 'values', 'performance-criteria', 'rating-scale',
-  'checkin-questions', 'survey-questions', 'peer-review-questions',
+  'employees', 'job-titles', 'departments', 'values', 'performance-criteria',
+  'rating-scale', 'checkin-questions', 'survey-questions', 'peer-review-questions',
   'engagement-questions', 'org-data', 'assessments',
 ] as const;
 export type CoreDataItem = (typeof CORE_DATA_ITEMS)[number];
@@ -49,15 +49,21 @@ const USER_HIDDEN_CORE_DATA: CoreDataItem[] = [
 // ── Actions ──────────────────────────────────────────────────
 // Verbs, not views. Each is checked server-side at its mutation.
 export const ACTIONS = [
-  'survey.run',            // start, edit and send the engagement survey
+  'survey.run',                  // start, edit and send the engagement survey
   'survey.editQuestions',
+  'survey.takeOwn',              // answer it — everyone
+  'survey.viewResults',          // see the aggregate results
+  'managerSurvey.editQuestions', // the instrument managers are rated WITH
   'pip.create',
   'coaching.create',
-  'exitSurvey.send',       // send one TO somebody
-  'exitSurvey.submitOwn',  // fill in your own — everyone
-  'review.author',         // author a regular (downward) review
+  'exitSurvey.send',             // send one TO somebody
+  'exitSurvey.submitOwn',        // fill in your own — everyone
+  'review.author',               // author a regular (downward) review
   'ninebox.rate',
   'priorities.set',
+  'okr.edit',                    // create/edit objectives; linking one to a
+                                 // weekly-plan action item is NOT this
+  'employees.edit',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -76,11 +82,15 @@ const ALL_REVIEW_TABS = REVIEW_TABS;
 // deliberately including sysadmin in the exclusion (PM ruling). Sysadmin
 // administers the system; it does not speak to the company.
 const SYSADMIN_ACTIONS: Action[] = [
+  'survey.takeOwn', 'survey.viewResults', 'managerSurvey.editQuestions',
   'pip.create', 'coaching.create', 'exitSurvey.send', 'exitSurvey.submitOwn',
-  'review.author', 'ninebox.rate', 'priorities.set',
+  'review.author', 'ninebox.rate', 'priorities.set', 'okr.edit', 'employees.edit',
 ];
 
 const SURVEY_OWNER_ACTIONS: Action[] = [...SYSADMIN_ACTIONS, 'survey.run', 'survey.editQuestions'];
+
+// 'employees' is on this list as a READ. Editing the roster is employees.edit,
+// which a user does not have — they see the directory, they cannot change it.
 
 const CAPS: Record<AccessLevel, Caps> = {
   // Runs the system. Everything except addressing the company.
@@ -100,21 +110,30 @@ const CAPS: Record<AccessLevel, Caps> = {
   },
   // Everything their branch of the tree can justify — but not the instruments,
   // and they do not send surveys.
+  // Reads Core Data in full, but does not edit the instrument they are rated
+  // with — managerSurvey.editQuestions is deliberately absent (PM, 2026-08-03).
   manager: {
     pages: ALL_PAGES, reviewTabs: ALL_REVIEW_TABS,
-    coreDataItems: ALL_CORE_DATA.filter((i) => i !== 'org-data'),
+    coreDataItems: ALL_CORE_DATA,
     actions: [
+      'survey.takeOwn', 'survey.viewResults',
       'pip.create', 'coaching.create', 'exitSurvey.send', 'exitSurvey.submitOwn',
-      'review.author', 'ninebox.rate', 'priorities.set',
+      'review.author', 'ninebox.rate', 'priorities.set', 'okr.edit',
     ],
   },
   // Receives coaching, PIPs and reviews; authors none of them. Gives an upward
   // and a peer review, and fills in their own exit survey if asked.
+  // Reads OKRs but does not author them — linking one to a weekly-plan action
+  // item is a different thing and stays open. Takes the engagement survey but
+  // never sees the results. Sees the Reviews tab as a read-only history of what
+  // they have been given: reviewTabs keeps 'reviews' so the tab renders, and
+  // review.author is absent so nothing on it can start one.
   user: {
-    pages: ['okrs', 'okr-analytics', 'weekly-plan', 'pulses', 'reviews', 'development', 'core-data'],
-    reviewTabs: ['manager', 'peer'],
+    pages: ['okrs', 'okr-analytics', 'weekly-plan', 'pulses', 'reviews',
+            'development', 'engagement-survey', 'core-data'],
+    reviewTabs: ALL_REVIEW_TABS,
     coreDataItems: ALL_CORE_DATA.filter((i) => !USER_HIDDEN_CORE_DATA.includes(i)),
-    actions: ['exitSurvey.submitOwn'],
+    actions: ['exitSurvey.submitOwn', 'survey.takeOwn'],
   },
 };
 

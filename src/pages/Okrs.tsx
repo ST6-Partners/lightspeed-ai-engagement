@@ -1,4 +1,5 @@
 import { fmtDate } from '../lib/date';
+import { useCapabilities } from '../lib/useCapabilities';
 // OKRs — live nested objectives → key results → tasks (DD-002 Planning).
 // Editable (title, owner linked to the Org directory, status, light, due,
 // description); add key results / tasks inline; archive (reversible) vs delete
@@ -57,6 +58,10 @@ interface EditForm {
 }
 
 export default function Okrs() {
+  // A user reads the tree and cannot author it. Linking an OKR to a weekly
+  // plan action item is a separate capability and stays open to them.
+  const { can } = useCapabilities();
+  const canEditOkrs = can('okr.edit');
   const periodsQ = trpc.okrPeriods.list.useQuery();
   const { data: me } = trpc.auth.me.useQuery();
   const periods = (periodsQ.data ?? []) as PeriodRow[];
@@ -67,8 +72,11 @@ export default function Okrs() {
   }, [selectedPeriodId, periods, currentPeriod]);
   const selectedPeriod = periods.find((p) => p.id === selectedPeriodId) ?? null;
   const isReadOnly = !!selectedPeriod && (!selectedPeriod.isCurrent || selectedPeriod.status === 'closed');
-  const canEdit = !isReadOnly;
-  const canManagePeriods = ['admin', 'sysadmin'].includes((me as { role?: string } | undefined)?.role ?? 'user');
+  // Two separate reasons the tree can be read-only: the period is closed, or
+  // this person does not author OKRs at all. A user is the second case.
+  const canEdit = !isReadOnly && canEditOkrs;
+  const canManagePeriods = canEditOkrs
+    && ['sysadmin', 'elt', 'hr'].includes((me as { accessLevel?: string } | undefined)?.accessLevel ?? 'user');
   const [showPeriodMgr, setShowPeriodMgr] = useState(false);
   const periodInput = selectedPeriodId ? { periodId: selectedPeriodId } : undefined;
 

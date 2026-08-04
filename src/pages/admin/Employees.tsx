@@ -26,7 +26,10 @@ const ACCESS_LEVEL_COLORS: Record<string, string> = {
 // Employees = the users directory (Core Data). Beyond app-level role/flags, each
 // record carries Title + Department (managed lookups) and a Manager (another
 // employee). Accounts are still created at sign-up; this screen curates them.
-export default function Employees() {
+// readOnly renders the directory without any control that writes: a user may
+// look up who works here and who reports to whom, and change nothing
+// (PM, 2026-08-03). The editable copy lives at Admin > Sysadmin > Employees.
+export default function Employees({ readOnly = false }: { readOnly?: boolean } = {}) {
   const [searchQuery, setSearchQuery] = useState('');
   // Current staff vs past employees. Archived people keep their history but are
   // out of the working directory and out of every count on this screen.
@@ -141,15 +144,19 @@ export default function Employees() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Employees</h2>
-          <p className="text-sm text-gray-500">The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and app role here. Title and Department come from the Core Data lookups.</p>
+          <p className="text-sm text-gray-500">{readOnly
+            ? 'Who works here and who they report to. View only.'
+            : 'The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and access level here. Title and Department come from the Core Data lookups.'}</p>
         </div>
-        <ImportButton label="Import employees" hint="CSV: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
-          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, accessLevel: r.accesslevel ?? r['access level'] ?? r.role, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />
+        {!readOnly && <ImportButton label="Import employees" hint="CSV: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
+          onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, accessLevel: r.accesslevel ?? r['access level'] ?? r.role, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />}
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
         <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="text-sm text-blue-900">Title &amp; Department are managed in Core Data → Job Titles / Departments. Manager is another employee (their boss).</div>
+        <div className="text-sm text-blue-900">{readOnly
+          ? 'This is a read-only view. Changes are made by an administrator.'
+          : 'Title & Department are managed in Core Data → Job Titles / Departments. Manager is another employee (their boss).'}</div>
       </div>
 
       <div className="flex gap-3 flex-wrap items-center">
@@ -162,13 +169,15 @@ export default function Employees() {
           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${view === 'past' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           {pastStaff.length} past
         </button>
-        <button onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
-          {showAdd ? <X size={14} /> : <UserPlus size={14} />}{showAdd ? 'Cancel' : 'Add Employee'}
-        </button>
+        {!readOnly && (
+          <button onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+            {showAdd ? <X size={14} /> : <UserPlus size={14} />}{showAdd ? 'Cancel' : 'Add Employee'}
+          </button>
+        )}
       </div>
 
-      {showAdd && (
+      {showAdd && !readOnly && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
           <h3 className="text-sm font-bold text-gray-900">New employee</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -267,7 +276,7 @@ export default function Employees() {
                     </span>
                   </td>
                   <td className="px-3 py-3 text-sm">
-                    <button type="button" onClick={() => openEdit(user)}
+                    <button type="button" disabled={readOnly} onClick={() => !readOnly && openEdit(user)}
                       title="Edit employee"
                       className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left">
                       {user.name ?? '—'}
@@ -277,7 +286,7 @@ export default function Employees() {
 
                   {/* Title — managed job_titles lookup */}
                   <td className="px-3 py-3 text-sm">
-                    <select value={user.jobTitleId ?? ''} onChange={(e) => set(user.id, { jobTitleId: e.target.value || null })}
+                    <select value={user.jobTitleId ?? ''} onChange={(e) => set(user.id, { jobTitleId: e.target.value || null })} disabled={readOnly}
                       className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
                       <option value="">—</option>
                       {titles.map((t: any) => <option key={t.id} value={t.id}>{t.title}{t.level ? ` · ${t.level}` : ''}</option>)}
@@ -286,7 +295,7 @@ export default function Employees() {
 
                   {/* Department — managed departments lookup */}
                   <td className="px-3 py-3 text-sm">
-                    <select value={user.departmentId ?? ''} onChange={(e) => set(user.id, { departmentId: e.target.value || null })}
+                    <select value={user.departmentId ?? ''} onChange={(e) => set(user.id, { departmentId: e.target.value || null })} disabled={readOnly}
                       className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
                       <option value="">—</option>
                       {depts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -296,7 +305,7 @@ export default function Employees() {
                   {/* Manager — another employee. */}
                   <td className="px-3 py-3 text-sm">
                     <div className="flex items-center gap-1">
-                      <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })}
+                      <select value={user.managerId ?? ''} onChange={(e) => set(user.id, { managerId: e.target.value || null })} disabled={readOnly}
                         className="w-full px-2 py-1 rounded text-xs border border-gray-200 cursor-pointer focus:ring-2 focus:ring-blue-500">
                         <option value="">—</option>
                         {employeesByFirstName.filter((m: any) => m.id !== user.id).map((m: any) => (
@@ -309,7 +318,7 @@ export default function Employees() {
                   {/* Access level — one field. Supersedes the old Role dropdown,
                       Leader badge dropdown and HR tick-box (AIE 2026-08-03). */}
                   <td className="px-3 py-3 text-sm">
-                    <select value={user.accessLevel ?? 'user'} onChange={(e) => set(user.id, { accessLevel: e.target.value })}
+                    <select value={user.accessLevel ?? 'user'} onChange={(e) => set(user.id, { accessLevel: e.target.value })} disabled={readOnly}
                       className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${ACCESS_LEVEL_COLORS[user.accessLevel ?? 'user'] || 'bg-gray-100'}`}>
                       {ACCESS_LEVEL_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                     </select>
@@ -320,22 +329,23 @@ export default function Employees() {
                     <div className="flex items-center gap-1">
                       {user.archivedAt ? (
                         <button type="button" onClick={() => archiveMutation.mutate({ id: user.id, archived: false })}
-                          disabled={archiveMutation.isPending}
+                          disabled={readOnly || archiveMutation.isPending}
                           title="Restore to current employees"
                           className="p-1 rounded text-gray-400 hover:text-green-700 hover:bg-green-50 disabled:opacity-50">
                           <ArchiveRestore size={15} />
                         </button>
                       ) : (
                         <button type="button" onClick={() => archiveMutation.mutate({ id: user.id, archived: true })}
-                          disabled={archiveMutation.isPending}
+                          disabled={readOnly || archiveMutation.isPending}
                           title="Archive — keeps their history, removes them from the directory"
                           className="p-1 rounded text-gray-400 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50">
                           <Archive size={15} />
                         </button>
                       )}
-                      <button type="button" onClick={() => { setDeleteError(null); setPendingDelete(user); }}
+                      <button type="button" disabled={readOnly}
+                        onClick={() => { if (readOnly) return; setDeleteError(null); setPendingDelete(user); }}
                         title="Remove employee permanently"
-                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50">
                         <Trash2 size={15} />
                       </button>
                     </div>

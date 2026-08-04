@@ -2,6 +2,7 @@
 // Period-aware (2026-07-22): every query can be scoped to a goal-setting period,
 // and new nodes inherit their parent's period (objectives default to current).
 import { z } from 'zod';
+import { requireAction } from '../services/access.js';
 import { eq, and, asc, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
@@ -110,6 +111,7 @@ export const okrsRouter = router({
     }),
 
   create: protectedProcedure
+    .use(requireAction('okr.edit'))
     .input(z.object({
       parentId: z.string().uuid().nullable().optional(),
       type: nodeType,
@@ -148,6 +150,7 @@ export const okrsRouter = router({
     }),
 
   update: protectedProcedure
+    .use(requireAction('okr.edit'))
     .input(z.object({
       id: z.string().uuid(),
       title: z.string().min(1).max(400).optional(),
@@ -177,6 +180,7 @@ export const okrsRouter = router({
   // Archive (soft-delete) — moves the node and its whole subtree to the Archive
   // section by stamping archived_at. Reversible via unarchive; nothing is lost.
   archive: protectedProcedure
+    .use(requireAction('okr.edit'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const all = await ctx.db.query.okrNodes.findMany({
@@ -194,6 +198,7 @@ export const okrsRouter = router({
   // parent is still archived, the Plan view surfaces it as a top-level orphan
   // so it stays visible until the parent is restored too.
   unarchive: protectedProcedure
+    .use(requireAction('okr.edit'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.update(okrNodes)
@@ -205,6 +210,7 @@ export const okrsRouter = router({
 
   // Hard delete — permanently removes the node; descendants go via FK cascade.
   remove: protectedProcedure
+    .use(requireAction('okr.edit'))
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.delete(okrNodes).where(eq(okrNodes.id, input.id));

@@ -12,6 +12,7 @@ import { eq, inArray, asc, desc, and, isNull, gte, lt, or, ne } from 'drizzle-or
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireManager, requireAdmin, hasMinimumRole } from '../services/permissions.js';
+import { resolveAreaAccess } from '../services/access.js';
 import type { RoleTier } from '../services/permissions.js';
 import { users } from '../db/schema/core.js';
 import { notifications } from '../db/schema/notifications.js';
@@ -99,9 +100,19 @@ export const orgScreenRouter = router({
     ]);
     const titleById = new Map(titles.map((t) => [t.id, t.title]));
     const deptById = new Map(depts.map((d) => [d.id, d.name]));
+
+    // Scope to what the viewer may reach. This query returned the whole company
+    // to everyone — the Access grid governed whether the PAGE opened, not what
+    // it then handed back, so a manager on down_org still saw all 219 people.
+    // Every tab on the Organization screen reads from this list, so filtering
+    // here scopes Priorities, OKRs, Engagement and Assessments in one place.
+    const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'planning', ctx.req.session?.previewLevel);
+    const inScope = acc.reach === 'all' ? null : new Set(acc.scopeUserIds ?? [ctx.user.id]);
+
     return {
       people: people
         .filter((u) => u.isActive)
+        .filter((u) => !inScope || inScope.has(u.id))
         .map((u) => ({
           id: u.id,
           name: u.name ?? u.email,

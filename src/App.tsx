@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AreaGuard from './components/AreaGuard';
+import ItemGuard from './components/ItemGuard';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Entities from './pages/Entities';
@@ -63,18 +64,18 @@ export default function App() {
         <Route path="/core-data" element={<AreaGuard area="documents" />}>
           <Route index element={<CoreData />} />
           <Route element={<CoreDataSubLayout />}>
-            <Route path="employees" element={<Navigate to="/admin/settings?tab=employees" replace />} />
-            <Route path="job-titles" element={<JobTitles />} />
-            <Route path="departments" element={<Departments />} />
-            <Route path="survey-questions" element={<ManagerSurveyQuestions />} />
-            <Route path="peer-review-questions" element={<PeerReviewQuestions />} />
-            <Route path="rating-scale" element={<ManagerRatingScale />} />
-            <Route path="org-data" element={<OrgData />} />
-            <Route path="values" element={<CompanyValues />} />
-            <Route path="performance-criteria" element={<PerformanceCriteria />} />
-            <Route path="checkin-questions" element={<CheckinQuestions />} />
-            <Route path="engagement-questions" element={<EngagementQuestions />} />
-            <Route path="assessments" element={<AreaGuard area="assessments"><Assessments /></AreaGuard>} />
+            <Route path="employees" element={<ItemGuard item="employees"><Employees readOnly /></ItemGuard>} />
+            <Route path="job-titles" element={<ItemGuard item="job-titles"><JobTitles /></ItemGuard>} />
+            <Route path="departments" element={<ItemGuard item="departments"><Departments /></ItemGuard>} />
+            <Route path="survey-questions" element={<ItemGuard item="survey-questions"><ManagerSurveyQuestions /></ItemGuard>} />
+            <Route path="peer-review-questions" element={<ItemGuard item="peer-review-questions"><PeerReviewQuestions /></ItemGuard>} />
+            <Route path="rating-scale" element={<ItemGuard item="rating-scale"><ManagerRatingScale /></ItemGuard>} />
+            <Route path="org-data" element={<ItemGuard item="org-data"><OrgData /></ItemGuard>} />
+            <Route path="values" element={<ItemGuard item="values"><CompanyValues /></ItemGuard>} />
+            <Route path="performance-criteria" element={<ItemGuard item="performance-criteria"><PerformanceCriteria /></ItemGuard>} />
+            <Route path="checkin-questions" element={<ItemGuard item="checkin-questions"><CheckinQuestions /></ItemGuard>} />
+            <Route path="engagement-questions" element={<ItemGuard item="engagement-questions"><EngagementQuestions /></ItemGuard>} />
+            <Route path="assessments" element={<ItemGuard item="assessments"><AreaGuard area="assessments"><Assessments /></AreaGuard></ItemGuard>} />
           </Route>
         </Route>
         {/* Insights (manager+) */}
