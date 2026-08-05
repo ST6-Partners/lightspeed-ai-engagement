@@ -74,20 +74,37 @@ async function assertCanReadAssessments(ctx: any): Promise<void> {
 // Who may PLACE (rate / clear) a given person on the 9 Box (Stage 2): admins,
 // HR-access users, and the person's PRIMARY-manager chain (their primary
 // manager or anyone above them). A non-primary (secondary) manager cannot.
+/**
+ * May this viewer act ON this person? Used by every write on the Organization
+ * page — 9-box placement, clearing a placement, and setting priorities.
+ *
+ * Full reach acts on anyone. Anything narrower must have the target inside
+ * their own subtree, which is the org chart walked downward from them — not
+ * just direct reports, and never sideways.
+ *
+ * Two things the previous version got wrong and this fixes:
+ *   - it read users.role / isHrAccess directly, so it never saw a preview.
+ *     A sysadmin testing as a manager still placed anyone, which made the
+ *     restriction impossible to verify.
+ *   - it only guarded 9-box. Setting someone's priorities is the same
+ *     authority and was gated on role tier alone, so a manager could set
+ *     priorities on anybody in the company.
+ */
 async function assertCanPlace(ctx: any, targetId: string): Promise<void> {
-  const raterId = ctx.user.id as string;
-  const rater = await ctx.db.query.users.findFirst({ where: eq(users.id, raterId), columns: { role: true, isHrAccess: true } });
-  if (rater && (rater.role === 'admin' || rater.role === 'sysadmin' || rater.isHrAccess)) return;
-  const rows = await ctx.db.select({ id: users.id, managerId: users.managerId }).from(users);
-  const mgrOf = new Map<string, string | null>(rows.map((r: { id: string; managerId: string | null }) => [r.id, r.managerId]));
-  let cur = mgrOf.get(targetId) ?? null;
-  const seen = new Set<string>();
-  while (cur && !seen.has(cur)) {
-    if (cur === raterId) return;
-    seen.add(cur);
-    cur = mgrOf.get(cur) ?? null;
+  const acc = await resolveAreaAccess(ctx.db, ctx.user.id, 'planning', ctx.req.session?.previewLevel);
+  if (!acc.visible) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this area.' });
   }
-  throw new TRPCError({ code: 'FORBIDDEN', message: 'Only this person\u2019s primary manager (or someone above them, HR, or an admin) can place them.' });
+  if (acc.reach === 'all') return;
+
+  const scope = new Set(acc.scopeUserIds ?? [ctx.user.id]);
+  // Acting on yourself is not placement — a manager does not rate themselves.
+  if (targetId !== ctx.user.id && scope.has(targetId)) return;
+
+  throw new TRPCError({
+    code: 'FORBIDDEN',
+    message: 'You can only do this for people on your own team.',
+  });
 }
 
 export const orgScreenRouter = router({
@@ -178,6 +195,7 @@ export const orgScreenRouter = router({
     .use(requireManager)
     .input(z.object({ userId: z.string().uuid(), okrNodeId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanPlace(ctx, input.userId);
       const node = await ctx.db.query.okrNodes.findFirst({ where: eq(okrNodes.id, input.okrNodeId) });
       if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
       const periodKey = await currentPrioritiesKey(ctx.db);
@@ -227,6 +245,9 @@ export const orgScreenRouter = router({
       if (!node) throw new TRPCError({ code: 'NOT_FOUND', message: 'OKR item not found.' });
       const existing = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Keyed by row id, not userId — resolve the owner before checking reach,
+      // or a manager could edit a priority belonging to anyone in the company.
+      await assertCanPlace(ctx, existing.userId);
       const curKey = await currentPrioritiesKey(ctx.db);
       if (existing.periodKey && existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });
       // Changing WHAT someone's priority is, is materially a new assignment, so it
@@ -274,6 +295,7 @@ export const orgScreenRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.priorities.findFirst({ where: eq(priorities.id, input.id) });
+      if (existing) await assertCanPlace(ctx, existing.userId);
       if (existing?.periodKey) {
         const curKey = await currentPrioritiesKey(ctx.db);
         if (existing.periodKey !== curKey) throw new TRPCError({ code: 'FORBIDDEN', message: 'Past period is view-only.' });

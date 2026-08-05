@@ -45,28 +45,33 @@ const ls = {
 export default function Organization() {
   const { data, isLoading } = trpc.orgScreen.tree.useQuery();
   const { data: me } = trpc.auth.me.useQuery();
-  const role = (me as { role?: string } | undefined)?.role ?? 'user';
   const meId = (me as { id?: string } | undefined)?.id ?? null;
-  const meHr = (me as { isHrAccess?: boolean } | undefined)?.isHrAccess ?? false;
-  const meBadge = (me as { leaderBadge?: string | null } | undefined)?.leaderBadge ?? null;
-  // Company-wide (Organization) scope is limited to admins, ELT, and HR.
-  const canSeeCompanyWide = role === 'admin' || role === 'sysadmin' || meHr || meBadge === 'ELT';
+  // Read the ACCESS LEVEL, not the legacy role/HR flag. auth.me reports the
+  // previewed level while "view as" is active, so a sysadmin testing as a
+  // manager now sees the manager's affordances — with the old fields they saw
+  // their own, and the restriction could not be checked from the UI at all.
+  const level = (me as { accessLevel?: string } | undefined)?.accessLevel ?? 'user';
+  const fullReach = level === 'sysadmin' || level === 'elt' || level === 'hr';
+
+  // Company-wide (Organization) scope.
+  const canSeeCompanyWide = fullReach;
   const visibleScopes = SCOPES;
-  // Who the current viewer may PLACE on the 9 Box: admins, HR, and anyone in a
-  // person's PRIMARY-manager chain (their primary manager or above). Mirrors the
-  // server rule so the grid only shows a placement affordance where it will work.
+  // Who may PLACE someone on the 9 Box, or set their priorities: full reach, or
+  // anyone in that person's manager chain. A manager may act only on their own
+  // branch — and not on themselves. Mirrors assertCanPlace on the server so the
+  // grid never offers a control that will be refused.
   const canPlace = (personId: string): boolean => {
-    if (role === 'admin' || role === 'sysadmin' || meHr) return true;
-    if (!meId) return false;
+    if (fullReach) return true;
+    if (!meId || personId === meId) return false;
     let cur = maps.byId.get(personId)?.managerId ?? null;
     const seen = new Set<string>();
     while (cur && !seen.has(cur)) { if (cur === meId) return true; seen.add(cur); cur = maps.byId.get(cur)?.managerId ?? null; }
     return false;
   };
-  // HR or admin only — deliberately not a role tier, so managers are excluded.
-  const canReadAssessments = role === 'admin' || role === 'sysadmin' || meHr;
+  // HR-or-admin only (DD-029) — deliberately not a tier, so managers are out.
+  const canReadAssessments = fullReach;
   const TABS = ALL_TABS.filter((t) =>
-    (!t.minRole || (ROLE_RANK[role] ?? 0) >= ROLE_RANK[t.minRole]) &&
+    (!t.minRole || fullReach || level === 'manager') &&
     (!t.hrAdminOnly || canReadAssessments));
   const people = (data?.people ?? []) as Person[];
   const maps = useMemo(() => buildMaps(people), [people]);
@@ -160,7 +165,7 @@ export default function Organization() {
 
   useEffect(() => {
     if (!TABS.some((t) => t.key === tab)) { setTab('priorities'); ls.set('org.tab', 'priorities'); }
-  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const select = (id: string) => { setSelectedId(id); ls.set('org.selected', id); };
   const chooseScope = (s: Scope) => { setScope(s); ls.set('org.scope', s); };
