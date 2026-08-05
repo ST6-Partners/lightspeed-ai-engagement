@@ -19,16 +19,6 @@ export default function Login() {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const ssoErr = new URLSearchParams(window.location.search).get('sso');
-  const ssoMsg: Record<string, string> = {
-    unconfigured: 'Microsoft sign-in isn’t configured yet. Use email and password for now.',
-    domain: 'That Microsoft account isn’t on the Lightspeed domain.',
-    inactive: 'Your account is inactive. Contact your admin.',
-    state: 'Sign-in expired — please try again.',
-    token: 'Microsoft sign-in failed — please try again.',
-    noemail: 'No email was returned by Microsoft.',
-    error: 'Something went wrong with Microsoft sign-in.',
-  };
 
   const onDone = (data: { token?: string }) => {
     if (data?.token) localStorage.setItem('auth_token', data.token);
@@ -82,9 +72,6 @@ export default function Login() {
 
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">{error}</div>
-        )}
-        {ssoErr && ssoMsg[ssoErr] && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-2">{ssoMsg[ssoErr]}</div>
         )}
 
         {mode === 'forgot' && sent ? (
@@ -140,18 +127,12 @@ export default function Login() {
           </form>
         )}
 
-        {mode === 'login' && (
-          <>
-            <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-gray-200" /><span className="text-[11px] uppercase tracking-wide text-gray-400">or</span><div className="flex-1 h-px bg-gray-200" />
-            </div>
-            <a href="/auth/microsoft"
-              className="w-full flex items-center justify-center gap-2 border border-gray-300 rounded-lg py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden="true"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="12" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="12" width="10" height="10" fill="#00A4EF"/><rect x="12" y="12" width="10" height="10" fill="#FFB900"/></svg>
-              Sign in with Microsoft
-            </a>
-          </>
-        )}
+        {/* Microsoft sign-in removed 2026-08-04 at the PM's direction. It was built but
+            never given its Entra credentials, so the button only ever produced an
+            "isn't configured yet" notice — a dead end on the first screen every user
+            sees. Email and password is the only route in. The server-side handler
+            (server/src/http/microsoftSso.ts) is retained but no longer mounted, so
+            restoring this is a matter of re-adding the button and the mount. */}
 
         {mode === 'forgot' && !sent ? (
           <p className="mt-4 text-xs text-center">

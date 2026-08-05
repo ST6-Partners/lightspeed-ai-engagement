@@ -12,7 +12,8 @@ import { pool, db } from './server/src/db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
-import { registerMicrosoftSso } from './server/src/http/microsoftSso.js';
+// Microsoft SSO withdrawn 2026-08-04 — see the commented-out mount below.
+// import { registerMicrosoftSso } from './server/src/http/microsoftSso.js';
 import { registerBuiltInJobs, runJob } from './server/src/services/job-runner.js';
 import { registerCadenceNotifyJob } from './server/src/services/cadenceNotify.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
@@ -100,8 +101,13 @@ async function main() {
   // stateless HMAC bearer token covers cross-site-iframe contexts.
   app.use(getSessionMiddleware());
 
-  // Microsoft Entra SSO (domain-restricted). Inert until MS_* env vars are set.
-  registerMicrosoftSso(app);
+  // Microsoft Entra SSO — NOT MOUNTED. Withdrawn 2026-08-04 at the PM's direction:
+  // the MS_* credentials were never issued, so /auth/microsoft only ever bounced the
+  // user back to /login with "isn't configured yet". Leaving the route live with no
+  // entry point would keep a half-working sign-in path exposed. The handler is kept
+  // in server/src/http/microsoftSso.ts; re-enable by restoring this call and the
+  // button in src/pages/Login.tsx once the Entra app registration exists.
+  // registerMicrosoftSso(app);
 
   app.use('/api/feedback', feedbackApiRouter);
 

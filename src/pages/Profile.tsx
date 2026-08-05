@@ -3,7 +3,7 @@
 // fields + start date are editable; org-structure fields are read-only (managed by
 // your admin via the employee upload) so analytics stay trustworthy.
 import { useEffect, useRef, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, KeyRound } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 const inputCls =
@@ -282,6 +282,76 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      <PasswordCard />
+    </div>
+  );
+}
+
+// Change password. The mutation (auth.changePassword) has existed since the login
+// rebuild but its only UI was a tab inside Settings labelled "Access" — nobody
+// looked there, so people believed they could not change their own password. This
+// puts the control where they go looking for it. The Settings copy is left in place
+// so no existing path breaks; both call the same mutation.
+function PasswordCard() {
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const changePassword = trpc.auth.changePassword.useMutation();
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+    if (newPw.length < 8) { setMsg({ kind: 'err', text: 'Your new password must be at least 8 characters.' }); return; }
+    if (newPw !== confirmPw) { setMsg({ kind: 'err', text: "Those two new passwords don't match." }); return; }
+    try {
+      await changePassword.mutateAsync({ currentPassword: curPw, newPassword: newPw });
+      setCurPw(''); setNewPw(''); setConfirmPw('');
+      setMsg({ kind: 'ok', text: 'Password updated.' });
+    } catch (err: any) {
+      setMsg({ kind: 'err', text: err?.message ?? "Couldn't update your password." });
+    }
+  };
+
+  return (
+    <div className="ls-card p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <KeyRound className="w-4 h-4 text-ls-blue" />
+        <h2 className="text-lg font-bold text-ls-ink-1">Password</h2>
+      </div>
+      <p className="text-[13px] text-ls-ink-3 mb-4">
+        Change the password you use to sign in. You&rsquo;ll need your current one. If you&rsquo;ve
+        forgotten it, sign out and use &ldquo;Forgot password?&rdquo; on the sign-in screen.
+      </p>
+      <form onSubmit={submit}>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label className={lblCls} htmlFor="pw-current">Current password</label>
+            <input id="pw-current" type="password" autoComplete="current-password" className={inputCls}
+              value={curPw} onChange={(e) => setCurPw(e.target.value)} />
+          </div>
+          <div>
+            <label className={lblCls} htmlFor="pw-new">New password</label>
+            <input id="pw-new" type="password" autoComplete="new-password" className={inputCls}
+              value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+          </div>
+          <div>
+            <label className={lblCls} htmlFor="pw-confirm">Confirm new password</label>
+            <input id="pw-confirm" type="password" autoComplete="new-password" className={inputCls}
+              value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button type="submit" className="ls-btn ls-btn-primary"
+            disabled={changePassword.isLoading || !curPw || !newPw || !confirmPw}>
+            {changePassword.isLoading ? 'Updating…' : 'Update password'}
+          </button>
+          {msg && (
+            <span className={`text-[13px] ${msg.kind === 'ok' ? 'text-ls-thrive' : 'text-ls-risk'}`}>{msg.text}</span>
+          )}
+        </div>
+      </form>
     </div>
   );
 }
