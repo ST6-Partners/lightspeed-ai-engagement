@@ -68,6 +68,18 @@ export const users = pgTable('users', {
   isBeta: boolean('is_beta').notNull().default(false),
   isHrAccess: boolean('is_hr_access').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true),
+  // Phase-1 activation (AIE 2026-08-05). DELIBERATELY SEPARATE from isActive:
+  // isActive is already read by ~15 surfaces (org tree, engagement eligibility,
+  // assignment pickers, manager rollups, cadence notify), so using it to mean
+  // "not yet activated" would empty the org chart and every headcount. This
+  // column carries ONLY the sign-in meaning — a person must have it true, and be
+  // isActive, to reach auth.login. Default FALSE: the roster starts closed and a
+  // sysadmin opens accounts deliberately. See services/activation.ts.
+  loginEnabled: boolean('login_enabled').notNull().default(false),
+  // Set when a sysadmin activates someone with the derived first-time password;
+  // cleared the moment they choose their own. While true the app admits them but
+  // routes every page to /set-password.
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
   // Archived = a past employee. Distinct from isActive (which governs sign-in):
   // archiving hides someone from the working directory and every headcount while
   // preserving their reviews, coaching plans and survey history. AIE 2026-08-04.

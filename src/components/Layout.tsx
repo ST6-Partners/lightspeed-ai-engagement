@@ -128,6 +128,14 @@ export default function Layout() {
     if (!isLoading && !user) navigate('/login', { replace: true });
   }, [isLoading, user, navigate]);
 
+  // First sign-in: someone else chose this person's password, so hold them on
+  // /set-password until they pick their own. This is the enforcement point —
+  // Login also sends them there, but a bookmark, a refresh or a direct URL all
+  // land here, so the check belongs on the shell that wraps every page.
+  useEffect(() => {
+    if (!isLoading && user?.mustChangePassword) navigate('/set-password', { replace: true });
+  }, [isLoading, user?.mustChangePassword, navigate]);
+
   useEffect(() => {
     if (user) {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;

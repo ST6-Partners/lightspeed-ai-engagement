@@ -8,6 +8,7 @@ import Chat from './pages/Chat';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import ResetPassword from './pages/ResetPassword';
+import SetPassword from './pages/SetPassword';
 import AdminSettings from './pages/AdminSettings';
 import Pips from './pages/Pips';
 import PipDetail from './pages/PipDetail';
@@ -34,6 +35,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* First sign-in password change. Outside <Layout /> on purpose — the person
+          is authenticated but must not reach the app until they've chosen a
+          password, and Layout is what routes them here. */}
+      <Route path="/set-password" element={<SetPassword />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         {/* Planning */}

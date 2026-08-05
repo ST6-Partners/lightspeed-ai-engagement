@@ -21,9 +21,92 @@ import { passwordResetTokens } from '../db/schema/passwordResetTokens.js';
 import { okrNodes } from '../db/schema/okr.js';
 import { requireAdmin } from '../services/permissions.js';
 import { legacyFieldsFor, effectiveLevelOf, type AccessLevel } from '../services/access.js';
+import { ACCESS_LEVELS } from '../db/schema/accessControl.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
 import { sendEmail } from '../services/email.js';
+import { defaultPasswordFor, REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN } from '../services/activation.js';
 import { env } from '../env.js';
+
+// ── Sign-in throttle (AIE 2026-08-05) ────────────────────────
+// The phase-1 first-time password is derived from a person's name, so an
+// unthrottled login endpoint is a practical guessing channel rather than a
+// theoretical one. In-memory and per-process: it resets on deploy and is not
+// shared across instances, which is fine for what it is — a brake on scripted
+// guessing, not a security boundary. Replace with a shared store if the app ever
+// runs more than one instance.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
+const loginFailures = new Map<string, { count: number; first: number }>();
+
+function throttleKey(ip: string | undefined): string { return ip || 'unknown'; }
+
+function checkLoginThrottle(ip: string | undefined): void {
+  const rec = loginFailures.get(throttleKey(ip));
+  if (!rec) return;
+  if (Date.now() - rec.first > LOGIN_WINDOW_MS) { loginFailures.delete(throttleKey(ip)); return; }
+  if (rec.count >= LOGIN_MAX_FAILURES) {
+    throw new TRPCError({
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Too many failed attempts. Wait a few minutes and try again.',
+    });
+  }
+}
+
+function noteLoginFailure(ip: string | undefined): void {
+  const k = throttleKey(ip);
+  const rec = loginFailures.get(k);
+  if (!rec || Date.now() - rec.first > LOGIN_WINDOW_MS) loginFailures.set(k, { count: 1, first: Date.now() });
+  else rec.count++;
+  // Keep the map from growing without bound on a long-running process.
+  if (loginFailures.size > 5000) {
+    const cutoff = Date.now() - LOGIN_WINDOW_MS;
+    for (const [key, v] of loginFailures) if (v.first < cutoff) loginFailures.delete(key);
+  }
+}
+
+// A bcrypt hash of a value nobody will ever submit. Compared against when the
+// account does not exist, so a miss costs the same ~100ms as a real check and the
+// endpoint stops being an account-existence oracle.
+const TIMING_EQUALISER_HASH = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+
+// ── Access level input, single-sourced (AIE 2026-08-05) ───────
+// Migration 0102 collapsed seven levels to five, but this router kept its own
+// hand-written list of seven in four places (importUsers, createUser,
+// updateUser, and the hint text on the Employees page). A value outside
+// ACCESS_LEVELS is unknown to both capsFor() and the reach grid, and both fail
+// closed — so importing someone as `SLT` or `admin` silently left them with no
+// navigation at all. There is now ONE list, and the two retired names are
+// TRANSLATED rather than accepted, matching exactly what 0102 did to the rows
+// already in the table.
+const RETIRED_LEVEL_MAP: Record<string, AccessLevel> = { slt: 'elt', admin: 'sysadmin' };
+
+const accessLevelInput = z.string().transform((raw, ctx) => {
+  const v = raw.trim().toLowerCase();
+  if ((ACCESS_LEVELS as readonly string[]).includes(v)) return v as AccessLevel;
+  const mapped = RETIRED_LEVEL_MAP[v];
+  if (mapped) return mapped;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: `"${raw}" is not an access level. Use one of: ${ACCESS_LEVELS.join(', ')}.`,
+  });
+  return z.NEVER;
+});
+
+/**
+ * Same translation for the bulk import path, which must not reject a whole file
+ * over one bad cell. Returns the resolved level plus a warning to surface on the
+ * row, so a retired value is visible rather than a silent promotion.
+ */
+export function resolveAccessLevel(raw: string | undefined | null): { level: AccessLevel; warning?: string } {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (!v) return { level: 'user' };
+  if ((ACCESS_LEVELS as readonly string[]).includes(v)) return { level: v as AccessLevel };
+  const mapped = RETIRED_LEVEL_MAP[v];
+  if (mapped) {
+    return { level: mapped, warning: `access level "${raw}" was retired on 2026-08-03 — imported as "${mapped}"` };
+  }
+  return { level: 'user', warning: `unknown access level "${raw}" — imported as "user"` };
+}
 
 export const authRouter = router({
   // Current user — or null if unauthenticated.
@@ -31,7 +114,13 @@ export const authRouter = router({
     if (!ctx.user) return null;
     const dbUser = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.user.id),
-      columns: { id: true, name: true, email: true, role: true, accessLevel: true, isBeta: true, isHrAccess: true, leaderBadge: true, timezone: true, avatarUrl: true },
+      columns: {
+        id: true, name: true, email: true, role: true, accessLevel: true, isBeta: true, isHrAccess: true,
+        leaderBadge: true, timezone: true, avatarUrl: true,
+        // Phase-1 activation: the client routes every page to /set-password
+        // while mustChangePassword is true.
+        loginEnabled: true, mustChangePassword: true,
+      },
     });
     if (!dbUser) return null;
     // While a sysadmin is previewing another level, report the PREVIEWED level
@@ -57,11 +146,35 @@ export const authRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
-      const existing = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
-      if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An account with that email already exists. Try signing in.' });
 
       const countRes = await ctx.db.select({ c: sql<number>`count(*)` }).from(users);
       const isFirstUser = Number(countRes[0]?.c ?? 0) === 0;
+
+      // ── Self-registration is CLOSED (AIE 2026-08-05) ─────────
+      // This was an open publicProcedure with no domain restriction and no
+      // approval step, so anyone who reached the app URL could mint themselves a
+      // working account — on an app holding assessment scores, PIPs and exit
+      // surveys. It also undercut the whole point of sysadmin-controlled
+      // activation. Accounts now arrive from the roster import or Core Data ->
+      // Employees, and a sysadmin activates them.
+      //
+      // Two deliberate exceptions: a completely empty database still needs a way
+      // to create its first sysadmin, and SELF_REGISTRATION_DOMAIN reopens
+      // sign-up for one email domain if that is ever wanted again.
+      if (!isFirstUser) {
+        const allowedDomain = env.SELF_REGISTRATION_DOMAIN;
+        const domain = email.split('@')[1] ?? '';
+        if (!allowedDomain || domain !== allowedDomain) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Accounts are created by your administrator. Ask them to switch on your access, then sign in with your name.',
+          });
+        }
+      }
+
+      const existing = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
+      if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An account with that email already exists. Try signing in.' });
+
       const seedEmail = env.SEED_SUPER_ADMIN_EMAIL;
       const role = (isFirstUser || (!!seedEmail && email === seedEmail)) ? 'sysadmin' : 'user';
 
@@ -71,7 +184,11 @@ export const authRouter = router({
         email,
         name: input.name ?? null,
         role,
+        accessLevel: role === 'sysadmin' ? 'sysadmin' : 'user',
         passwordHash,
+        // They chose this password themselves, so they can sign in immediately.
+        loginEnabled: true,
+        mustChangePassword: false,
         lastLoginAt: new Date(),
       }).returning();
 
@@ -80,19 +197,160 @@ export const authRouter = router({
     }),
 
   // ── Log in ─────────────────────────────────────────────────
+  // Two ways to identify yourself: `userId`, chosen from the name picker on the
+  // sign-in screen (phase 1), or `email` as before — the reset-link flow, the
+  // bootstrap account and the REST tests all still use email.
   login: publicProcedure
-    .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
+    .input(z.object({
+      email: z.string().email().optional(),
+      userId: z.string().uuid().optional(),
+      password: z.string().min(1),
+    }).refine((v) => !!v.email !== !!v.userId, {
+      message: 'Provide either an email address or a selected name, not both.',
+    }))
     .mutation(async ({ ctx, input }) => {
-      const email = input.email.toLowerCase();
-      const u = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
-      const bad = () => new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid email or password' });
-      if (!u || !u.passwordHash || !u.isActive) throw bad();
-      const ok = await verifyPassword(input.password, u.passwordHash);
-      if (!ok) throw bad();
+      const ip = ctx.req.ip;
+      checkLoginThrottle(ip);
 
+      const u = input.userId
+        ? await ctx.db.query.users.findFirst({ where: eq(users.id, input.userId) })
+        : await ctx.db.query.users.findFirst({ where: eq(users.email, input.email!.toLowerCase()) });
+
+      // One message for every failure mode. Which of these was false is exactly
+      // the thing an attacker wants to learn.
+      const bad = () => new TRPCError({ code: 'UNAUTHORIZED', message: 'That password is not right. Check it and try again.' });
+
+      // Always spend the same time. Returning early on "no such account" made the
+      // miss ~1ms against ~100ms for a real check, which is an existence oracle.
+      const ok = await verifyPassword(input.password, u?.passwordHash ?? TIMING_EQUALISER_HASH);
+      if (!u || !u.passwordHash || !u.isActive || !ok) { noteLoginFailure(ip); throw bad(); }
+
+      // Phase-1 activation gate, checked AFTER the password so it cannot be used
+      // to enumerate who has been activated. A correct password earns an honest
+      // explanation; a wrong one learns nothing.
+      if (!u.loginEnabled) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Your account is not switched on yet. Ask your administrator to enable your access.',
+        });
+      }
+
+      loginFailures.delete(throttleKey(ip));
       ctx.req.session.userId = u.id;
       await ctx.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, u.id));
-      return { success: true, token: mintToken(u.id) };
+      return { success: true, token: mintToken(u.id), mustChangePassword: u.mustChangePassword };
+    }),
+
+  // ── Sign-in name picker (phase 1, AIE 2026-08-05) ──────────
+  // Returns activated accounts whose name matches what the person has typed, so
+  // they can find themselves without knowing their email address.
+  //
+  // A SEARCH, NOT A LIST. The PM asked for a dropdown of active users; returning
+  // the whole set from an unauthenticated endpoint would hand the staff directory
+  // to anyone who loaded the login page. Three characters minimum, matched as a
+  // PREFIX of a name part rather than a substring, and capped at 10.
+  //
+  // Be clear-eyed about what this is: a brake, not a boundary. Someone patient
+  // enough to iterate prefixes can still enumerate activated names, so this
+  // endpoint is not what protects the app — the mandatory password change and the
+  // server-side gate in trpc.ts are. It returns no email address, so the roster's
+  // addresses stay private either way, and the client sends the opaque id back to
+  // `login`. Phase 2 (Microsoft sign-in) removes the need for it entirely.
+  lookupForSignIn: publicProcedure
+    .input(z.object({ query: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const q = input.query.trim();
+      if (q.length < 3) return [];
+      const rows = await ctx.db.select({
+        id: users.id,
+        name: users.name,
+        title: users.title,
+      }).from(users)
+        .where(and(
+          eq(users.loginEnabled, true),
+          eq(users.isActive, true),
+          isNull(users.archivedAt),
+          // Start of the name, or the start of any word within it — so "mill"
+          // finds "Steven Miller" but "ill" does not.
+          sql`(${users.name} ILIKE ${q + '%'} OR ${users.name} ILIKE ${'% ' + q + '%'})`,
+        ))
+        .orderBy(users.name)
+        .limit(10);
+      return rows;
+    }),
+
+  // ── Admin: switch login access on or off ───────────────────
+  // On activation the account is given the derived first-time password and
+  // flagged to choose its own. Returns that password so the sysadmin can hand it
+  // over — it is derivable from the name anyway, so this reveals nothing new,
+  // and having it on screen removes the guesswork.
+  setLoginEnabled: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      userIds: z.array(z.string().uuid()).min(1).max(500),
+      enabled: z.boolean(),
+      // Re-issue the first-time password even if the person already has one.
+      // Off by default so activating someone twice never destroys a password
+      // they have chosen.
+      resetPassword: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const results: Array<{ id: string; name: string | null; ok: boolean; password?: string; error?: string }> = [];
+
+      for (const id of input.userIds) {
+        const u = await ctx.db.query.users.findFirst({ where: eq(users.id, id) });
+        if (!u) { results.push({ id, name: null, ok: false, error: 'No such employee.' }); continue; }
+
+        if (!input.enabled) {
+          await ctx.db.update(users)
+            .set({ loginEnabled: false, updatedAt: new Date() })
+            .where(eq(users.id, id));
+          results.push({ id, name: u.name, ok: true });
+          continue;
+        }
+
+        // Only mint a first-time password when there isn't one, unless asked.
+        const needsPassword = !u.passwordHash || input.resetPassword === true;
+        if (!needsPassword) {
+          await ctx.db.update(users)
+            .set({ loginEnabled: true, updatedAt: new Date() })
+            .where(eq(users.id, id));
+          results.push({ id, name: u.name, ok: true });
+          continue;
+        }
+
+        let password: string;
+        try {
+          password = defaultPasswordFor(u.name);
+        } catch (e) {
+          // A name too short to make a safe password. Named failure, no account
+          // left half-open.
+          results.push({ id, name: u.name, ok: false, error: e instanceof Error ? e.message : 'Could not derive a password.' });
+          continue;
+        }
+
+        await ctx.db.update(users).set({
+          loginEnabled: true,
+          passwordHash: await hashPassword(password),
+          mustChangePassword: REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN,
+          updatedAt: new Date(),
+        }).where(eq(users.id, id));
+        results.push({ id, name: u.name, ok: true, password });
+      }
+
+      const enabled = results.filter((r) => r.ok).length;
+      return { results, succeeded: enabled, failed: results.length - enabled };
+    }),
+
+  // Everyone a sysadmin could activate: a current employee with no way in yet.
+  // Drives the "activate everyone who hasn't been activated" button.
+  notYetActivated: protectedProcedure
+    .use(requireAdmin)
+    .query(async ({ ctx }) => {
+      return ctx.db.select({ id: users.id, name: users.name, title: users.title })
+        .from(users)
+        .where(and(eq(users.loginEnabled, false), eq(users.isActive, true), isNull(users.archivedAt)))
+        .orderBy(users.name);
     }),
 
   // ── Log out ────────────────────────────────────────────────
@@ -139,7 +397,16 @@ export const authRouter = router({
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase().trim();
       const u = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
-      if (u && u.isActive && u.passwordHash) {
+      // Keyed on loginEnabled, NOT on "already has a password" (AIE 2026-08-05).
+      //
+      // The old condition was `u.passwordHash`, which meant the people who most
+      // needed a link — every roster row, created without one — were the only ones
+      // who could not get it, and got a "we've sent you a link" message anyway.
+      // resetPassword downstream never required an existing password, so this one
+      // clause was the whole blocker. Now: activated people get a link whether or
+      // not they have a password yet, and anyone a sysadmin has not switched on
+      // gets nothing, because they are not a user yet.
+      if (u && u.isActive && u.loginEnabled) {
         // Raw token goes only in the email link; we store its SHA-256 hash.
         const rawToken = crypto.randomBytes(32).toString('base64url');
         const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -194,7 +461,12 @@ export const authRouter = router({
       if (row.expiresAt.getTime() < Date.now()) throw invalid();
 
       await ctx.db.update(users)
-        .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: new Date() })
+        .set({
+          passwordHash: await hashPassword(input.newPassword),
+          // They have chosen their own password, so the first-time prompt is done.
+          mustChangePassword: false,
+          updatedAt: new Date(),
+        })
         .where(eq(users.id, row.userId));
       await ctx.db.update(passwordResetTokens)
         .set({ usedAt: new Date() })
@@ -211,8 +483,16 @@ export const authRouter = router({
       if (!u || !u.passwordHash) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No password set for this account' });
       const ok = await verifyPassword(input.currentPassword, u.passwordHash);
       if (!ok) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Current password is incorrect' });
+      if (input.newPassword === input.currentPassword) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a password different from your current one.' });
+      }
       await ctx.db.update(users)
-        .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: new Date() })
+        .set({
+          passwordHash: await hashPassword(input.newPassword),
+          // Clears the first-login prompt — this is the route out of /set-password.
+          mustChangePassword: false,
+          updatedAt: new Date(),
+        })
         .where(eq(users.id, ctx.user.id));
       return { success: true };
     }),
@@ -239,6 +519,7 @@ export const authRouter = router({
             location: true, businessUnit: true, eltLeader: true, hireYear: true, hireMonth: true, hireDay: true,
             connectionType: true, isActive: true, isBeta: true, isHrAccess: true, timezone: true, archivedAt: true,
             lastActiveAt: true, lastLoginAt: true,
+            loginEnabled: true, mustChangePassword: true,
           },
         }),
         ctx.db.select({ userId: userManagers.userId, managerId: userManagers.managerId }).from(userManagers),
@@ -275,9 +556,13 @@ export const authRouter = router({
       hireMonth: z.number().int().nullable().optional(),
       hireDay: z.number().int().nullable().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
-      accessLevel: z.enum(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']).optional(),
+      accessLevel: accessLevelInput.optional(),
       isActive: z.boolean().optional(),
       isBeta: z.boolean().optional(),
+      // loginEnabled is DELIBERATELY not settable here. It goes through
+      // setLoginEnabled, which mints the first-time password at the same time.
+      // Setting it directly would leave login_enabled true with no password —
+      // the person appears in the sign-in picker and can never get in.
     }))
     .mutation(async ({ ctx, input }) => {
       // Don't let an admin set their own account inactive — the auth layer
@@ -440,15 +725,20 @@ export const authRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       let added = 0; let updated = 0; let skipped = 0; const errors: string[] = [];
-      const LEVELS = new Set(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']);
-      // Legacy columns still accepted so existing CSVs keep working: a file with
-      // role=manager or leaderBadge=ELT maps onto the new single level. An
-      // explicit accessLevel column wins. ST6 is retired and maps to admin.
-      const fromLegacy = (role: string, badge: string): string => {
-        if (badge === 'ELT') return 'elt';
-        if (badge === 'SLT') return 'slt';
-        if (badge === 'ST6') return 'admin';
-        return LEVELS.has(role) ? role : 'user';
+      // Level resolution is single-sourced through resolveAccessLevel (top of
+      // this file), which knows the five real levels and TRANSLATES the two
+      // retired ones with a warning on the row. Before 2026-08-05 this block
+      // carried its own hand-written set of seven, so a spreadsheet marked `SLT`
+      // or `admin` wrote a level the reach grid does not recognise — and the grid
+      // fails closed, leaving that person with no navigation at all.
+      //
+      // Legacy role / leaderBadge columns are still honoured so existing CSVs
+      // keep working. An explicit accessLevel column wins. ST6 is retired.
+      const fromLegacy = (role: string, badge: string): { level: AccessLevel; warning?: string } => {
+        if (badge === 'ELT') return { level: 'elt' };
+        if (badge === 'SLT') return { level: 'elt', warning: 'leader badge "SLT" was retired on 2026-08-03 — read as "elt"' };
+        if (badge === 'ST6') return { level: 'sysadmin', warning: 'leader badge "ST6" was retired — read as "sysadmin"' };
+        return resolveAccessLevel(role);
       };
 
       const [allUsers, allTitles, allDepts] = await Promise.all([
@@ -480,11 +770,13 @@ export const authRouter = router({
         const badgeRaw = (r.leaderBadge ?? r.leaderbadge ?? '').trim().toUpperCase();
         const titleRaw = (r.title ?? '').trim();
         const deptRaw = (r.department ?? '').trim();
+        const resolved = levelRaw ? resolveAccessLevel(levelRaw) : fromLegacy(roleRaw, badgeRaw);
         return {
           email: (r.email ?? '').trim().toLowerCase(),
           name: r.name?.trim() || '',
           levelProvided: !!(levelRaw || roleRaw || badgeRaw),
-          accessLevel: levelRaw && LEVELS.has(levelRaw) ? levelRaw : fromLegacy(roleRaw, badgeRaw),
+          accessLevel: resolved.level,
+          levelWarning: resolved.warning,
           titleRaw, jobTitleId: titleRaw ? (titleId.get(titleRaw.toLowerCase()) ?? null) : null,
           deptRaw, departmentId: deptRaw ? (deptId.get(deptRaw.toLowerCase()) ?? null) : null,
           managerRef: r.manager?.trim() || '',
@@ -502,6 +794,10 @@ export const authRouter = router({
         if (!r.email || !r.email.includes('@')) { skipped++; if (r.email) errors.push(`${r.email}: invalid email`); continue; }
         if (r.titleRaw && !r.jobTitleId) errors.push(`${r.email}: unknown title "${r.titleRaw}"`);
         if (r.deptRaw && !r.departmentId) errors.push(`${r.email}: unknown department "${r.deptRaw}"`);
+        // A retired or unrecognised access level is reported on the row rather
+        // than applied silently. Silently promoting someone to sysadmin because a
+        // spreadsheet said "admin" is the worse of the two failures.
+        if (r.levelWarning) errors.push(`${r.email}: ${r.levelWarning}`);
         try {
           const existingId = idByEmail.get(r.email);
           if (existingId) {
@@ -524,7 +820,9 @@ export const authRouter = router({
               jobTitleId: r.jobTitleId, departmentId: r.departmentId,
               team: r.team, location: r.location, businessUnit: r.businessUnit,
               hireYear: r.hireYear, hireMonth: r.hireMonth, hireDay: r.hireDay,
-              isActive: true, passwordHash: null,
+              // A roster row is an employee record, not an invitation: no
+              // password and no way in until a sysadmin activates them.
+              isActive: true, passwordHash: null, loginEnabled: false,
             }).returning();
             idByEmail.set(r.email, u.id);
             if (r.name) idByName.set(r.name.toLowerCase(), u.id);
@@ -558,7 +856,7 @@ export const authRouter = router({
       email: z.string().email(),
       name: z.string().optional(),
       role: z.enum(['user', 'manager', 'admin', 'sysadmin']).optional(),
-      accessLevel: z.enum(['sysadmin', 'elt', 'slt', 'hr', 'admin', 'manager', 'user']).optional(),
+      accessLevel: accessLevelInput.optional(),
       jobTitleId: z.string().uuid().nullable().optional(),
       departmentId: z.string().uuid().nullable().optional(),
       managerId: z.string().uuid().nullable().optional(),
@@ -582,6 +880,12 @@ export const authRouter = router({
         leaderBadge: input.leaderBadge ?? null,
         isActive: input.isActive ?? true,
         passwordHash: input.tempPassword ? await hashPassword(input.tempPassword) : null,
+        // Giving someone a temporary password IS the activation — otherwise the
+        // admin hands over a password that cannot be used and the person is
+        // invisible to the sign-in picker until a second, undiscoverable step.
+        // Somebody else chose it, so they are prompted to replace it.
+        loginEnabled: !!input.tempPassword,
+        mustChangePassword: input.tempPassword ? REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN : false,
       }).returning();
       if (input.managerId) {
         await ctx.db.insert(userManagers).values({ userId: user.id, managerId: input.managerId });
@@ -599,7 +903,13 @@ export const authRouter = router({
       const target = await ctx.db.query.users.findFirst({ where: eq(users.id, input.userId) });
       if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
       await ctx.db.update(users)
-        .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: new Date() })
+        .set({
+          passwordHash: await hashPassword(input.newPassword),
+          // Somebody else picked this password, so the person is prompted to
+          // replace it on their next sign-in — same rule as an activation.
+          mustChangePassword: REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN,
+          updatedAt: new Date(),
+        })
         .where(eq(users.id, input.userId));
       return { success: true };
     }),

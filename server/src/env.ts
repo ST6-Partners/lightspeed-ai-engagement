@@ -15,6 +15,13 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   SESSION_SECRET: string;
   SEED_SUPER_ADMIN_EMAIL: string;
+  // Self-registration is CLOSED unless this is set to a single email domain
+  // (e.g. 'lightspeedsystems.com'). Left empty, auth.register refuses everyone
+  // except the very first account in an empty database. AIE 2026-08-05: sign-up
+  // was previously open to anyone who reached the URL, which both undercut
+  // sysadmin-controlled activation and let strangers into an app holding
+  // assessment scores, PIPs and exit surveys.
+  SELF_REGISTRATION_DOMAIN: string;
   // Microsoft Entra SSO (optional — SSO button is inert until all are set).
   MS_CLIENT_ID: string;
   MS_CLIENT_SECRET: string;
@@ -41,6 +48,7 @@ export function loadEnv(): Env {
     ANTHROPIC_API_KEY: optional('ANTHROPIC_API_KEY'),
     SESSION_SECRET: optional('SESSION_SECRET', 'dev-only-session-secret-32-chars-xxxxxxxxxxxx'),
     SEED_SUPER_ADMIN_EMAIL: optional('SEED_SUPER_ADMIN_EMAIL').toLowerCase(),
+    SELF_REGISTRATION_DOMAIN: optional('SELF_REGISTRATION_DOMAIN').toLowerCase().replace(/^@/, ''),
     MS_CLIENT_ID: optional('MS_CLIENT_ID'),
     MS_CLIENT_SECRET: optional('MS_CLIENT_SECRET'),
     MS_TENANT_ID: optional('MS_TENANT_ID'),

@@ -19,7 +19,26 @@ export interface AppUser {
   name: string | null;
   role: string;
   isBeta: boolean;
+  // Phase-1 activation (AIE 2026-08-05). Both are enforced in
+  // protectedProcedure below, not only in the UI.
+  loginEnabled: boolean;
+  mustChangePassword: boolean;
 }
+
+/**
+ * The only procedures reachable while must_change_password is set.
+ *
+ * Everything else is refused server-side. Without this the derived first-time
+ * password would be a full API credential: a caller could sign in, ignore the
+ * /set-password screen entirely, and read reviews, PIPs and assessments straight
+ * off tRPC. The UI redirect in Layout.tsx is a convenience; this is the gate.
+ */
+const ALLOWED_WHILE_PASSWORD_PENDING = new Set([
+  'auth.me',
+  'auth.logout',
+  'auth.changePassword',
+  'auth.updateTimezone',
+]);
 
 // Context — available in every tRPC procedure
 export const createContext = async ({ req, res }: CreateExpressContextOptions) => {
@@ -48,6 +67,8 @@ export const createContext = async ({ req, res }: CreateExpressContextOptions) =
         name: dbUser.name,
         role: dbUser.role,
         isBeta: dbUser.isBeta,
+        loginEnabled: dbUser.loginEnabled,
+        mustChangePassword: dbUser.mustChangePassword,
       };
     }
   }
@@ -81,10 +102,31 @@ function touchActivity(userId: string) {
 
 // Protected procedure — requires authenticated session
 export const protectedProcedure = t.procedure
-  .use(async ({ ctx, next }) => {
+  .use(async ({ ctx, next, path }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not authenticated' });
     }
+
+    // Sign-in access revoked while they were signed in. Checked here rather than
+    // only at login, so switching someone off in Core Data -> Employees takes
+    // effect on their very next request instead of whenever their 7-day bearer
+    // token happens to expire — which is what the button's tooltip promises.
+    if (!ctx.user.loginEnabled) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Your access has been switched off. Contact your administrator.',
+      });
+    }
+
+    // First sign-in with a password somebody else chose: nothing but the
+    // change-password path is reachable until they pick their own.
+    if (ctx.user.mustChangePassword && !ALLOWED_WHILE_PASSWORD_PENDING.has(path)) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Choose your own password before using the app.',
+      });
+    }
+
     touchActivity(ctx.user.id);
     // Narrow ctx.user to non-null for all downstream procedures: the guard
     // above guarantees it, but tRPC's next({ ctx }) would otherwise pass the

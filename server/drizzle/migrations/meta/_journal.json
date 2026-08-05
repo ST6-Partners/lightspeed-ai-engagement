@@ -757,6 +757,20 @@
       "when": 1785861121352,
       "tag": "0106_aie_manager_brief_assigned_actions_in_weekly_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1785861122352,
+      "tag": "0107_aie_login_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1785861123352,
+      "tag": "0108_aie_employee_name_cleanup",
+      "breakpoints": true
     }
   ]
 }

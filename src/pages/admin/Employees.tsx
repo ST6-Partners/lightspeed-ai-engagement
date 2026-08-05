@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { trpc } from '../../lib/trpc';
-import { Search, Info, UserPlus, X, Trash2, Archive, ArchiveRestore } from 'lucide-react';
+import { Search, Info, UserPlus, X, Trash2, Archive, ArchiveRestore, KeyRound, Copy, Check } from 'lucide-react';
 import ImportButton from '../../components/ImportButton';
+// The rule is stated once, in the service that implements it, and shown here so a
+// sysadmin handing passwords over does not have to remember it.
+import { DEFAULT_PASSWORD_RULE } from '../../lib/activationRule';
 
 // One field per person (AIE 2026-08-03). Supersedes the separate Role dropdown,
 // Leader badge dropdown and HR tick-box. ELT and SLT are the only two that draw
@@ -25,7 +28,8 @@ const ACCESS_LEVEL_COLORS: Record<string, string> = {
 
 // Employees = the users directory (Core Data). Beyond app-level role/flags, each
 // record carries Title + Department (managed lookups) and a Manager (another
-// employee). Accounts are still created at sign-up; this screen curates them.
+// employee). Accounts come from the roster import or Add Employee (self sign-up
+// was closed 2026-08-05); this screen curates them and switches sign-in on.
 // readOnly renders the directory without any control that writes: a user may
 // look up who works here and who reports to whom, and change nothing
 // (PM, 2026-08-03). The editable copy lives at Admin > Sysadmin > Employees.
@@ -43,6 +47,44 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
   });
   const importEmployees = trpc.auth.importUsers.useMutation({ onSuccess: () => utils.auth.listUsers.invalidate() });
   const set = (id: string, patch: Record<string, unknown>) => updateMutation.mutate({ id, ...patch } as any);
+
+  // ── Sign-in activation (phase 1, AIE 2026-08-05) ─────────────
+  // Switching this on gives the person a first-time password derived from their
+  // name and flags them to choose their own. `activated` holds the passwords the
+  // last run produced so they can be read out or copied — they are derivable from
+  // the name anyway, so showing them reveals nothing new, and it removes the
+  // guesswork about punctuation and capitalisation.
+  type ActivationResult = { id: string; name: string | null; ok: boolean; password?: string; error?: string };
+  const [activated, setActivated] = useState<ActivationResult[] | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const activateMutation = trpc.auth.setLoginEnabled.useMutation({
+    onError: (e: any) => setActivateError(e?.message ?? 'Could not switch sign-in. Nothing was changed for the people still listed as off — try a smaller batch.'),
+    onSuccess: (res: any) => {
+      setActivateError(null);
+      utils.auth.listUsers.invalidate();
+      utils.auth.notYetActivated.invalidate();
+      // Only worth showing when passwords came back.
+      const withPasswords = (res?.results ?? []).filter((r: ActivationResult) => r.password || !r.ok);
+      setActivated(withPasswords.length ? withPasswords : null);
+      setCopied(false);
+    },
+  });
+  const { data: pending = [] } = trpc.auth.notYetActivated.useQuery(undefined, { enabled: !readOnly });
+  // 50 at a time. Each activation costs a bcrypt hash (~100ms), so a whole roster
+  // in one request would sit for a minute and risk a gateway timeout — which would
+  // lose the password list with no record of who was done.
+  const ACTIVATION_BATCH = 50;
+  const activate = (ids: string[], enabled: boolean) => {
+    if (!ids.length) return;
+    setActivateError(null);
+    activateMutation.mutate({ userIds: ids.slice(0, ACTIVATION_BATCH), enabled });
+  };
+  const copyHandover = () => {
+    const text = (activated ?? []).filter((r) => r.password)
+      .map((r) => `${r.name}\t${r.password}`).join('\n');
+    navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false));
+  };
 
   // ── Add Employee (admin create) ──────────────────────────────
   const EMPTY = { name: '', email: '', accessLevel: 'user', jobTitleId: '', departmentId: '', managerId: '', isActive: true, tempPassword: '' };
@@ -146,9 +188,14 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
           <h2 className="text-lg font-bold text-gray-900">Employees</h2>
           <p className="text-sm text-gray-500">{readOnly
             ? 'Who works here and who they report to. View only.'
-            : 'The staff directory. Accounts are created at sign-up; assign each person a title, department, manager, and access level here. Title and Department come from the Core Data lookups.'}</p>
+            : 'The staff directory. Accounts come from the roster import or Add Employee — self sign-up is closed. Assign each person a title, department, manager and access level here, then switch their sign-in on. Title and Department come from the Core Data lookups.'}</p>
         </div>
-        {!readOnly && <ImportButton label="Import employees" hint="CSV, Excel or PDF: email, name, accessLevel (sysadmin/ELT/SLT/HR/admin/manager/user), title, department, manager, team, location, businessUnit, startDate"
+        {/* The hint used to list seven access levels including SLT and admin, which
+            were retired on 2026-08-03. Importing one of those wrote a level the
+            reach grid does not recognise, and the grid fails closed — so the
+            person ended up with no navigation. The import now translates them with
+            a warning; this text lists only the five that exist. */}
+        {!readOnly && <ImportButton label="Import employees" hint="CSV, Excel or PDF: email, name, accessLevel (sysadmin/ELT/HR/manager/user), title, department, manager, team, location, businessUnit, startDate"
           columns={['email', 'name', 'accesslevel', 'title', 'department', 'manager', 'team', 'location', 'businessunit', 'startdate']}
           onImport={async (rows) => importEmployees.mutateAsync({ rows: rows.map((r) => ({ email: r.email ?? '', name: r.name, role: r.role, title: r.title, department: r.department, manager: r.manager, accessLevel: r.accesslevel ?? r['access level'] ?? r.role, leaderBadge: r.leaderbadge, team: r.team, location: r.location, businessUnit: r.businessunit ?? r['business unit'] ?? r.business_unit, startDate: r.startdate ?? r['start date'] ?? r.start_date })) })} />}
       </div>
@@ -170,6 +217,27 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${view === 'past' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           {pastStaff.length} past
         </button>
+        {!readOnly && pending.length > 0 && (
+          <button type="button" disabled={activateMutation.isLoading}
+            onClick={() => {
+              const n = Math.min(pending.length, ACTIVATION_BATCH);
+              const more = pending.length - n;
+              if (!window.confirm(
+                `Switch on sign-in for ${n} ${n === 1 ? 'person' : 'people'}?\n\n`
+                + 'Each gets a first-time password derived from their name, and has to choose their own the first time they sign in.'
+                + (more > 0 ? `\n\nThis does ${n} now — press the button again for the remaining ${more}.` : ''),
+              )) return;
+              activate(pending.map((p: any) => p.id), true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-ls-blue-deep text-white hover:opacity-90 disabled:opacity-50">
+            <KeyRound size={14} />
+            {activateMutation.isLoading
+              ? 'Switching on…'
+              : pending.length > ACTIVATION_BATCH
+                ? `Switch on sign-in (${ACTIVATION_BATCH} of ${pending.length})`
+                : `Switch on sign-in for ${pending.length}`}
+          </button>
+        )}
         {!readOnly && (
           <button onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
             className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
@@ -177,6 +245,53 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
           </button>
         )}
       </div>
+
+      {activateError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-2.5 flex items-start justify-between gap-3">
+          <span>{activateError}</span>
+          <button type="button" onClick={() => setActivateError(null)} className="text-red-400 hover:text-red-700 shrink-0"><X size={15} /></button>
+        </div>
+      )}
+
+      {/* Hand-over panel — the passwords the last activation produced. */}
+      {activated && (
+        <div className="bg-white rounded-lg border border-ls-blue/40 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">First-time passwords</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Give each person their password. They'll be asked to choose their own the first time they sign in.
+                This list is not stored — copy it now if you need it.
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">{DEFAULT_PASSWORD_RULE}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button type="button" onClick={copyHandover}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200">
+                {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy all'}
+              </button>
+              <button type="button" onClick={() => setActivated(null)}
+                className="text-gray-400 hover:text-gray-600"><X size={15} /></button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto border border-gray-200 rounded">
+            <table className="w-full text-xs">
+              <tbody>
+                {activated.map((r) => (
+                  <tr key={r.id} className="border-b border-gray-100 last:border-0">
+                    <td className="px-3 py-1.5 text-gray-800">{r.name ?? '—'}</td>
+                    <td className="px-3 py-1.5">
+                      {r.ok
+                        ? <code className="font-mono text-[11px] bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">{r.password}</code>
+                        : <span className="text-red-700">{r.error}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {showAdd && !readOnly && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
@@ -263,6 +378,10 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
                 <th className="px-3 py-3 w-[150px]">Department</th>
                 <th className="px-3 py-3 w-[170px]">Manager</th>
                 <th className="px-3 py-3 w-[120px]">Access</th>
+                {/* Sign-in is DELIBERATELY a separate column from Active. Active
+                    means "a current employee" and is read by the org tree, survey
+                    eligibility and every headcount; this one means "has a way in". */}
+                <th className="px-3 py-3 w-[110px]">Sign-in</th>
                 <th className="px-3 py-3 w-24">Actions</th>
               </tr>
             </thead>
@@ -323,6 +442,33 @@ export default function Employees({ readOnly = false }: { readOnly?: boolean } =
                       className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${ACCESS_LEVEL_COLORS[user.accessLevel ?? 'user'] || 'bg-gray-100'}`}>
                       {ACCESS_LEVEL_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                     </select>
+                  </td>
+
+                  {/* Sign-in — the phase-1 activation switch. Switching it ON with
+                      no password set mints the derived first-time one and shows it
+                      in the hand-over panel above. */}
+                  <td className="px-3 py-3 text-sm">
+                    {readOnly ? (
+                      <span className={`text-xs font-medium ${user.loginEnabled ? 'text-green-700' : 'text-gray-400'}`}>
+                        {user.loginEnabled ? 'On' : 'Off'}
+                      </span>
+                    ) : (
+                      <button type="button" disabled={activateMutation.isLoading}
+                        onClick={() => activate([user.id], !user.loginEnabled)}
+                        title={user.loginEnabled
+                          ? 'Switch off — this person can no longer sign in. Their record and history stay.'
+                          : 'Switch on — gives this person a first-time password derived from their name.'}
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium disabled:opacity-50 ${
+                          user.loginEnabled
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${user.loginEnabled ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        {user.loginEnabled ? 'On' : 'Off'}
+                      </button>
+                    )}
+                    {user.mustChangePassword && (
+                      <div className="text-[10px] text-amber-700 mt-0.5">new password pending</div>
+                    )}
                   </td>
 
                   {/* Archive (reversible, keeps history) + Remove (hard delete) */}
