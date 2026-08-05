@@ -8,7 +8,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bot, MessageCircle, Star, Database,
   Home, Users, Target, CalendarCheck, ClipboardList, DoorOpen,
-  Settings, LogOut, MessageSquare, ClipboardCheck, FileText,
+  Settings, LogOut, MessageSquare, ClipboardCheck,
   UserCheck, ChevronsLeft, ChevronsRight, HeartHandshake, BarChart3,
   ChevronDown, ChevronRight, Sparkles, BookOpen, X } from 'lucide-react';
 import NotificationBell from './NotificationBell';
@@ -39,7 +39,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Engagement',
     area: 'engagement',
-    // Order mirrors the Documents → Overview chart's Engagement row.
+    // Order runs the way the work does: pulse, review, develop, survey.
     items: [
       { page: 'pulses', path: '/check-ins', label: 'Pulses', icon: MessageCircle },
       { page: 'reviews', path: '/reviews', label: 'Reviews', icon: Star, children: [
@@ -59,7 +59,6 @@ const navGroups: NavGroup[] = [
     label: 'Documents',
     area: 'documents',
     items: [
-      { path: '/documents/overview', label: 'Overview', icon: FileText },
       { page: 'core-data', path: '/core-data', label: 'Core Data', icon: Database, children: [
         { path: '/core-data/job-titles', label: 'Job Titles', item: 'job-titles' },
         { path: '/core-data/departments', label: 'Departments', item: 'departments' },

@@ -18,7 +18,6 @@ import OkrAnalytics from './pages/OkrAnalytics';
 import WeeklyPlan from './pages/WeeklyPlan';
 import ExitSurvey from './pages/ExitSurvey';
 import EngagementSurvey from './pages/EngagementSurvey';
-import Overview from './pages/Overview';
 import CheckIns from './pages/CheckIns';
 import ManagerEffectiveness from './pages/ManagerEffectiveness';
 import ManagerBrief from './pages/ManagerBrief';
@@ -59,8 +58,9 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/manager-survey" element={<Navigate to="/reviews?tab=manager" replace />} />
         <Route path="/peer-review" element={<Navigate to="/reviews?tab=peer" replace />} />
+        {/* Documents -> Overview was removed 2026-08-05; old links land on Core Data. */}
+        <Route path="/documents/overview" element={<Navigate to="/core-data" replace />} />
         {/* Core Data */}
-        <Route path="/documents/overview" element={<AreaGuard area="documents"><Overview /></AreaGuard>} />
         <Route path="/core-data" element={<AreaGuard area="documents" />}>
           <Route index element={<CoreData />} />
           <Route element={<CoreDataSubLayout />}>
