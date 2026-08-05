@@ -988,84 +988,141 @@ function PrivateNotesSection({ employeeId }: { employeeId: string }) {
 // review someone gave you, with the scores on it. No period picker, no
 // employee picker, no instrument tabs — those are the authoring workflow, and
 // leaving any of them up reads as "review somebody".
-function MyReviewCard({ row, kind }: { row: any; kind: 'values' | 'performance' }) {
-  const [open, setOpen] = useState(false);
-  const detail = kind === 'values'
-    ? trpc.values.getEvaluation.useQuery({ id: row.id }, { enabled: open })
-    : trpc.performance.getEvaluation.useQuery({ id: row.id }, { enabled: open });
+function Stars({ score }: { score: number | null | undefined }) {
+  const v = typeof score === 'number' ? Math.round(score) : 0;
+  return (
+    <span className="shrink-0 whitespace-nowrap" title={typeof score === 'number' ? `${score} of 5` : 'Not scored'}
+          aria-label={typeof score === 'number' ? `${score} out of 5` : 'Not scored'}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} className={i <= v ? 'text-ls-blue' : 'text-ls-line'} aria-hidden="true">
+          {i <= v ? '\u2605' : '\u2606'}
+        </span>
+      ))}
+    </span>
+  );
+}
 
-  // Both procedures return `scores`, not `items`, and name the label field per
-  // instrument (valueName / criterionName). Reading `items` showed an empty
-  // card — which is why opening a review appeared to do nothing.
-  const scores: any[] = (detail.data as any)?.scores ?? [];
-  const labelOf = (sc: any) => sc.valueName ?? sc.criterionName ?? '—';
-  const rated = scores.filter((sc) => typeof sc.score === 'number');
-  const avg = rated.length ? rated.reduce((a, sc) => a + sc.score, 0) / rated.length : null;
+function ScoreMeter({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="min-w-[120px]">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">{label}</div>
+      <div className="mt-0.5">
+        <span className="text-2xl font-bold text-ls-ink tabular-nums">{value != null ? value.toFixed(1) : '—'}</span>
+        <span className="text-sm text-ls-ink-3"> / 5</span>
+      </div>
+      <div className="mt-1 h-1.5 w-full rounded-full bg-ls-bg-2 overflow-hidden">
+        <div className="h-full rounded-full bg-ls-active" style={{ width: `${value != null ? (value / 5) * 100 : 0}%` }} />
+      </div>
+    </div>
+  );
+}
 
-  // Values are grouped by pillar on the authoring form; keep that grouping so
-  // the employee reads it the way it was written.
-  const groups = scores.reduce((m: Map<string, any[]>, sc: any) => {
-    const g = sc.pillar ?? '';
-    m.set(g, [...(m.get(g) ?? []), sc]);
-    return m;
-  }, new Map<string, any[]>());
+// One card per review PERIOD, combining both instruments — an employee was
+// given one review, not a Values review and a Performance review, so splitting
+// them into two cards mis-describes what happened.
+function MyReviewPeriodCard({
+  periodLabel, valuesRow, perfRow, defaultOpen,
+}: { periodLabel: string; valuesRow?: any; perfRow?: any; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+
+  // The list already carries the averages, the status and the overall note, so
+  // the header renders without a second round trip. Only the per-item scores
+  // need the detail call, and only once the card is opened — otherwise every
+  // past review is fetched in full on page load.
+  const vQ = trpc.values.getEvaluation.useQuery({ id: valuesRow?.id }, { enabled: open && !!valuesRow?.id });
+  const pQ = trpc.performance.getEvaluation.useQuery({ id: perfRow?.id }, { enabled: open && !!perfRow?.id });
+
+  const vScores: any[] = (vQ.data as any)?.scores ?? [];
+  const pScores: any[] = (pQ.data as any)?.scores ?? [];
+  const vAvg = typeof valuesRow?.avgScore === 'number' ? valuesRow.avgScore : null;
+  const pAvg = typeof perfRow?.avgScore === 'number' ? perfRow.avgScore : null;
+
+  const notes = [valuesRow?.overallNotes, perfRow?.overallNotes]
+    .filter((t) => typeof t === 'string' && t.trim().length > 0) as string[];
+
+  const anyDraft = [valuesRow?.status, perfRow?.status].filter(Boolean).some((st) => st === 'draft');
+  const loading = open && ((!!valuesRow?.id && vQ.isLoading) || (!!perfRow?.id && pQ.isLoading));
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full text-left">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-gray-900">
-              {kind === 'values' ? 'Company values' : 'Performance criteria'}
-              {row.periodLabel ? ` · ${row.periodLabel}` : ''}
-            </div>
-            <div className="text-xs text-gray-500">
-              by {row.reviewerName ?? '—'}{row.status ? ` · ${String(row.status).replace('_', ' ')}` : ''}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {avg != null && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
-                avg {avg.toFixed(1)}
-              </span>
-            )}
-            <span className="text-[13px] text-ls-blue-deep font-semibold">{open ? 'Hide' : 'Open'}</span>
-          </div>
+    <div className="ls-card p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="text-left">
+          <h3 className="text-[17px] font-bold text-ls-ink flex items-center gap-1.5">
+            <span className="text-ls-ink-3 text-xs">{open ? '\u25be' : '\u25b8'}</span>
+            Your Review
+          </h3>
+          <p className="text-[13px] text-ls-ink-3 mt-0.5">
+            The review your manager delivered to you — click to open
+          </p>
+        </button>
+        <span className={`ls-chip ${anyDraft ? 'bg-ls-watch-bg text-ls-watch' : 'bg-ls-thrive-bg text-ls-thrive'}`}>
+          {anyDraft ? 'In progress' : 'Delivered'}
+        </span>
+      </div>
+
+      <div className="flex items-end gap-10 flex-wrap mt-4">
+        <ScoreMeter label="Values" value={vAvg} />
+        <ScoreMeter label="Performance" value={pAvg} />
+        <div className="min-w-[100px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ls-ink-3">Period</div>
+          <div className="mt-0.5 text-[17px] font-bold text-ls-ink">{periodLabel || '—'}</div>
         </div>
-      </button>
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className="ml-auto text-[15px] font-semibold text-ls-blue-deep hover:underline shrink-0">
+          {open ? 'Close review' : 'Open review'} →
+        </button>
+      </div>
 
       {open && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
-          {detail.isLoading && <div className="text-xs text-gray-400">Loading…</div>}
-          {!detail.isLoading && scores.length === 0 && (
-            <div className="text-xs text-gray-500">No scores were recorded on this review.</div>
-          )}
-          {[...groups.entries()].map(([pillar, list]) => (
-            <div key={pillar || 'all'} className="mb-3 last:mb-0">
-              {pillar && (
-                <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">{pillar}</div>
-              )}
-              <div className="space-y-1.5">
-                {list.map((sc: any, i: number) => (
-                  <div key={`${labelOf(sc)}-${i}`} className="text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="text-gray-700 min-w-0">{labelOf(sc)}</span>
-                      <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md bg-gray-100 text-gray-800 text-xs font-semibold">
-                        {typeof sc.score === 'number' ? sc.score : '—'}
-                      </span>
-                    </div>
-                    {sc.notes && <div className="text-xs text-gray-500 italic mt-0.5">&ldquo;{sc.notes}&rdquo;</div>}
-                  </div>
-                ))}
-              </div>
+        <div className="mt-4 pt-4 border-t border-dashed border-ls-line">
+          {loading && <div className="text-sm text-ls-ink-3 py-2">Loading…</div>}
+
+          {vScores.map((sc: any, i: number) => (
+            <div key={`v-${i}`} className="flex items-center justify-between gap-4 py-2.5 border-b border-ls-line last:border-0">
+              <span className="text-[15px] text-ls-ink min-w-0">
+                <b className="font-bold">Values</b> · {sc.valueName}
+              </span>
+              <Stars score={sc.score} />
             </div>
           ))}
-          {(detail.data as any)?.overallNotes && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1">Overall</div>
-              <div className="text-sm text-gray-700">{(detail.data as any).overallNotes}</div>
+          {pScores.map((sc: any, i: number) => (
+            <div key={`p-${i}`} className="flex items-center justify-between gap-4 py-2.5 border-b border-ls-line last:border-0">
+              <span className="text-[15px] text-ls-ink min-w-0">
+                <b className="font-bold">Performance</b> · {sc.criterionName}
+              </span>
+              <Stars score={sc.score} />
+            </div>
+          ))}
+
+          {!loading && vScores.length === 0 && pScores.length === 0 && (
+            <div className="text-sm text-ls-ink-3 py-2">No scores were recorded on this review.</div>
+          )}
+
+          {/* Per-item notes are shown under the list rather than inline, so the
+              score rows stay scannable. */}
+          {[...vScores, ...pScores].some((sc: any) => sc.notes) && (
+            <div className="mt-4 space-y-1.5">
+              {[...vScores, ...pScores].filter((sc: any) => sc.notes).map((sc: any, i: number) => (
+                <div key={`n-${i}`} className="text-[13px] text-ls-ink-2">
+                  <span className="text-ls-ink-3">{sc.valueName ?? sc.criterionName}:</span>{' '}
+                  <span className="italic">&ldquo;{sc.notes}&rdquo;</span>
+                </div>
+              ))}
             </div>
           )}
+
+          {notes.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-ls-line">
+              <div className="text-[13px] text-ls-ink-3 mb-1">Overall notes</div>
+              {notes.map((t, i) => (
+                <p key={i} className="text-[15px] text-ls-ink leading-relaxed">{t}</p>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-4 pt-3 border-t border-ls-line text-[13px] italic text-ls-ink-3">
+            You&rsquo;re viewing the review your manager delivered to you. This is read-only.
+          </p>
         </div>
       )}
     </div>
@@ -1077,26 +1134,36 @@ function MyReviewHistory({ employeeId }: { employeeId: string }) {
   const perfQ = trpc.performance.listEvaluations.useQuery({ employeeId }, { enabled: !!employeeId });
   const loading = valuesQ.isLoading || perfQ.isLoading;
 
-  const rows = [
-    ...(valuesQ.data ?? []).map((r: any) => ({ row: r, kind: 'values' as const })),
-    ...(perfQ.data ?? []).map((r: any) => ({ row: r, kind: 'performance' as const })),
-  ].sort((a, b) => String(b.row.periodLabel ?? '').localeCompare(String(a.row.periodLabel ?? '')));
+  // Pair the two instruments up by period so each card is one review.
+  const periods = useMemo(() => {
+    const m = new Map<string, { periodLabel: string; valuesRow?: any; perfRow?: any }>();
+    for (const r of (valuesQ.data ?? []) as any[]) {
+      const k = r.periodLabel ?? '';
+      m.set(k, { ...(m.get(k) ?? { periodLabel: k }), periodLabel: k, valuesRow: r });
+    }
+    for (const r of (perfQ.data ?? []) as any[]) {
+      const k = r.periodLabel ?? '';
+      m.set(k, { ...(m.get(k) ?? { periodLabel: k }), periodLabel: k, perfRow: r });
+    }
+    return [...m.values()].sort((a, b) => b.periodLabel.localeCompare(a.periodLabel));
+  }, [valuesQ.data, perfQ.data]);
 
   if (loading) {
-    return <div className="bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-400">Loading reviews…</div>;
+    return <div className="ls-card p-6 text-center text-sm text-ls-ink-3">Loading reviews…</div>;
   }
-  if (rows.length === 0) {
+  if (periods.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
-        <Star className="mx-auto text-gray-300 mb-2" size={32} />
-        <p className="text-sm text-gray-500">You have not been given a review yet.</p>
+      <div className="ls-card p-8 text-center">
+        <Star className="mx-auto text-ls-ink-3 mb-2" size={32} />
+        <p className="text-sm text-ls-ink-3">You have not been given a review yet.</p>
       </div>
     );
   }
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-gray-500">{rows.length} {rows.length === 1 ? 'review' : 'reviews'} received</p>
-      {rows.map(({ row, kind }) => <MyReviewCard key={`${kind}-${row.id}`} row={row} kind={kind} />)}
+    <div className="space-y-4">
+      {periods.map((p, i) => (
+        <MyReviewPeriodCard key={p.periodLabel || i} {...p} defaultOpen={i === 0} />
+      ))}
     </div>
   );
 }
